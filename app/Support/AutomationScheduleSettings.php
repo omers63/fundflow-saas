@@ -39,11 +39,12 @@ final class AutomationScheduleSettings
             'emi_close_day' => 6,
             'emi_close_time' => '00:45',
             // Daily fund / bank / delinquency jobs (legacy single-time, kept for backward compatibility).
+            // Defaults match Samman production schedule for new installs / fresh seed.
             'master_invariants_time' => '06:00',
             'daily_reconcile_time' => '06:20',
-            'nightly_reconcile_time' => '06:30',
+            'nightly_reconcile_time' => '23:30',
             'bank_auto_match_time' => '08:00',
-            'delinquency_digest_time' => '07:30',
+            'delinquency_digest_time' => '12:30',
             // Cron-like cadence for scoped reconciliation/maintenance jobs.
             'master_invariants_frequency' => 'daily',
             'master_invariants_weekdays' => '',
@@ -56,7 +57,7 @@ final class AutomationScheduleSettings
             'nightly_reconcile_frequency' => 'daily',
             'nightly_reconcile_weekdays' => '',
             'nightly_reconcile_month_days' => '',
-            'nightly_reconcile_times' => '06:30',
+            'nightly_reconcile_times' => '23:30',
             'bank_auto_match_frequency' => 'daily',
             'bank_auto_match_weekdays' => '',
             'bank_auto_match_month_days' => '',
@@ -64,11 +65,11 @@ final class AutomationScheduleSettings
             'delinquency_digest_frequency' => 'daily',
             'delinquency_digest_weekdays' => '',
             'delinquency_digest_month_days' => '',
-            'delinquency_digest_times' => '07:30',
-            'fund_status_digest_frequency' => 'daily',
-            'fund_status_digest_weekdays' => '',
+            'delinquency_digest_times' => '12:30',
+            'fund_status_digest_frequency' => 'weekly',
+            'fund_status_digest_weekdays' => '6',
             'fund_status_digest_month_days' => '',
-            'fund_status_digest_times' => '04:00',
+            'fund_status_digest_times' => '23:00',
             // Statements (defaults follow month-boundary day/time when unset).
             'statements_day' => 6,
             'statements_time' => '00:30',
@@ -239,13 +240,14 @@ final class AutomationScheduleSettings
         Setting::set(self::GROUP, 'emi_close_day', $emiDay !== null ? (string) $emiDay : null);
         Setting::set(self::GROUP, 'emi_close_time', self::normalizeClockTime($state['automation_emi_close_time'] ?? null) ?? '00:45');
 
+        $defaults = self::defaults();
         foreach ([
-            'master_invariants' => ['default_times' => '06:00'],
-            'daily_reconcile' => ['default_times' => '06:20'],
-            'nightly_reconcile' => ['default_times' => '06:30'],
-            'bank_auto_match' => ['default_times' => '08:00'],
-            'delinquency_digest' => ['default_times' => '07:30'],
-            'fund_status_digest' => ['default_times' => '04:00'],
+            'master_invariants' => ['default_times' => (string) $defaults['master_invariants_times']],
+            'daily_reconcile' => ['default_times' => (string) $defaults['daily_reconcile_times']],
+            'nightly_reconcile' => ['default_times' => (string) $defaults['nightly_reconcile_times']],
+            'bank_auto_match' => ['default_times' => (string) $defaults['bank_auto_match_times']],
+            'delinquency_digest' => ['default_times' => (string) $defaults['delinquency_digest_times']],
+            'fund_status_digest' => ['default_times' => (string) $defaults['fund_status_digest_times']],
         ] as $job => $meta) {
             $freq = self::normalizeCadenceFrequency($state["automation_{$job}_frequency"] ?? 'daily');
             Setting::set(self::GROUP, "{$job}_frequency", $freq);
@@ -391,7 +393,7 @@ final class AutomationScheduleSettings
 
     public static function nightlyReconcileTime(): string
     {
-        return self::normalizeClockTime(self::get('nightly_reconcile_time', '06:30')) ?? '06:30';
+        return self::normalizeClockTime(self::get('nightly_reconcile_time', '23:30')) ?? '23:30';
     }
 
     public static function bankAutoMatchTime(): string
@@ -401,7 +403,7 @@ final class AutomationScheduleSettings
 
     public static function delinquencyDigestTime(): string
     {
-        return self::normalizeClockTime(self::get('delinquency_digest_time', '07:30')) ?? '07:30';
+        return self::normalizeClockTime(self::get('delinquency_digest_time', '12:30')) ?? '12:30';
     }
 
     // -------------------------------------------------------------------------
@@ -525,13 +527,19 @@ final class AutomationScheduleSettings
 
     public static function fundStatusDigestFrequency(): string
     {
-        return self::normalizeCadenceFrequency(self::get('fund_status_digest_frequency', 'daily'));
+        return self::normalizeCadenceFrequency(self::get(
+            'fund_status_digest_frequency',
+            (string) self::defaults()['fund_status_digest_frequency'],
+        ));
     }
 
     /** @return list<int> */
     public static function fundStatusDigestWeekdays(): array
     {
-        return self::parseCadenceWeekdays(self::get('fund_status_digest_weekdays', ''));
+        return self::parseCadenceWeekdays(self::get(
+            'fund_status_digest_weekdays',
+            (string) self::defaults()['fund_status_digest_weekdays'],
+        ));
     }
 
     /** @return list<int> */
@@ -543,7 +551,10 @@ final class AutomationScheduleSettings
     /** @return list<string> */
     public static function fundStatusDigestTimes(): array
     {
-        return self::parseCadenceTimes(self::get('fund_status_digest_times', ''), '04:00');
+        return self::parseCadenceTimes(
+            self::get('fund_status_digest_times', ''),
+            (string) self::defaults()['fund_status_digest_times'],
+        );
     }
 
     public static function notifyContributionDue(): bool

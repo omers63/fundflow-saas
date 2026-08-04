@@ -11,13 +11,16 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanEligibilityOverride;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\Setting;
+use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MemberAnnualSubscriptionFeeService;
 use App\Services\MemberExportService;
 use App\Services\MemberImportService;
 use App\Services\Tenant\MemberMembershipProfileService;
+use App\Support\AutomationScheduleSettings;
 use App\Support\BusinessDay;
 use App\Support\LoanEligibilityGate;
 use Carbon\Carbon;
@@ -88,6 +91,8 @@ test('member import creates member from member_number without email', function (
 });
 
 test('member import creates member with opening balances from csv', function () {
+    Setting::set(AutomationScheduleSettings::GROUP, 'auto_apply_collections', '0');
+
     $path = writeMemberImportCsv(
         "name,email,monthly_contribution_amount,joined_at,contribution_arrears_cutoff_date,cutoff_cash_balance,cutoff_fund_balance\n".
         "Imported Member,imported.member@fund.test,1000,2024-03-01,2024-12-31,500,1200\n"
@@ -126,6 +131,90 @@ test('member import skips existing email', function () {
     expect($result['created'])->toBe(0)
         ->and($result['skipped'])->toBe(1)
         ->and(Member::query()->where('email', 'existing.member@fund.test')->count())->toBe(1);
+});
+
+test('member import links subsequent shared-email rows as dependents without parent_member_number', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number\n" .
+        "1,Household Head,shared.email-first@fund.test,\n" .
+        "2,Household Dependent A,shared.email-first@fund.test,\n" .
+        "3,Household Dependent B,shared.email-first@fund.test,\n" .
+        "4,Independent Member,independent@fund.test,\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(4)
+        ->and($result['failed'])->toBe(0);
+
+    $head = Member::query()->where('member_number', '1')->first();
+    $depA = Member::query()->where('member_number', '2')->first();
+    $depB = Member::query()->where('member_number', '3')->first();
+    $solo = Member::query()->where('member_number', '4')->first();
+
+    expect($head?->parent_member_id)->toBeNull()
+        ->and($depA?->parent_member_id)->toBe($head?->id)
+        ->and($depB?->parent_member_id)->toBe($head?->id)
+        ->and($solo?->parent_member_id)->toBeNull()
+        ->and($depA?->email)->toBe('shared.email-first@fund.test');
+});
+
+test('member re-import rebuilds parent links from email-first and parent_member_number', function () {
+    // Flat import (no parents) first — email-first also links #11 during first run.
+    $flat = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number\n" .
+        "10,Reimport Head,reimport.household@fund.test,\n" .
+        "11,Reimport Dep Email,reimport.household@fund.test,\n" .
+        "12,Reimport Dep By Number,other@fund.test,\n"
+    );
+
+    $first = app(MemberImportService::class)->import($flat, 'TempPass@123');
+
+    expect($first['created'])->toBe(3)
+        ->and(Member::query()->where('member_number', '11')->value('parent_member_id'))->not->toBeNull();
+
+    // Clear household links to simulate a bad prior import.
+    Member::query()->update(['parent_member_id' => null]);
+
+    $relink = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number\n" .
+        "10,Reimport Head,reimport.household@fund.test,\n" .
+        "11,Reimport Dep Email,reimport.household@fund.test,\n" .
+        "12,Reimport Dep By Number,other@fund.test,10\n"
+    );
+
+    $second = app(MemberImportService::class)->import($relink, 'TempPass@123');
+
+    expect($second['created'])->toBe(0)
+        ->and($second['skipped'])->toBe(3)
+        ->and($second['failed'])->toBe(0);
+
+    $head = Member::query()->where('member_number', '10')->first();
+
+    expect(Member::query()->where('member_number', '11')->value('parent_member_id'))->toBe($head?->id)
+        ->and(Member::query()->where('member_number', '12')->value('parent_member_id'))->toBe($head?->id);
+});
+
+test('member import prefers parent_member_number over shared-email inference', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number\n" .
+        "1,Email Household A,shared.prefer@fund.test,\n" .
+        "2,Email Household B,shared.prefer@fund.test,\n" .
+        "3,Explicit Parent,explicit.parent@fund.test,\n" .
+        "4,Explicit Dependent,shared.prefer@fund.test,3\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(4)->and($result['failed'])->toBe(0);
+
+    $emailHead = Member::query()->where('member_number', '1')->first();
+    $emailDep = Member::query()->where('member_number', '2')->first();
+    $explicitParent = Member::query()->where('member_number', '3')->first();
+    $explicitDep = Member::query()->where('member_number', '4')->first();
+
+    expect($emailDep?->parent_member_id)->toBe($emailHead?->id)
+        ->and($explicitDep?->parent_member_id)->toBe($explicitParent?->id);
 });
 
 test('member import links dependent when parent row appears later in the file', function () {
@@ -354,7 +443,14 @@ test('member import populates membership profile from optional columns', functio
         ->and((float) $profile->membership_fee_amount)->toBe(75.0)
         ->and($profile->membership_fee_transfer_date?->toDateString())->toBe('2024-05-20')
         ->and($profile->membership_fee_transfer_reference)->toBe('FEE-PROF-1')
-        ->and($profile->message)->toBe('Hello from CSV');
+        ->and($profile->message)->toBe('Hello from CSV')
+        // Default public fee_new seeds residual cash: deposit − required fee on master fees.
+        ->and(
+            Transaction::query()
+                ->where('reference_type', MembershipApplication::class)
+                ->where('reference_id', $profile->id)
+                ->exists()
+        )->toBeTrue();
 });
 
 test('member export includes roster and balance columns', function () {

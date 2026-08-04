@@ -1452,21 +1452,32 @@ class AccountingService
     private function masterPoolMirrorLegDescription(string $description, ?int $memberId, string $mirrorSuffix): string
     {
         $base = trim($description);
+        $suffix = trim($mirrorSuffix);
 
-        if ($memberId === null) {
-            return $base === '' ? trim($mirrorSuffix) : $base.' '.trim($mirrorSuffix);
+        if ($memberId !== null) {
+            $memberName = Member::query()->whereKey($memberId)->value('name');
+
+            if (filled($memberName) && ! MemberLedgerDescriptionTranslator::descriptionAlreadyContainsMemberName($base, (string) $memberName)) {
+                $base = __(':description (:member)', [
+                    'description' => $base,
+                    'member' => $memberName,
+                ]);
+            }
         }
 
-        $memberName = Member::query()->whereKey($memberId)->value('name');
-
-        if (filled($memberName) && ! MemberLedgerDescriptionTranslator::descriptionAlreadyContainsMemberName($base, (string) $memberName)) {
-            return __(':description (:member)', [
-                'description' => $base,
-                'member' => $memberName,
-            ]);
+        if ($suffix === '') {
+            return $base;
         }
 
-        return $base === '' ? trim($mirrorSuffix) : $base;
+        if ($base === '') {
+            return $suffix;
+        }
+
+        if (str_contains($base, $suffix)) {
+            return $base;
+        }
+
+        return $base.' '.$suffix;
     }
 
     private function assertMasterReserveAccount(Account $account): void

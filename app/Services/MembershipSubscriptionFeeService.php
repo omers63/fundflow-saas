@@ -32,6 +32,19 @@ class MembershipSubscriptionFeeService
         return $this->requiredFeeAmount($application) > 0;
     }
 
+    /**
+     * Legacy member CSV rows with a declared application fee always expect ledger legs
+     * (including household dependents).
+     */
+    public function expectsSubscriptionFeeLedger(MembershipApplication $application): bool
+    {
+        if ((float) ($application->membership_fee_amount ?? 0) > 0) {
+            return true;
+        }
+
+        return $this->applicationRequiresSubscriptionFee($application);
+    }
+
     public function requiredFeeAmount(MembershipApplication $application): float
     {
         $stored = $application->membership_fee_required_amount;
@@ -66,19 +79,112 @@ class MembershipSubscriptionFeeService
      */
     public function postOnApproval(MembershipApplication $application, Member $member): void
     {
-        if (! $this->applicationRequiresSubscriptionFee($application)) {
+        $this->postSubscriptionFeeLedger($application, $member, legacyMemberImport: false);
+    }
+
+    /**
+     * Post fee legs for member roster / legacy import when application_fee_amount is declared.
+     * Idempotent when legs already exist. Suppresses contribution collection on cash credits.
+     */
+    public function postOnLegacyMemberImport(MembershipApplication $application, Member $member): void
+    {
+        $this->postSubscriptionFeeLedger($application, $member, legacyMemberImport: true);
+    }
+
+    /**
+     * @return int Number of applications that received newly posted fee legs
+     */
+    public function backfillMissingLegacyMemberImportFees(): int
+    {
+        $posted = 0;
+
+        MembershipApplication::query()
+            ->where('status', 'approved')
+            ->where('membership_fee_amount', '>', 0)
+            ->whereNotNull('member_id')
+            ->orderBy('id')
+            ->chunkById(100, function ($rows) use (&$posted): void {
+                foreach ($rows as $application) {
+                    if (! $application instanceof MembershipApplication) {
+                        continue;
+                    }
+
+                    if ($this->hasSubscriptionFeePosted($application)) {
+                        continue;
+                    }
+
+                    if (! $this->expectsSubscriptionFeeLedger($application)) {
+                        continue;
+                    }
+
+                    $member = $application->member;
+
+                    if ($member === null) {
+                        continue;
+                    }
+
+                    if ($member->cashAccount === null) {
+                        continue;
+                    }
+
+                    // Enrollment dependents without CSV import intentionally skip fees —
+                    // only backfill true roster profile shells or cases that expect a fee.
+                    if (
+                        ! $application->isMembershipProfileShell()
+                        && ! $this->applicationRequiresSubscriptionFee($application)
+                    ) {
+                        continue;
+                    }
+
+                    $this->postOnLegacyMemberImport($application, $member);
+                    $posted++;
+                }
+            });
+
+        return $posted;
+    }
+
+    private function postSubscriptionFeeLedger(
+        MembershipApplication $application,
+        Member $member,
+        bool $legacyMemberImport,
+    ): void {
+        $transferred = (float) ($application->membership_fee_amount ?? 0);
+
+        if ($legacyMemberImport) {
+            if ($transferred <= 0.00001) {
+                return;
+            }
+        } elseif (! $this->applicationRequiresSubscriptionFee($application)) {
             $application->update(['rejection_reason' => null]);
 
             return;
         }
 
         if ($this->hasSubscriptionFeePosted($application)) {
+            if ($legacyMemberImport) {
+                return;
+            }
+
             throw new InvalidArgumentException(__('Subscription fee accounting has already been posted for this application.'));
         }
 
-        $this->assertCanApprove($application);
+        if (! $legacyMemberImport) {
+            $this->assertCanApprove($application);
+        }
 
-        $transferred = (float) $application->membership_fee_amount;
+        if ($legacyMemberImport && (float) ($application->membership_fee_required_amount ?? 0) <= 0) {
+            $requiredDefault = $this->requiredFeeAmount($application);
+            if ($requiredDefault <= 0) {
+                $requiredDefault = $transferred;
+            }
+            $application->update([
+                'membership_fee_required_amount' => round($requiredDefault, 2),
+            ]);
+            $application = $application->fresh() ?? $application;
+        }
+
+        $transferred = (float) ($application->membership_fee_amount ?? 0);
         $required = $this->requiredFeeAmount($application);
         $settledFee = min($transferred, $required);
         $arrears = max(0.0, round($required - $settledFee, 2));
@@ -148,7 +254,7 @@ class MembershipSubscriptionFeeService
             });
         };
 
-        if ($application->wasImportedFromCsv()) {
+        if ($legacyMemberImport || $application->wasImportedFromCsv()) {
             AccountingService::withoutMemberCashCollection($postSubscriptionFee);
 
             return;

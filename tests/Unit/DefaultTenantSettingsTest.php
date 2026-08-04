@@ -40,19 +40,19 @@ it('persists every automation schedule default key for a fresh tenant', function
         ->and($stored['loan_due_notify_days'])->toBe('0,7,14,21,28')
         ->and($stored['master_invariants_time'])->toBe('06:00')
         ->and($stored['daily_reconcile_time'])->toBe('06:20')
-        ->and($stored['nightly_reconcile_time'])->toBe('06:30')
+        ->and($stored['nightly_reconcile_time'])->toBe('23:30')
         ->and($stored['bank_auto_match_time'])->toBe('08:00')
-        ->and($stored['delinquency_digest_time'])->toBe('07:30')
+        ->and($stored['delinquency_digest_time'])->toBe('12:30')
         ->and($stored['master_invariants_frequency'])->toBe('daily')
         ->and($stored['master_invariants_times'])->toBe('06:00')
         ->and($stored['daily_reconcile_frequency'])->toBe('daily')
         ->and($stored['daily_reconcile_times'])->toBe('06:20')
         ->and($stored['nightly_reconcile_frequency'])->toBe('daily')
-        ->and($stored['nightly_reconcile_times'])->toBe('06:30')
+        ->and($stored['nightly_reconcile_times'])->toBe('23:30')
         ->and($stored['bank_auto_match_frequency'])->toBe('daily')
         ->and($stored['bank_auto_match_times'])->toBe('08:00')
         ->and($stored['delinquency_digest_frequency'])->toBe('daily')
-        ->and($stored['delinquency_digest_times'])->toBe('07:30')
+        ->and($stored['delinquency_digest_times'])->toBe('12:30')
         ->and($stored['cycle_close_time'])->toBe('00:30')
         ->and($stored['cycle_init_time'])->toBe('00:35')
         ->and($stored['emi_close_time'])->toBe('00:45')
@@ -78,7 +78,9 @@ it('persists every automation schedule default key for a fresh tenant', function
         ->and($stored['month_boundary_day'])->toBe('6')
         ->and($stored['emi_close_day'])->toBe('6')
         ->and($stored['statements_day'])->toBe('6')
-        ->and($stored['fund_status_digest_times'])->toBe('04:00');
+        ->and($stored['fund_status_digest_frequency'])->toBe('weekly')
+        ->and($stored['fund_status_digest_weekdays'])->toBe('6')
+        ->and($stored['fund_status_digest_times'])->toBe('23:00');
 });
 
 it('backfills only missing automation schedule keys', function () {
@@ -179,7 +181,11 @@ it('persists samman-shaped settings defaults for a fresh tenant', function () {
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'emi_close_day'))->toBe('6')
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'statements_day'))->toBe('6')
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'dispatch_announcements_interval_minutes'))->toBe('15')
-        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'fund_status_digest_times'))->toBe('04:00')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'nightly_reconcile_times'))->toBe('23:30')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'delinquency_digest_times'))->toBe('12:30')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'fund_status_digest_frequency'))->toBe('weekly')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'fund_status_digest_weekdays'))->toBe('6')
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'fund_status_digest_times'))->toBe('23:00')
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'notify_contribution_due'))->toBe('1')
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'notify_reconciliation_digest'))->toBe('1')
         ->and(Setting::get(CommunicationSettings::GROUP, 'email_enabled'))->toBe('1')
@@ -251,7 +257,7 @@ it('ensureInstalled does not overwrite an existing tenant setting', function () 
     expect(Setting::get(AutomationScheduleSettings::GROUP, 'dispatch_announcements_interval_minutes'))->toBe('7')
         ->and(Setting::get('general', 'currency'))->toBe('USD')
         // Missing automation keys still backfill
-        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'fund_status_digest_times'))->toBe('04:00');
+        ->and(Setting::get(AutomationScheduleSettings::GROUP, 'fund_status_digest_times'))->toBe('23:00');
 });
 
 it('aligns loan queue arrears default with samman policy', function () {

@@ -684,8 +684,11 @@ class ReconciliationReportService
         ];
 
         // --- 4e) Membership application subscription fee posting integrity ---
+        // Legacy member import profiles with declared application fees must have deposit + fee legs.
+        // Enrollment household dependents (non-CSV) intentionally skip posting.
         $membershipFeeIssues = [];
         $masterFees = Account::masterFees();
+        $subscriptionFees = app(MembershipSubscriptionFeeService::class);
 
         MembershipApplication::query()
             ->where('status', 'approved')
@@ -694,14 +697,39 @@ class ReconciliationReportService
                     ->orWhere('membership_fee_required_amount', '>', 0);
             })
             ->orderBy('id')
-            ->chunkById(200, function ($rows) use (&$membershipFeeIssues, $masterCash, $masterFees): void {
+            ->chunkById(200, function ($rows) use (&$membershipFeeIssues, $masterCash, $masterFees, $subscriptionFees): void {
                 foreach ($rows as $application) {
                     if (! $application instanceof MembershipApplication) {
                         continue;
                     }
 
+                    // Pure profile shells with no fee metadata are historical records only.
+                    if (
+                        $application->isMembershipProfileShell()
+                        && (float) ($application->membership_fee_amount ?? 0) <= self::AMOUNT_TOLERANCE
+                        && (float) ($application->membership_fee_required_amount ?? 0) <= self::AMOUNT_TOLERANCE
+                    ) {
+                        continue;
+                    }
+
+                    // Declared membership/application fees (incl. legacy member import) always expect legs.
+                    if (! $subscriptionFees->expectsSubscriptionFeeLedger($application)) {
+                        continue;
+                    }
+
+                    // Enrollment dependents with leftover fee columns but no fee posting path stay exempt.
+                    if (
+                        ! $application->isMembershipProfileShell()
+                        && ! $subscriptionFees->applicationRequiresSubscriptionFee($application)
+                    ) {
+                        continue;
+                    }
+
                     $expectedTransfer = (float) ($application->membership_fee_amount ?? 0);
-                    $expectedFee = min($expectedTransfer, (float) ($application->membership_fee_required_amount ?? $expectedTransfer));
+                    $expectedFee = min(
+                        $expectedTransfer,
+                        $subscriptionFees->requiredFeeAmount($application),
+                    );
 
                     if ($expectedTransfer > self::AMOUNT_TOLERANCE) {
                         $actualTransfer = (float) Transaction::query()
@@ -752,6 +780,7 @@ class ReconciliationReportService
             'issue_count' => count($membershipFeeIssues),
             'issues' => array_slice($membershipFeeIssues, 0, 100),
             'issues_truncated' => count($membershipFeeIssues) > 100,
+            'note' => 'Enrollment approvals and legacy member CSV rows with declared application fees. Fee-exempt household dependents are excluded.',
         ];
 
         // --- 4f) Annual subscription fee posting integrity ---

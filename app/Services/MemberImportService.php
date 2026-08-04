@@ -24,12 +24,20 @@ use Throwable;
 
 final class MemberImportService
 {
+    /**
+     * First CSV row key per contact email (file order). Used when parent_member_number is empty.
+     *
+     * @var array<string, string>
+     */
+    private array $emailFirstRowKeys = [];
+
     public function __construct(
         private readonly HouseholdMemberService $householdMembers,
         private readonly MemberOpeningBalanceService $openingBalances,
         private readonly ContributionCollectionCycleService $contributions,
         private readonly LegacyMemberIdentifierResolver $memberResolver,
         private readonly MemberMembershipProfileService $membershipProfiles,
+        private readonly MembershipSubscriptionFeeService $subscriptionFees,
     ) {}
 
     /**
@@ -44,6 +52,14 @@ final class MemberImportService
      * bank_account_number, iban, next_of_kin_name, next_of_kin_phone, membership_fee_amount /
      * application_fee_amount, membership_fee_transfer_date / application_fee_transfer_date,
      * membership_fee_transfer_reference / application_fee_transfer_reference, message / applicant_message).
+     * Declared application / membership fees are posted like approval (member + master cash deposit mirror,
+     * then fee to master fees; no bank statement lines).
+     *
+     * Household links:
+     * - When parent_member_number (or name/email parent columns) is set, that reference is used.
+     * - When parent_member_number is empty, the first row with a given contact email is the household
+     *   parent; later rows that reuse the same email become dependents of that first row.
+     * - Re-import of existing members re-applies household links without re-creating the rows.
      *
      * Parent rows may appear after dependent rows; the importer resolves household links in multiple passes.
      *
@@ -78,56 +94,62 @@ final class MemberImportService
             ];
         }
 
-        $defaultArrearsCutoffDate = $this->normalizeOptionalDate($defaultArrearsCutoffDate);
-        $lineBase = 2;
+        $this->emailFirstRowKeys = $this->buildEmailFirstRowKeys($rows);
 
-        $pending = [];
+        try {
+            $defaultArrearsCutoffDate = $this->normalizeOptionalDate($defaultArrearsCutoffDate);
+            $lineBase = 2;
 
-        foreach ($rows as $index => $row) {
-            $pending[] = [
-                'line' => $lineBase + $index,
-                'row' => $row,
-            ];
-        }
+            $pending = [];
 
-        while ($pending !== []) {
-            $deferred = [];
-            $progress = false;
+            foreach ($rows as $index => $row) {
+                $pending[] = [
+                    'line' => $lineBase + $index,
+                    'row' => $row,
+                ];
+            }
 
-            foreach ($pending as $item) {
-                if (! $this->canImportRow($item['row'])) {
-                    $deferred[] = $item;
+            while ($pending !== []) {
+                $deferred = [];
+                $progress = false;
 
-                    continue;
-                }
+                foreach ($pending as $item) {
+                    if (! $this->canImportRow($item['row'])) {
+                        $deferred[] = $item;
 
-                try {
-                    $result = $this->importRow($item['row'], $defaultPassword, $defaultArrearsCutoffDate);
-
-                    if ($result === 'skipped') {
-                        $skipped++;
-                    } else {
-                        $created++;
+                        continue;
                     }
 
-                    $progress = true;
-                } catch (Throwable $e) {
-                    $failed++;
-                    $errors[] = "Row {$item['line']}: {$e->getMessage()}";
-                    $progress = true;
+                    try {
+                        $result = $this->importRow($item['row'], $defaultPassword, $defaultArrearsCutoffDate);
+
+                        if ($result === 'skipped') {
+                            $skipped++;
+                        } else {
+                            $created++;
+                        }
+
+                        $progress = true;
+                    } catch (Throwable $e) {
+                        $failed++;
+                        $errors[] = "Row {$item['line']}: {$e->getMessage()}";
+                        $progress = true;
+                    }
                 }
-            }
 
-            if (! $progress) {
-                foreach ($deferred as $item) {
-                    $failed++;
-                    $errors[] = "Row {$item['line']}: {$this->missingParentReferenceMessage($item['row'])}";
+                if (! $progress) {
+                    foreach ($deferred as $item) {
+                        $failed++;
+                        $errors[] = "Row {$item['line']}: {$this->missingParentReferenceMessage($item['row'])}";
+                    }
+
+                    break;
                 }
 
-                break;
+                $pending = $deferred;
             }
-
-            $pending = $deferred;
+        } finally {
+            $this->emailFirstRowKeys = [];
         }
 
         return [
@@ -152,18 +174,22 @@ final class MemberImportService
         $memberNumber = $this->cell($row, 'member_number');
         $explicitEmail = strtolower(trim($this->cell($row, 'email')));
 
-        if ($this->rowAlreadyImported($name, $memberNumber, $explicitEmail)) {
+        $parentMember = $this->resolveParentMember($row);
+
+        if ($this->rowNeedsResolvedParent($row) && $parentMember === null && ! $this->parentReferenceMatchesRowName($row)) {
+            throw new InvalidArgumentException($this->missingParentReferenceMessage($row));
+        }
+
+        $existing = $this->findExistingMember($name, $memberNumber, $explicitEmail);
+
+        if ($existing !== null) {
+            $this->syncHouseholdFromImport($existing, $parentMember);
+
             return 'skipped';
         }
 
         $password = $this->cell($row, 'password');
         $plainPassword = strlen($password) >= 8 ? $password : $defaultPassword;
-
-        $parentMember = $this->resolveParentMember($row);
-
-        if ($this->rowHasParentReference($row) && $parentMember === null && ! $this->parentReferenceMatchesRowName($row)) {
-            throw new InvalidArgumentException($this->missingParentReferenceMessage($row));
-        }
 
         $email = $this->resolveImportEmail($row, $name, $memberNumber, $parentMember);
         $monthlyContribution = $this->parseMonthlyContribution($row);
@@ -233,6 +259,16 @@ final class MemberImportService
 
             $this->membershipProfiles->syncFromImportAttributes($member->fresh() ?? $member, $profileAttributes);
 
+            $member = $member->fresh() ?? $member;
+            $profile = $this->membershipProfiles->findForMember($member);
+
+            if (
+                $profile !== null
+                && (float) ($profile->membership_fee_amount ?? 0) > 0.00001
+            ) {
+                $this->subscriptionFees->postOnLegacyMemberImport($profile, $member);
+            }
+
             return 'created';
         });
     }
@@ -257,27 +293,76 @@ final class MemberImportService
 
     /**
      * When member_number is present it is the authoritative identity for legacy imports.
-     * Household dependents often reuse the head's contact email and must not be skipped.
+     * Household dependents often reuse the head's contact email and must not be skipped as "already imported"
+     * solely because their email matches the head — they are keyed by member_number when provided.
      */
-    private function rowAlreadyImported(string $name, string $memberNumber, string $explicitEmail): bool
+    private function findExistingMember(string $name, string $memberNumber, string $explicitEmail): ?Member
     {
         if ($memberNumber !== '') {
-            return Member::query()->where('member_number', $memberNumber)->exists();
+            return Member::query()->where('member_number', $memberNumber)->first();
         }
 
         if ($explicitEmail !== '') {
-            if (Member::query()->where('email', $explicitEmail)->exists()) {
-                return true;
+            $byMemberEmail = Member::query()->where('email', $explicitEmail)->first();
+
+            if ($byMemberEmail !== null) {
+                return $byMemberEmail;
             }
 
-            if (User::query()->where('email', $explicitEmail)->exists()) {
-                return true;
+            $user = User::query()->where('email', $explicitEmail)->first();
+
+            if ($user !== null) {
+                return Member::query()->where('user_id', $user->id)->first();
             }
         }
 
         return Member::query()
             ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
-            ->exists();
+            ->first();
+    }
+
+    /**
+     * @param  list<array<string, string>>  $rows
+     * @return array<string, string>
+     */
+    private function buildEmailFirstRowKeys(array $rows): array
+    {
+        $firstKeys = [];
+
+        foreach ($rows as $row) {
+            $email = strtolower(trim($this->cell($row, 'email')));
+
+            if ($email === '' || isset($firstKeys[$email])) {
+                continue;
+            }
+
+            $firstKeys[$email] = $this->rowIdentityKey($row);
+        }
+
+        return $firstKeys;
+    }
+
+    /**
+     * Stable key for a CSV row (used to match email-first household heads).
+     *
+     * @param  array<string, string>  $row
+     */
+    private function rowIdentityKey(array $row): string
+    {
+        $memberNumber = $this->cell($row, 'member_number');
+
+        if ($memberNumber !== '') {
+            return 'n:'.$memberNumber;
+        }
+
+        $email = strtolower(trim($this->cell($row, 'email')));
+        $name = mb_strtolower(trim($this->cell($row, 'name')));
+
+        if ($email !== '') {
+            return 'e:'.$email.'|'.$name;
+        }
+
+        return 'name:'.$name;
     }
 
     /**
@@ -285,7 +370,7 @@ final class MemberImportService
      */
     private function canImportRow(array $row): bool
     {
-        if (! $this->rowHasParentReference($row)) {
+        if (! $this->rowNeedsResolvedParent($row)) {
             return true;
         }
 
@@ -297,9 +382,25 @@ final class MemberImportService
     }
 
     /**
+     * Row cannot be imported as a household head because CSV / email rules assign a parent.
+     *
      * @param  array<string, string>  $row
      */
-    private function rowHasParentReference(array $row): bool
+    private function rowNeedsResolvedParent(array $row): bool
+    {
+        if ($this->rowHasExplicitParentReference($row)) {
+            return ! $this->parentReferenceMatchesRowName($row);
+        }
+
+        return $this->emailInferredParentRowKey($row) !== null;
+    }
+
+    /**
+     * Explicit parent columns on the row (not email-order inference).
+     *
+     * @param  array<string, string>  $row
+     */
+    private function rowHasExplicitParentReference(array $row): bool
     {
         if ($this->cell($row, 'parent_member_number') !== '') {
             return true;
@@ -333,7 +434,80 @@ final class MemberImportService
             }
         }
 
+        $inferredKey = $this->emailInferredParentRowKey($row);
+
+        if ($inferredKey !== null) {
+            return (string) __('Household parent for shared email was not found.');
+        }
+
         return (string) __('Parent member was not found.');
+    }
+
+    /**
+     * When parent_member_number is empty, later rows that reuse an earlier row's contact email
+     * become dependents of that first email encounter.
+     *
+     * @param  array<string, string>  $row
+     */
+    private function emailInferredParentRowKey(array $row): ?string
+    {
+        if ($this->cell($row, 'parent_member_number') !== '') {
+            return null;
+        }
+
+        $email = strtolower(trim($this->cell($row, 'email')));
+
+        if ($email === '') {
+            return null;
+        }
+
+        $firstKey = $this->emailFirstRowKeys[$email] ?? null;
+
+        if ($firstKey === null || $firstKey === $this->rowIdentityKey($row)) {
+            return null;
+        }
+
+        return $firstKey;
+    }
+
+    private function findMemberByRowIdentityKey(string $key): ?Member
+    {
+        if (str_starts_with($key, 'n:')) {
+            return $this->memberResolver->findByMemberNumber(substr($key, 2));
+        }
+
+        if (str_starts_with($key, 'e:')) {
+            $payload = substr($key, 2);
+            $parts = explode('|', $payload, 2);
+            $email = $parts[0] ?? '';
+            $name = $parts[1] ?? '';
+
+            if ($email !== '') {
+                $byEmail = $this->memberResolver->findByEmail($email);
+
+                if ($byEmail !== null) {
+                    return $byEmail;
+                }
+            }
+
+            if ($name !== '') {
+                return Member::query()
+                    ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+                    ->whereNull('parent_member_id')
+                    ->first()
+                    ?? Member::query()
+                        ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+                        ->first();
+            }
+
+            return null;
+        }
+
+        if (str_starts_with($key, 'name:')) {
+            return $this->memberResolver->findByName(substr($key, 5));
+        }
+
+        return null;
     }
 
     /**
@@ -344,6 +518,10 @@ final class MemberImportService
         $parentNumber = $this->cell($row, 'parent_member_number');
 
         if ($parentNumber !== '') {
+            if ($this->parentReferenceMatchesRowName($row)) {
+                return null;
+            }
+
             return $this->memberResolver->findByNumberOrLegacyLabel($parentNumber);
         }
 
@@ -365,7 +543,64 @@ final class MemberImportService
             return $this->memberResolver->findByEmail($parentEmail);
         }
 
-        return null;
+        $inferredKey = $this->emailInferredParentRowKey($row);
+
+        if ($inferredKey === null) {
+            return null;
+        }
+
+        return $this->findMemberByRowIdentityKey($inferredKey);
+    }
+
+    /**
+     * Re-apply household parent/dependent link for an existing member (fresh re-import).
+     */
+    private function syncHouseholdFromImport(Member $member, ?Member $parentMember): void
+    {
+        if ($parentMember !== null) {
+            if ((int) $member->id === (int) $parentMember->id) {
+                return;
+            }
+
+            if ((int) ($member->parent_member_id ?? 0) === (int) $parentMember->id) {
+                return;
+            }
+
+            $member->loadMissing('user');
+
+            if ($member->user !== null) {
+                $this->householdMembers->assignToHousehold($member, $parentMember);
+
+                return;
+            }
+
+            $householdEmail = $this->resolveParentHouseholdEmail($parentMember);
+            $member->update([
+                'parent_member_id' => $parentMember->id,
+                'email' => $householdEmail,
+                'household_email' => $householdEmail,
+                'is_separated' => false,
+                'direct_login_enabled' => false,
+            ]);
+
+            return;
+        }
+
+        if ($member->parent_member_id === null) {
+            return;
+        }
+
+        $member->loadMissing('user');
+
+        if ($member->user !== null) {
+            $this->householdMembers->removeFromHousehold($member);
+
+            return;
+        }
+
+        $member->update([
+            'parent_member_id' => null,
+        ]);
     }
 
     /**

@@ -152,7 +152,6 @@ class Settings extends Page implements HasForms
         $memberNumber = MemberNumberSettings::all();
         $public = PublicPageSettings::all();
         $fiscal = FiscalSettings::forForm();
-        $reconciliation = Setting::getGroup('reconciliation');
 
         $templates = BankTemplate::orderBy('name')->get()->map(fn (BankTemplate $t) => [
             'id' => $t->id,
@@ -208,9 +207,6 @@ class Settings extends Page implements HasForms
             'business_day' => BusinessDaySettings::forForm(),
             'business_day_banner_admin' => BusinessDaySettings::showBannerOnAdmin(),
             'business_day_banner_member' => BusinessDaySettings::showBannerOnMember(),
-            'reconciliation_bank_statement_balance' => $reconciliation['bank_statement_balance'] ?? null,
-            'reconciliation_bank_statement_date' => $reconciliation['bank_statement_date'] ?? null,
-            'reconciliation_bank_variance_critical' => filter_var($reconciliation['bank_variance_critical'] ?? false, FILTER_VALIDATE_BOOL),
             ...ReconciliationDigestSettings::allForForm(),
             'fiscal_year_start_month' => $fiscal['fiscal_year_start_month'],
             'fiscal_year_start_day' => $fiscal['fiscal_year_start_day'],
@@ -932,22 +928,6 @@ class Settings extends Page implements HasForms
                     ]),
             ],
             'reconciliation::tab' => [
-                Section::make(__('Bank vs book'))
-                    ->description(__('Declared bank closing balance and critical variance for scheduled fund:reconcile runs and as defaults when you Run check now on the reconciliation page.'))
-                    ->columns(2)
-                    ->schema([
-                        TextInput::make('reconciliation_bank_statement_balance')
-                            ->label(__('Statement / bank closing balance'))
-                            ->numeric()
-                            ->nullable(),
-                        DatePicker::make('reconciliation_bank_statement_date')
-                            ->label(__('Statement as-of date'))
-                            ->native(false)
-                            ->nullable(),
-                        Toggle::make('reconciliation_bank_variance_critical')
-                            ->label(__('Treat bank vs book variance as critical on scheduled runs'))
-                            ->default(false),
-                    ]),
                 Section::make(__('Digest notifications'))
                     ->description(__('Database alerts always go to admins when reconciliation digests are enabled under Collection → Automation notifications. Push can be turned off separately here.'))
                     ->schema([
@@ -1433,9 +1413,6 @@ class Settings extends Page implements HasForms
         Setting::set('general', 'currency', $state['currency']);
         LocalizationSettings::saveFromForm($state);
         LedgerSettings::saveFromForm($state);
-        Setting::set('reconciliation', 'bank_statement_balance', $state['reconciliation_bank_statement_balance'] ?? '');
-        Setting::set('reconciliation', 'bank_statement_date', $state['reconciliation_bank_statement_date'] ?? '');
-        Setting::set('reconciliation', 'bank_variance_critical', ($state['reconciliation_bank_variance_critical'] ?? false) ? '1' : '0');
         ReconciliationDigestSettings::saveFromForm($state);
         BusinessDaySettings::saveFromForm($state);
         FiscalSettings::saveFromForm([

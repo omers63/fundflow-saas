@@ -2,6 +2,7 @@
 
 namespace App\Models\Tenant;
 
+use App\Services\MembershipApprovalPostingPipeline;
 use App\Support\Lang;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -128,6 +129,26 @@ class MembershipApplication extends Model
     public function wasImportedFromCsv(): bool
     {
         return $this->import_arrears_cutoff_date !== null;
+    }
+
+    /**
+     * Synthetic approved row for member profile / optional historical fee columns
+     * (member CSV import, portal profile). Never ran {@see MembershipApprovalPostingPipeline}.
+     */
+    public function isMembershipProfileShell(): bool
+    {
+        if ($this->wasImportedFromCsv()) {
+            return false;
+        }
+
+        if ($this->status !== 'approved' || $this->member_id === null) {
+            return false;
+        }
+
+        // Enrollment applications always store a password at create; profile shells do not.
+        $storedPassword = $this->attributes['password'] ?? null;
+
+        return $storedPassword === null || $storedPassword === '';
     }
 
     public function scopePending($query)

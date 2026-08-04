@@ -70,3 +70,15 @@ test('audit system automation side tab exposes the schedule form', function () {
         ->assertSee(__('Cycle & month boundary'))
         ->assertSee(__('Save schedule'));
 });
+
+test('platform automation defaults match samman production clocks', function () {
+    $defaults = AutomationScheduleSettings::defaults();
+
+    expect($defaults['nightly_reconcile_times'])->toBe('23:30')
+        ->and($defaults['delinquency_digest_times'])->toBe('12:30')
+        ->and($defaults['fund_status_digest_frequency'])->toBe('weekly')
+        ->and($defaults['fund_status_digest_weekdays'])->toBe('6')
+        ->and($defaults['fund_status_digest_times'])->toBe('23:00')
+        ->and($defaults['contribution_due_notify_days'])->toBe('0,7,14,21,28')
+        ->and($defaults['daily_reconcile_times'])->toBe('06:20');
+});
