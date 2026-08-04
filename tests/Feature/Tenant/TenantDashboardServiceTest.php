@@ -307,9 +307,13 @@ test('tenant dashboard pool health includes twelve cycle flow trend', function (
     $pool = $this->service->snapshot()['pool_health'];
 
     expect($pool['sparkline'])->toHaveCount(30)
+        ->and($pool['sparkline_heights'])->toHaveCount(30)
         ->and($pool['sparkline_max'])->toBeGreaterThan(0)
         ->and($pool['sparkline_end'])->toBe(6000.0)
         ->and($pool['sparkline_start'])->toBe(5800.0)
+        // Range-normalized heights stretch 5800→6000 (with a readable floor), not absolute-vs-max ~96% flat.
+        ->and(max($pool['sparkline_heights']))->toBe(100.0)
+        ->and(min($pool['sparkline_heights']))->toBe(18.0)
         ->and($pool['flow_trend']['points'])->toHaveCount(12)
         ->and($pool['flow_trend']['inflow_series'])->toHaveCount(2)
         ->and($pool['flow_trend']['outflow_series'])->toHaveCount(3)

@@ -329,22 +329,36 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                         {{ \App\Support\Insights\InsightFormatter::compactAmount($pool['sparkline_end'] ?? ($pool['pool_total'] ?? 0)) }}
                     </p>
                 </div>
-                <div class="flex h-8 items-end gap-px sm:h-10">
-                    @php
-                        $sparklineMax = max(1, (float) ($pool['sparkline_max'] ?? 1));
-                    @endphp
-                    @foreach ($pool['sparkline'] as $point)
-                        @php $h = max(12, (int) round(((float) $point / $sparklineMax) * 100)); @endphp
-                        <div
-                            @class([
-                                'flex-1 rounded-sm',
-                                'bg-red-400/70 dark:bg-red-500/60' => ($pool['has_drift'] ?? false),
-                                'bg-sky-400/70 dark:bg-sky-500/60' => !($pool['has_drift'] ?? false),
-                            ])
-                            style="height: {{ $h }}%"
-                            title="{{ \App\Support\Insights\InsightFormatter::money($point) }}"
-                        ></div>
-                    @endforeach
+                <div class="relative h-14 sm:h-16">
+                    {{-- Track so empty-ish series still read as a chart --}}
+                    <div
+                        class="pointer-events-none absolute inset-0 rounded-md bg-gray-50/90 ring-1 ring-inset ring-gray-100 dark:bg-gray-800/40 dark:ring-gray-700/80">
+                    </div>
+                    <div class="relative flex h-full items-end gap-px px-0.5 py-1">
+                        @php
+                            $sparkHeights = $pool['sparkline_heights'] ?? null;
+                            $chartPx = 56; // matches h-14; sm bumps via min height on bars still look fine
+                        @endphp
+                        @foreach ($pool['sparkline'] as $index => $point)
+                            @php
+                                $pct = is_array($sparkHeights) && isset($sparkHeights[$index])
+                                    ? (float) $sparkHeights[$index]
+                                    : 42.0;
+                                $pct = max(0.0, min(100.0, $pct));
+                                // Pixel heights avoid flex % collapse (empty div + height:% often paints 0px).
+                                $px = max(4, (int) round(($pct / 100) * $chartPx));
+                            @endphp
+                            <div
+                                @class([
+                                    'min-w-0 flex-1 rounded-sm',
+                                    'bg-red-500 dark:bg-red-400' => ($pool['has_drift'] ?? false),
+                                    'bg-sky-500 dark:bg-sky-400' => !($pool['has_drift'] ?? false),
+                                ])
+                                style="height: {{ $px }}px"
+                                title="{{ \App\Support\Insights\InsightFormatter::money($point) }}"
+                            ></div>
+                        @endforeach
+                    </div>
                 </div>
             </div>
         @endif
@@ -368,15 +382,15 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                             ['label' => __('Process'), 'count' => $pipeline['process'] ?? 0, 'url' => $pipeline['queue_process_url'] ?? '#', 'tone' => 'emerald'],
                             ['label' => __('Running'), 'count' => $pipeline['running'] ?? 0, 'url' => $pipeline['queue_tiers_url'] ?? '#', 'tone' => 'teal'],
                         ] as $stage)
-                                <a href="{{ $stage['url'] }}" @class([
-                                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold transition hover:opacity-80',
-                                    'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $stage['tone'] === 'amber',
-                                    'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' => $stage['tone'] === 'sky',
-                                    'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' => $stage['tone'] === 'emerald',
-                                    'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200' => $stage['tone'] === 'teal',
-                                ])>
-                                    {{ $stage['label'] }} <span class="tabular-nums">{{ $stage['count'] }}</span>
-                                </a>
+                                    <a href="{{ $stage['url'] }}" @class([
+                                        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold transition hover:opacity-80',
+                                        'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $stage['tone'] === 'amber',
+                                        'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' => $stage['tone'] === 'sky',
+                                        'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' => $stage['tone'] === 'emerald',
+                                        'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200' => $stage['tone'] === 'teal',
+                                    ])>
+                                        {{ $stage['label'] }} <span class="tabular-nums">{{ $stage['count'] }}</span>
+                                    </a>
                     @endforeach
                     <a href="{{ \App\Filament\Tenant\Pages\LoanQueueWorkbenchPage::getUrl() }}"
                         class="ms-1 text-[11px] font-medium text-sky-600 hover:underline dark:text-sky-400">{{ __('Open workbench →') }}</a>

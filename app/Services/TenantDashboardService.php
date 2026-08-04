@@ -477,7 +477,9 @@ final class TenantDashboardService
             'solvency_ratio' => $solvency,
             'reconciliation_url' => ReconciliationOverviewPage::getUrl(),
             'sparkline' => $sparkline['values'],
+            'sparkline_heights' => $sparkline['heights'],
             'sparkline_max' => $sparkline['max'],
+            'sparkline_min' => $sparkline['min'],
             'sparkline_start' => $sparkline['start'],
             'sparkline_end' => $sparkline['end'],
             'flow_trend' => $flowTrend,
@@ -486,8 +488,9 @@ final class TenantDashboardService
 
     /**
      * End-of-day master cash + fund totals for the last 30 calendar days (oldest → newest).
+     * Heights are range-normalized + exponential so day-to-day pool moves read clearly.
      *
-     * @return array{values: list<float>, max: float, start: float, end: float}
+     * @return array{values: list<float>, heights: list<float>, max: float, min: float, start: float, end: float}
      */
     private function poolHealthSparkline(float $currentPoolTotal): array
     {
@@ -501,10 +504,13 @@ final class TenantDashboardService
 
         if ($accountIds->isEmpty()) {
             $flat = array_fill(0, 30, round($currentPoolTotal, 2));
+            $heights = PoolFlowTrendBuilder::rangeExponentialHeights($flat);
 
             return [
                 'values' => $flat,
+                'heights' => $heights,
                 'max' => max(1.0, $currentPoolTotal),
+                'min' => round($currentPoolTotal, 2),
                 'start' => $flat[0],
                 'end' => $flat[29],
             ];
@@ -535,10 +541,14 @@ final class TenantDashboardService
         ksort($values);
 
         $values = array_values($values);
+        $min = min($values);
+        $max = max(1.0, max($values));
 
         return [
             'values' => $values,
-            'max' => max(1.0, max($values)),
+            'heights' => PoolFlowTrendBuilder::rangeExponentialHeights($values),
+            'max' => $max,
+            'min' => $min,
             'start' => $values[0],
             'end' => $values[array_key_last($values)],
         ];

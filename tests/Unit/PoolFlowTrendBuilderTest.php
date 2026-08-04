@@ -24,15 +24,74 @@ afterEach(function () {
     Carbon::setTestNow();
 });
 
-test('exponential height expands relative differences super-linearly toward the max', function () {
-    $half = PoolFlowTrendBuilder::exponentialHeight(50, 100);
-    $full = PoolFlowTrendBuilder::exponentialHeight(100, 100);
-    $quarter = PoolFlowTrendBuilder::exponentialHeight(25, 100);
+test('proportional height scales linearly against the shared max', function () {
+    expect(PoolFlowTrendBuilder::proportionalHeight(50, 100))->toBe(50.0)
+        ->and(PoolFlowTrendBuilder::proportionalHeight(100, 100))->toBe(100.0)
+        ->and(PoolFlowTrendBuilder::proportionalHeight(25, 100))->toBe(25.0)
+        ->and(PoolFlowTrendBuilder::proportionalHeight(0, 100))->toBe(0.0)
+        ->and(PoolFlowTrendBuilder::proportionalHeight(10, 0))->toBe(0.0);
+});
 
-    expect($full)->toBe(100.0)
-        ->and($half)->toBeLessThan(50.0)
-        ->and($half)->toBeGreaterThan($quarter)
-        ->and(PoolFlowTrendBuilder::exponentialHeight(0, 100))->toBe(0.0);
+test('range exponential heights expand day-to-day deltas within a flat absolute band', function () {
+    // Typical pool: large absolute level, modest day moves — absolute max scaling would look flat.
+    $values = [9800.0, 9810.0, 9850.0, 9900.0, 10000.0];
+    $heights = PoolFlowTrendBuilder::rangeExponentialHeights($values);
+
+    expect($heights)->toHaveCount(5)
+        ->and($heights[4])->toBe(100.0)
+        ->and($heights[0])->toBe(18.0)
+        ->and($heights[0])->toBeLessThan($heights[1])
+        ->and($heights[1])->toBeLessThan($heights[2])
+        ->and($heights[2])->toBeLessThan($heights[3])
+        ->and($heights[3])->toBeLessThan($heights[4]);
+
+    // Low-to-mid day-to-day step remains noticeable after range normalize + curve.
+    $stepLow = $heights[1] - $heights[0];
+    $stepHigh = $heights[4] - $heights[3];
+    expect($stepLow)->toBeGreaterThan(1.0)
+        ->and($stepHigh)->toBeGreaterThan(1.0);
+});
+
+test('range exponential heights stay mid-stub when the series is flat', function () {
+    $heights = PoolFlowTrendBuilder::rangeExponentialHeights([5000.0, 5000.0, 5000.0]);
+
+    expect($heights)->toBe([42.0, 42.0, 42.0]);
+});
+
+test('twelve cycle pool flow heights are proportional within each direction', function () {
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+    ]);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $openPeriod = Contribution::periodDate($openMonth, $openYear);
+
+    Contribution::factory()->for($member)->posted()->create([
+        'period' => $openPeriod,
+        'amount' => 2500,
+        'posted_at' => $cycles->cycleStartAt($openMonth, $openYear)->addDay(),
+    ]);
+
+    Loan::factory()->for($member)->create([
+        'status' => 'active',
+        'amount' => 10_000,
+        'amount_disbursed' => 10_000,
+        'disbursed_at' => $cycles->cycleStartAt($openMonth, $openYear)->addDays(2),
+    ]);
+
+    $trend = PoolFlowTrendBuilder::twelveCycles($cycles);
+    $openPoint = collect($trend['points'])->firstWhere('period', $openPeriod);
+
+    // Separate max_in / max_out so a large loan does not crush inflow bars.
+    expect($trend['max'])->toBe(10000.0)
+        ->and($trend['max_in'])->toBe(2500.0)
+        ->and($trend['max_out'])->toBe(10000.0)
+        ->and($openPoint)->not->toBeNull()
+        ->and($openPoint['out_heights']['loans'])->toBe(100.0)
+        ->and($openPoint['in_heights']['contributions'])->toBe(100.0);
 });
 
 test('twelve cycle pool flow aggregates contributions and emi per cycle', function () {

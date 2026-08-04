@@ -24,11 +24,29 @@ final class PoolFlowTrendBuilder
 {
     public const CYCLE_COUNT = 12;
 
-    /** Super-linear bar height so cycle-to-cycle differences read more clearly. */
+    /**
+     * Curve for range-normalized absolute series (e.g. 30-day pool balance).
+     * Super-linear toward the series max so day-to-day deltas fill more of the chart.
+     */
     public const EXPONENTIAL_ALPHA = 2.25;
 
     /**
-     * Map a raw amount onto a 0–100 visual height using an exponential curve.
+     * Map a raw amount onto a 0–100 bar height proportionally (value / max).
+     * Prefer this for multi-series inflow/outflow charts so amounts stay comparable.
+     */
+    public static function proportionalHeight(float $value, float $max): float
+    {
+        if ($value <= 0.0 || $max <= 0.0) {
+            return 0.0;
+        }
+
+        return round(min(100.0, ($value / $max) * 100.0), 2);
+    }
+
+    /**
+     * Map a raw amount onto a 0–100 visual height using an exponential curve against an absolute max.
+     *
+     * @deprecated Prefer {@see proportionalHeight()} for flow charts and {@see rangeExponentialHeights()} for absolute series.
      */
     public static function exponentialHeight(float $value, float $max): float
     {
@@ -41,6 +59,43 @@ final class PoolFlowTrendBuilder
         $scaled = (exp($alpha * $ratio) - 1.0) / (exp($alpha) - 1.0);
 
         return round($scaled * 100, 2);
+    }
+
+    /**
+     * Min–max normalize a list of absolute values, then map through an exponential curve
+     * so small day-to-day moves are obvious even when the level is high and flat.
+     *
+     * @param  list<float|int>  $values
+     * @return list<float> heights in 0–100
+     */
+    public static function rangeExponentialHeights(array $values): array
+    {
+        if ($values === []) {
+            return [];
+        }
+
+        $floatValues = array_map(static fn($v): float => (float) $v, $values);
+        $min = min($floatValues);
+        $max = max($floatValues);
+        $range = $max - $min;
+
+        if ($range < 0.01) {
+            // Flat series: mid-height stub so the strip still reads as a continuous baseline.
+            return array_map(static fn(): float => 42.0, $floatValues);
+        }
+
+        $alpha = self::EXPONENTIAL_ALPHA;
+        $expDenom = exp($alpha) - 1.0;
+
+        return array_map(static function (float $value) use ($min, $range, $alpha, $expDenom): float {
+            $ratio = ($value - $min) / $range;
+            // Mild curve: keep ordering while stretching mid-band day-to-day moves.
+            $emphasized = sqrt(max(0.0, $ratio));
+            $scaled = (exp($alpha * $emphasized) - 1.0) / $expDenom;
+
+            // Floor at 18% so the min day stays visible; max still reaches 100%.
+            return round(18.0 + ($scaled * 82.0), 2);
+        }, $floatValues);
     }
 
     /**
@@ -180,12 +235,22 @@ final class PoolFlowTrendBuilder
             self::addWindowedSeries($byPeriod, $periodMetas, $series, 'reserves');
         }
 
+        $maxIn = 0.0;
+        $maxOut = 0.0;
         $max = 0.0;
         foreach ($byPeriod as $amounts) {
+            foreach ($inflowKeys as $key) {
+                $maxIn = max($maxIn, (float) $amounts[$key]);
+            }
+            foreach ($outflowKeys as $key) {
+                $maxOut = max($maxOut, (float) $amounts[$key]);
+            }
             foreach ($amounts as $amount) {
                 $max = max($max, (float) $amount);
             }
         }
+        $maxIn = max(1.0, $maxIn);
+        $maxOut = max(1.0, $maxOut);
         $max = max(1.0, $max);
 
         $inflowSeries = [
@@ -214,7 +279,8 @@ final class PoolFlowTrendBuilder
             $inHeights = [];
             foreach ($inflowKeys as $key) {
                 $value = (float) $amounts[$key];
-                $height = self::exponentialHeight($value, $max);
+                // Proportional within inflows so a single large loan does not crush inflow bars.
+                $height = self::proportionalHeight($value, $maxIn);
                 $inHeights[$key] = $height;
                 $inflowLinePoints[$key][] = [
                     'x' => round($x, 3),
@@ -225,7 +291,7 @@ final class PoolFlowTrendBuilder
             $outHeights = [];
             foreach ($outflowKeys as $key) {
                 $value = (float) $amounts[$key];
-                $height = self::exponentialHeight($value, $max);
+                $height = self::proportionalHeight($value, $maxOut);
                 $outHeights[$key] = $height;
                 $outflowLinePoints[$key][] = [
                     'x' => round($x, 3),
@@ -257,6 +323,8 @@ final class PoolFlowTrendBuilder
         return [
             'points' => $points,
             'max' => round($max, 2),
+            'max_in' => round($maxIn, 2),
+            'max_out' => round($maxOut, 2),
             'inflow_series' => $inflowSeries,
             'outflow_series' => $outflowSeries,
             'lines' => [
