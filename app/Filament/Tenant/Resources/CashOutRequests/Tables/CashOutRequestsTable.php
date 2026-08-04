@@ -4,18 +4,20 @@ namespace App\Filament\Tenant\Resources\CashOutRequests\Tables;
 
 use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberFilamentActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
+use App\Filament\Tenant\Resources\CashOutRequests\Schemas\CashOutRequestForm;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\MemberCashOutService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
@@ -32,10 +34,49 @@ class CashOutRequestsTable
             $table
                 ->headerActions([
                     TableHeaderIconAction::apply(
-                        CreateAction::make()
+                        Action::make('create')
                             ->label(__('New cash out'))
                             ->icon('heroicon-o-plus-circle')
-                            ->url(CashOutRequestResource::getUrl('create')),
+                            ->modalHeading(__('New cash out'))
+                            ->modalDescription(__('Creates and approves a cash-out on the selected date. Member and master cash are debited, and an uncleared bank line is added for remittance.'))
+                            ->modalWidth('2xl')
+                            ->schema(CashOutRequestForm::components())
+                            ->action(function (array $data, Action $action, MemberCashOutService $service, Component $livewire): void {
+                                if (
+                                    ! ActionModalFailure::attemptThrowable(
+                                        $action,
+                                        function () use ($data, $service): void {
+                                            $member = Member::query()->findOrFail($data['member_id']);
+                                            $notes = filled($data['notes'] ?? null) ? (string) $data['notes'] : null;
+                                            $transactedAt = MemberFilamentActions::resolveCashOutDate($data['cash_out_date'] ?? null);
+
+                                            $request = $service->submit(
+                                                member: $member,
+                                                amount: (float) $data['amount'],
+                                                notes: $notes,
+                                            );
+
+                                            $service->accept(
+                                                $request,
+                                                auth('tenant')->id(),
+                                                $notes,
+                                                $transactedAt,
+                                            );
+                                        },
+                                        __('Could not create cash out'),
+                                    )
+                                ) {
+                                    return;
+                                }
+
+                                Notification::make()
+                                    ->title(__('Cash out approved'))
+                                    ->body(__('Member and master cash have been debited. Complete the remittance checklist under Audit & System, then clear the bank line when the statement imports.'))
+                                    ->success()
+                                    ->send();
+
+                                CashOutRequestResource::dispatchInsightsRefresh($livewire);
+                            }),
                     ),
                 ])
                 ->columns([

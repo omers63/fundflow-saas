@@ -32,6 +32,11 @@ final class BankClearingQueueTable
         return TableGrouping::apply(
             $table
                 ->columns([
+                    TextColumn::make('id')
+                        ->label(__('Line #'))
+                        ->sortable()
+                        ->searchable()
+                        ->toggleable(),
                     TextColumn::make('transaction_date')
                         ->date()
                         ->sortable(),

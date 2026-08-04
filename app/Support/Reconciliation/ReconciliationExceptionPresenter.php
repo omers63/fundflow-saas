@@ -101,6 +101,21 @@ final class ReconciliationExceptionPresenter
         );
     }
 
+    private static function queueFilterForBankLineEntity(ReconciliationException $record, string $entityKey): string
+    {
+        if (
+            $entityKey === 'imported_bank_transaction_id'
+            || in_array($record->exception_code, [
+                'RECON_UNMATCHED_BANK_LINE',
+                'STALE_PENDING',
+            ], true)
+        ) {
+            return BankClearingTabRegistry::FILTER_BANK_FILE;
+        }
+
+        return BankClearingTabRegistry::FILTER_OPERATIONS;
+    }
+
     /**
      * @return list<array{label: string, value: string, url: ?string}>
      */
@@ -159,10 +174,15 @@ final class ReconciliationExceptionPresenter
                 continue;
             }
 
+            $bankTransactionId = (int) $entities[$key];
+
             $items[] = [
                 'label' => __('Bank line'),
-                'value' => '#'.$entities[$key],
-                'url' => self::bankClearingUrl($record),
+                'value' => '#'.$bankTransactionId,
+                'url' => BankAccountsResource::workQueueUrlForBankLine(
+                    $bankTransactionId,
+                    self::queueFilterForBankLineEntity($record, $key),
+                ),
             ];
         }
 

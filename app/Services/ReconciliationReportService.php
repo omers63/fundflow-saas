@@ -8,8 +8,12 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\ExpenseDisbursement;
 use App\Models\Tenant\FeeDeduction;
+use App\Models\Tenant\FeeDisbursement;
 use App\Models\Tenant\FundPosting;
+use App\Models\Tenant\InvestDisbursement;
+use App\Models\Tenant\InvestReturn;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
@@ -1469,6 +1473,21 @@ class ReconciliationReportService
             return $issues;
         }
 
+        // Membership subscription fee: cash/fee legs reference the application.
+        // Ops row is synthetic (status=posted, uncleared until match); master bank
+        // posts on the matched CSV import only.
+        if ($tx->membership_application_id !== null) {
+            $issues = [];
+
+            if (!BankTransactionWorkflow::isSyntheticOperationalStatement($tx)) {
+                $issues = [
+                    ...$this->assertMatchedImportMasterBankLedger($tx, $expectedType, $expectedAmount),
+                ];
+            }
+
+            return $issues;
+        }
+
         $ledger = $tx->resolveMasterCashTransaction(false);
 
         if ($ledger === null) {
@@ -2117,7 +2136,7 @@ class ReconciliationReportService
             'resolution_hints' => [
                 __('Each posting group (same reference type and ID) should have equal total credits and debits. Groups listed below are filtered to the most likely unexpected sources of trial drift.'),
                 __('Use Suspected posting lines to see the individual ledger rows for the top unbalanced groups. The Linked source shown there is the posting-group key (same reference type and ID).'),
-                __('Unexpected lines without a reference often come from manual adjustments — open a transaction row below, then review the Linked source field in the modal or enable the Linked source column from Columns on the account ledger if it is hidden. Bank-file cash legs and accepted deposit master-cash pool mirrors (null linked source by design) are excluded here.'),
+                __('Unexpected lines without a reference often come from manual adjustments — open a transaction row below, then review the Linked source field in the modal or enable the Linked source column from Columns on the account ledger if it is hidden. Bank-file cash legs, accepted deposit master-cash pool mirrors, and master reserve funding transfers (null linked source by design) are excluded here.'),
                 __('Account-type nets show where credits and debits fail to cancel; member cash and fund accounts commonly carry net drift when only one pool leg was posted.'),
                 __('Cross-check related checks: stored balance vs ledger, paired control totals, and the flow-specific integrity checks for contributions, loans, and bank imports.'),
             ],
@@ -2125,8 +2144,8 @@ class ReconciliationReportService
     }
 
     /**
-     * Null-reference diagnostics excluding intentional bank-file cash legs and accepted
-     * deposit master-cash pool mirrors (null linked source by design for §5.12).
+     * Null-reference diagnostics excluding intentional bank-file cash legs, accepted
+     * deposit master-cash pool mirrors, and master fund→reserve funding transfers.
      *
      * @return array{
      *     null_reference_line_count: int,
@@ -2287,11 +2306,39 @@ class ReconciliationReportService
             return true;
         }
 
+        if ($this->isExpectedReserveFundingNullReferenceLine($transaction)) {
+            return true;
+        }
+
         return $this->isExpectedNullReferenceBankFlowLine(
             $transaction,
             $linkedMasterCashIdSet,
             $expectedPostedMemberCash,
         );
+    }
+
+    /**
+     * Master fund → reserve account transfers intentionally omit a domain reference;
+     * they pair as fund debit + expense/invest credit with the reserve-funding suffix.
+     */
+    private function isExpectedReserveFundingNullReferenceLine(Transaction $transaction): bool
+    {
+        $account = $transaction->account;
+
+        if ($account === null || !$account->is_master) {
+            return false;
+        }
+
+        $description = (string) $transaction->description;
+
+        if (
+            !str_contains($description, '(reserve funding)')
+            && !str_contains($description, '(master fund transfer)')
+        ) {
+            return false;
+        }
+
+        return in_array($account->type, ['fund', 'expense', 'invest', 'fees'], true);
     }
 
     /**
@@ -2340,6 +2387,14 @@ class ReconciliationReportService
         return [
             (new CashOutRequest)->getMorphClass(),
             (new FundPosting)->getMorphClass(),
+            // Application approval: deposit cash credits + fee legs (+ excess cash). Fee credit
+            // is not paired with a balancing debit under the same reference (bank clears later).
+            (new MembershipApplication)->getMorphClass(),
+            // Master reserve outs: debit expense/fee/invest only; bank match posts bank later.
+            (new ExpenseDisbursement)->getMorphClass(),
+            (new FeeDisbursement)->getMorphClass(),
+            (new InvestDisbursement)->getMorphClass(),
+            (new InvestReturn)->getMorphClass(),
         ];
     }
 
@@ -2355,7 +2410,8 @@ class ReconciliationReportService
 
         if ($referenceType !== (new Loan)->getMorphClass()) {
             return match ($referenceType) {
-                (new LoanRepayment)->getMorphClass() => $this->hasExpectedLoanRepaymentCashFlowShape($referenceType, $referenceId),
+                (new LoanRepayment)->getMorphClass(),
+                (new LoanInstallment)->getMorphClass() => $this->hasExpectedLoanRepaymentCashFlowShape($referenceType, $referenceId),
                 (new Contribution)->getMorphClass() => $this->hasExpectedContributionCashFlowShape($referenceType, $referenceId),
                 (new BankTransaction)->getMorphClass() => $this->hasExpectedBankTransactionOneSidedShape($referenceType, $referenceId),
                 default => false,

@@ -55,7 +55,10 @@ final class MemberWorkspaceSummaryService
      */
     private function compose(Member $member): array
     {
-        $member->loadMissing(['cashAccount', 'fundAccount', 'parent', 'user']);
+        // Always re-query account balances — loadMissing keeps stale in-memory relations after postings.
+        $member->unsetRelation('cashAccount');
+        $member->unsetRelation('fundAccount');
+        $member->load(['cashAccount', 'fundAccount', 'parent', 'user']);
 
         $dependentsCount = $member->dependents()->count();
         $dependents = $dependentsCount > 0

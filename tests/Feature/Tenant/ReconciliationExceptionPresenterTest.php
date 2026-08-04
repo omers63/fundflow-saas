@@ -92,3 +92,40 @@ test('reconciliation exception presenter recommends actionable fix buttons for b
         ->and(collect($actions)->pluck('name')->filter()->all())->toContain('resolveAmbiguousBankMatch')
         ->and(collect($actions)->firstWhere('type', 'link')['url'] ?? null)->not->toBeNull();
 });
+
+test('reconciliation exception bank line context links into bank clearing work queue with line search', function (): void {
+    $exception = new ReconciliationException([
+        'exception_code' => 'RECON_AMBIGUOUS_MATCH',
+        'domain' => 'bank_clearing',
+        'severity' => 'high',
+        'status' => ReconciliationException::STATUS_OPEN,
+        'affected_entities' => [
+            'imported_bank_transaction_id' => 42,
+            'uncleared_bank_transaction_id' => 17,
+            'candidate_ids' => [10, 11],
+        ],
+    ]);
+
+    $items = collect(ReconciliationExceptionPresenter::contextItems($exception))
+        ->where('label', __('Bank line'));
+
+    $importedUrl = $items->firstWhere('value', '#42')['url'] ?? null;
+    $unclearedUrl = $items->firstWhere('value', '#17')['url'] ?? null;
+
+    expect($importedUrl)->not->toBeNull()
+        ->and($importedUrl)->toContain('tableSearch=42')
+        ->and($importedUrl)->toContain('queueFilter='.BankClearingTabRegistry::FILTER_BANK_FILE)
+        ->and($unclearedUrl)->not->toBeNull()
+        ->and($unclearedUrl)->toContain('tableSearch=17')
+        ->and($unclearedUrl)->toContain('queueFilter='.BankClearingTabRegistry::FILTER_OPERATIONS);
+});
+
+test('recon snapshot bank line link targets work queue with table search', function (): void {
+    $url = BankAccountsResource::workQueueUrlForBankLine(190, BankClearingTabRegistry::FILTER_OPERATIONS);
+    $html = (string) ReconciliationSnapshotPresenter::bankLineLink(190);
+
+    expect($url)->toContain('tableSearch=190')
+        ->and($url)->toContain('queueFilter='.BankClearingTabRegistry::FILTER_OPERATIONS)
+        ->and($html)->toContain('tableSearch=190')
+        ->and($html)->toContain('#190');
+});

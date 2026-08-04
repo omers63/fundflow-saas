@@ -141,6 +141,14 @@ final class MemberDelinquencyActions
     private static function refreshMembersList(Component $livewire): void
     {
         MemberResource::dispatchInsightsRefresh($livewire);
+        MemberResource::dispatchMemberDetailInsightsRefresh($livewire);
+
+        if (method_exists($livewire, 'refreshMemberFromInsights') && method_exists($livewire, 'getRecord')) {
+            $record = $livewire->getRecord();
+            if ($record instanceof Member) {
+                $livewire->refreshMemberFromInsights((int) $record->getKey());
+            }
+        }
 
         if (method_exists($livewire, 'resetTable')) {
             $livewire->resetTable();

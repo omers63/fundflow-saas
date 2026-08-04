@@ -10,10 +10,12 @@ use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
 use App\Services\BankClearingMatchService;
+use App\Services\BankClearingQueueService;
 use App\Services\ContributionCycleService;
 use App\Services\MembershipApplicationApprovalService;
 use App\Services\MembershipSubscriptionFeeService;
 use App\Services\ReconciliationService;
+use App\Support\BankClearing\BankClearingQueueKind;
 use App\Support\PublicPageSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -78,8 +80,8 @@ test('approval allows transfer below required subscription fee and flags arrears
         ->and((float) Account::masterCash()->fresh()->balance)->toBe(0.0)
         ->and((float) Account::masterFees()->fresh()->balance)->toBe(40.0)
         ->and((string) $application->fresh()->rejection_reason)->toBe(__('Subscription fee arrears: :amount', [
-                    'amount' => number_format(10, 2),
-                ]));
+            'amount' => number_format(10, 2),
+        ]));
 });
 
 test('approving application posts subscription fee to cash pools with uncleared bank line', function () {
@@ -107,6 +109,52 @@ test('approving application posts subscription fee to cash pools with uncleared 
 
     expect(Carbon::parse($member->cashAccount->transactions()->where('type', 'credit')->value('transacted_at'))->toDateString())
         ->toBe('2026-02-15');
+
+    expect(app(BankClearingQueueService::class)->openItemsQuery('operations')->pluck('id')->all())
+        ->toContain($bankLine->id)
+        ->and(BankClearingQueueKind::forRecord($bankLine, false)->value)
+        ->toBe('subscription_fee');
+});
+
+test('subscription fee deposit detection works with bilingual application descriptions', function () {
+    $application = makePendingFeeApplication([
+        'membership_fee_transfer_reference' => 'AR-LOCALE-FEE',
+    ]);
+
+    $previous = app()->getLocale();
+    app()->setLocale('ar');
+    try {
+        $this->approval->approve($application);
+    } finally {
+        app()->setLocale($previous);
+    }
+
+    $application = $application->fresh();
+    $feeService = app(MembershipSubscriptionFeeService::class);
+
+    expect($feeService->masterCashCreditTransaction($application))->not->toBeNull()
+        ->and($feeService->ensureUnclearedBankLine($application, $application->member))->toBeFalse()
+        ->and(BankTransaction::query()->where('membership_application_id', $application->id)->exists())->toBeTrue();
+});
+
+test('backfill creates uncleared bank lines for fees posted before bank clearance support', function () {
+    $application = makePendingFeeApplication([
+        'membership_fee_transfer_date' => '2026-01-05',
+        'membership_fee_transfer_reference' => 'LEGACY-FEE-BT',
+    ]);
+    $member = $this->approval->approve($application);
+    $applicationId = $application->fresh()->id;
+
+    BankTransaction::query()->where('membership_application_id', $applicationId)->delete();
+
+    expect(BankTransaction::query()->where('membership_application_id', $applicationId)->exists())->toBeFalse();
+
+    $created = app(MembershipSubscriptionFeeService::class)->backfillMissingUnclearedBankLines();
+
+    expect($created)->toBeGreaterThanOrEqual(1)
+        ->and(BankTransaction::query()->where('membership_application_id', $applicationId)->exists())->toBeTrue()
+        ->and(app(BankClearingQueueService::class)->openItemsQuery('operations')->where('membership_application_id', $applicationId)->exists())->toBeTrue()
+        ->and((float) $member->cashAccount->fresh()->balance)->toBe(25.0);
 });
 
 test('subscription fee bank line clears against imported statement without double cash postings', function () {

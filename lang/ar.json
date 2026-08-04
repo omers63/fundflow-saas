@@ -6972,5 +6972,18 @@
     "≥90%": "≥90%",
     "✓ Saved at :time": "✓ حُفظ في :time",
     "Review declared transfer details before approving. When the declared transfer is below the required subscription fee, approval is still allowed and the shortfall is flagged as subscription fee arrears. On approval, the transfer posts to member and master cash and creates an uncleared bank line for clearance against the real bank statement (same path as deposits).": "راجع تفاصيل التحويل المُعلَنة قبل الموافقة. عندما يكون التحويل المُعلَن أقل من رسوم الاشتراك المطلوبة، تبقى الموافقة مسموحة ويُوسَم النقص كمتأخرات رسوم اشتراك. عند الموافقة يُرحَّل التحويل إلى نقد العضو ونقد الصندوق ويُنشأ سطر بنكي غير مُصفّى للمطابقة مع كشف البنك الحقيقي (نفس مسار الإيداعات).",
-    "Subscription fee transfer — :name (application #:id)": "تحويل رسوم الاشتراك — :name (طلب #:id)"
+    "Subscription fee transfer — :name (application #:id)": "تحويل رسوم الاشتراك — :name (طلب #:id)",
+    "Subscription fee": "رسوم اشتراك",
+    "New fund out": "طلب خروج من الصندوق جديد",
+    "Fund-out details": "تفاصيل خروج من الصندوق",
+    "Select a member to see available fund balance.": "اختر عضواً لعرض رصيد الصندوق المتاح.",
+    "Fund out moves money from the member fund account to their cash account. It does not create a bank remittance.": "ينقل خروج الصندوق المبلغ من حساب صندوق العضو إلى حسابه النقدي. لا يُنشئ حوالة بنكية.",
+    "Fund out approved": "تمت الموافقة على خروج الصندوق",
+    "The amount was moved from the member’s fund account to cash (with master mirrors). No bank remittance is created — use cash out if money must leave the bank.": "نُقل المبلغ من حساب صندوق العضو إلى النقد (مع مرايا الصندوق الرئيسية). لا تُنشأ حوالة بنكية — استخدم السحب النقدي إذا كان يجب أن يخرج المال من البنك.",
+    "Fund-out date": "تاريخ خروج الصندوق",
+    "Fund and cash ledger entries for this transfer are recorded as of this date.": "تُسجَّل قيود الصندوق والنقد لهذا التحويل بتاريخ هذا اليوم.",
+    "Creates and approves a cash-out on the selected date. Member and master cash are debited, and an uncleared bank line is added for remittance.": "ينشئ ويوافق على سحب نقدي بالتاريخ المحدد. يُخصم نقد العضو والصندوق الرئيسي، وتُضاف سطر بنكي غير مسوّى للحوالة.",
+    "Creates and approves a fund-out on the selected date. Moves fund balance to cash with master mirrors. No bank remittance is created.": "ينشئ ويوافق على خروج من الصندوق بالتاريخ المحدد. ينقل رصيد الصندوق إلى النقد مع مرايا الرئيسية. لا تُنشأ حوالة بنكية.",
+    "Could not create cash out": "تعذّر إنشاء السحب النقدي",
+    "Could not create fund out": "تعذّر إنشاء خروج الصندوق"
 }

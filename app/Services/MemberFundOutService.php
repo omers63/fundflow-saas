@@ -11,6 +11,7 @@ use App\Notifications\Tenant\FundOutRequestRejectedNotification;
 use App\Notifications\Tenant\NewFundOutRequestNotification;
 use App\Support\BusinessDay;
 use App\Support\MemberMembershipPolicy;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -85,8 +86,12 @@ final class MemberFundOutService
         });
     }
 
-    public function accept(FundOutRequest $request, ?int $reviewedBy = null, ?string $remarks = null): void
-    {
+    public function accept(
+        FundOutRequest $request,
+        ?int $reviewedBy = null,
+        ?string $remarks = null,
+        ?CarbonInterface $transactedAt = null,
+    ): void {
         if ($request->status !== 'pending') {
             throw new InvalidArgumentException(__('Only pending fund-out requests can be accepted.'));
         }
@@ -101,8 +106,8 @@ final class MemberFundOutService
             throw new InvalidArgumentException(__('Member no longer has enough available fund balance for this request.'));
         }
 
-        DB::transaction(function () use ($request, $member, $amount, $reviewedBy, $remarks): void {
-            $reviewedAt = BusinessDay::now();
+        DB::transaction(function () use ($request, $member, $amount, $reviewedBy, $remarks, $transactedAt): void {
+            $reviewedAt = $transactedAt ?? BusinessDay::now();
             $description = __('Fund out #:id – :name', [
                 'id' => $request->id,
                 'name' => $member->name,

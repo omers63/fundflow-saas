@@ -150,3 +150,33 @@ test('member workspace summary cache can be busted', function () {
 
     expect($third['balances']['cash']['amount'])->toBe(999.0);
 });
+
+test('member workspace summary reloads fund balance after account change without stale relations', function () {
+    $member = Member::factory()->create([
+        'name' => 'Stale Fund Member',
+        'status' => 'active',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subMonths(3),
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+    $member->load(['cashAccount', 'fundAccount']);
+    $member->fundAccount?->update(['balance' => 1800]);
+    $staleFund = clone $member->fundAccount->fresh();
+    // Simulate an in-memory relation that was loaded before a later write.
+    $staleFund->setRawAttributes(array_merge($staleFund->getAttributes(), ['balance' => '1800.00']));
+    $member->setRelation('fundAccount', $staleFund);
+
+    $service = app(MemberWorkspaceSummaryService::class);
+    MemberWorkspaceSummaryService::forgetCached((int) $member->id);
+
+    expect($service->summary($member)['balances']['fund']['amount'])->toBe(1800.0);
+
+    $member->fundAccount()->update(['balance' => 0]);
+    // Relation still carries the stale amount:
+    expect((float) $member->fundAccount->balance)->toBe(1800.0);
+
+    MemberWorkspaceSummaryService::forgetCached((int) $member->id);
+
+    expect($service->summary($member)['balances']['fund']['amount'])->toBe(0.0);
+});

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Tenant\Resources\CashOutRequests\Schemas\CashOutRequestForm;
+use App\Filament\Tenant\Resources\FundOutRequests\Schemas\FundOutRequestForm;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
 use App\Models\Tenant\Account;
@@ -18,6 +20,7 @@ use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Services\MemberAnnualSubscriptionFeeService;
 use App\Services\MemberCashOutService;
 use App\Services\MemberFreezeService;
+use App\Services\MemberFundOutService;
 use App\Services\MemberStatusService;
 use App\Services\MemberWithdrawalSettlementService;
 use App\Services\Tenant\DirectMessagingService;
@@ -158,6 +161,8 @@ final class MemberFilamentActions
             self::repayment(),
             self::adjustCash(),
             self::adjustFund(),
+            self::cashOut(),
+            self::fundOut(),
             self::cashOutFund(),
         ];
 
@@ -324,6 +329,114 @@ final class MemberFilamentActions
             resolveAccount: fn (Member $record) => self::resolveMemberAccount($record, 'fund'),
             modalDescription: __('Post a manual credit or debit to this member\'s fund account only. The balance may go negative for adjustments such as loan allocation. Use a clear description for the audit trail.'),
         );
+    }
+
+    public static function cashOut(): Action
+    {
+        return Action::make('cashOutMember')
+            ->label(__('Cash out'))
+            ->icon('heroicon-o-arrow-up-tray')
+            ->color('warning')
+            ->visible(fn (Member $record): bool => self::isTenantAdmin()
+                && app(MemberMembershipPolicy::class)->canRequestCashOut($record))
+            ->modalHeading(__('New cash out'))
+            ->modalDescription(__('Creates and approves a cash-out on the selected date. Member and master cash are debited, and an uncleared bank line is added for remittance.'))
+            ->modalWidth('2xl')
+            ->fillForm(fn (Member $record): array => [
+                'member_id' => $record->id,
+                'cash_out_date' => self::businessDayPickerDefault(),
+            ])
+            ->schema(CashOutRequestForm::components(lockMember: true))
+            ->action(function (Member $record, array $data, Action $action, MemberCashOutService $service, Component $livewire): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        function () use ($record, $data, $service): void {
+                            $notes = filled($data['notes'] ?? null) ? (string) $data['notes'] : null;
+                            $transactedAt = self::resolveCashOutDate($data['cash_out_date'] ?? null);
+
+                            $request = $service->submit(
+                                member: $record,
+                                amount: (float) $data['amount'],
+                                notes: $notes,
+                            );
+
+                            $service->accept(
+                                $request,
+                                auth('tenant')->id(),
+                                $notes,
+                                $transactedAt,
+                            );
+                        },
+                        __('Could not create cash out'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Cash out approved'))
+                    ->body(__('Member and master cash have been debited. Complete the remittance checklist under Audit & System, then clear the bank line when the statement imports.'))
+                    ->success()
+                    ->send();
+
+                MemberResource::dispatchMemberDetailInsightsRefresh($livewire);
+                self::refreshMembersList($livewire);
+            });
+    }
+
+    public static function fundOut(): Action
+    {
+        return Action::make('fundOutMember')
+            ->label(__('Fund out'))
+            ->icon('heroicon-o-arrow-right-circle')
+            ->color('primary')
+            ->visible(fn (Member $record): bool => self::isTenantAdmin()
+                && app(MemberMembershipPolicy::class)->canRequestFundOut($record))
+            ->modalHeading(__('New fund out'))
+            ->modalDescription(__('Creates and approves a fund-out on the selected date. Moves fund balance to cash with master mirrors. No bank remittance is created.'))
+            ->modalWidth('2xl')
+            ->fillForm(fn (Member $record): array => [
+                'member_id' => $record->id,
+                'fund_out_date' => self::businessDayPickerDefault(),
+            ])
+            ->schema(FundOutRequestForm::components(lockMember: true))
+            ->action(function (Member $record, array $data, Action $action, MemberFundOutService $service, Component $livewire): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        function () use ($record, $data, $service): void {
+                            $notes = filled($data['notes'] ?? null) ? (string) $data['notes'] : null;
+                            $transactedAt = self::resolveCashOutDate($data['fund_out_date'] ?? null);
+
+                            $request = $service->submit(
+                                member: $record,
+                                amount: (float) $data['amount'],
+                                notes: $notes,
+                            );
+
+                            $service->accept(
+                                $request,
+                                auth('tenant')->id(),
+                                $notes,
+                                $transactedAt,
+                            );
+                        },
+                        __('Could not create fund out'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Fund out approved'))
+                    ->body(__('The amount was moved from the member’s fund account to cash (with master mirrors). No bank remittance is created — use cash out if money must leave the bank.'))
+                    ->success()
+                    ->send();
+
+                MemberResource::dispatchMemberDetailInsightsRefresh($livewire);
+                self::refreshMembersList($livewire);
+            });
     }
 
     public static function cashOutFund(): Action
@@ -527,8 +640,8 @@ final class MemberFilamentActions
             ->helperText(__('Recorded as the date membership was frozen.'))
             ->required()
             ->native(false)
-            ->default(fn(): string => self::businessDayPickerDefault())
-            ->maxDate(fn(): string => self::businessDayPickerMaxDate());
+            ->default(fn (): string => self::businessDayPickerDefault())
+            ->maxDate(fn (): string => self::businessDayPickerMaxDate());
     }
 
     public static function resolveFreezeDate(mixed $freezeDate): Carbon
@@ -666,8 +779,8 @@ final class MemberFilamentActions
             ->helperText(__('Settlement and membership status are recorded as of this date.'))
             ->required()
             ->native(false)
-            ->default(fn(): string => self::businessDayPickerDefault())
-            ->maxDate(fn(): string => self::businessDayPickerMaxDate());
+            ->default(fn (): string => self::businessDayPickerDefault())
+            ->maxDate(fn (): string => self::businessDayPickerMaxDate());
     }
 
     public static function cashOutDateField(): DatePicker
@@ -677,8 +790,19 @@ final class MemberFilamentActions
             ->helperText(__('Fund transfer and cash-out ledger entries are recorded as of this date.'))
             ->required()
             ->native(false)
-            ->default(fn(): string => self::businessDayPickerDefault())
-            ->maxDate(fn(): string => self::businessDayPickerMaxDate());
+            ->default(fn (): string => self::businessDayPickerDefault())
+            ->maxDate(fn (): string => self::businessDayPickerMaxDate());
+    }
+
+    public static function fundOutDateField(): DatePicker
+    {
+        return DatePicker::make('fund_out_date')
+            ->label(__('Fund-out date'))
+            ->helperText(__('Fund and cash ledger entries for this transfer are recorded as of this date.'))
+            ->required()
+            ->native(false)
+            ->default(fn (): string => self::businessDayPickerDefault())
+            ->maxDate(fn (): string => self::businessDayPickerMaxDate());
     }
 
     /**
@@ -1753,6 +1877,24 @@ final class MemberFilamentActions
     private static function refreshMembersList(Component $livewire): void
     {
         MemberResource::dispatchInsightsRefresh($livewire);
+        MemberResource::dispatchMemberDetailInsightsRefresh($livewire);
+
+        // Synchronously refresh ViewMember workspace stats (cash/fund). Livewire
+        // bus events alone are easy to miss during the same request / tests.
+        if (method_exists($livewire, 'refreshMemberFromInsights')) {
+            $memberId = null;
+
+            if (method_exists($livewire, 'getRecord')) {
+                $record = $livewire->getRecord();
+                if ($record instanceof Member) {
+                    $memberId = (int) $record->getKey();
+                }
+            }
+
+            if ($memberId !== null) {
+                $livewire->refreshMemberFromInsights($memberId);
+            }
+        }
 
         if (method_exists($livewire, 'resetTable')) {
             $livewire->resetTable();

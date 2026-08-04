@@ -2,6 +2,35 @@
 
 Server-side configuration templates for production.
 
+## Nginx + PHP-FPM — production hardening
+
+| File | Purpose |
+|------|---------|
+| `nginx/fundflow-saas.conf` | SaaS vhost: PHP 8.4, HTTP/2, 25 MB body, Reverb `/app/`, FastCGI timeouts |
+| `nginx/reverb-app-location.conf` | WebSocket location snippet only |
+| `php/99-fundflow-production.ini` | FPM memory 256 M, uploads 20 M, opcache |
+| `php/php8.4-fpm-pool-www.conf` | Pool reference (`pm.max_children=20`, recycle, slowlog) |
+
+Apply (as root) after reviewing:
+
+```bash
+cd /var/www/fundflow-saas
+sudo cp deploy/nginx/fundflow-saas.conf /etc/nginx/sites-available/fundflow-saas
+sudo ln -sfn /etc/nginx/sites-available/fundflow-saas /etc/nginx/sites-enabled/fundflow-saas
+# merge pool keys from deploy/php/php8.4-fpm-pool-www.conf into /etc/php/8.4/fpm/pool.d/www.conf
+sudo cp deploy/php/99-fundflow-production.ini /etc/php/8.4/fpm/conf.d/
+sudo nginx -t && sudo systemctl reload nginx
+sudo systemctl reload php8.4-fpm
+```
+
+**Hostnames:** SaaS stays on `fundflow-saas.osamman.com` (and tenant `*.fundflow-saas.osamman.com`). Apex `osamman.com` / `www.osamman.com` remains on **legacy** fundflow (and cashflow on `*.osamman.cloud` / `cashflow.osamman.com`) — do not steal the apex for SaaS.
+
+Global nginx: prefer `ssl_protocols TLSv1.2 TLSv1.3;` only (see `/etc/nginx/nginx.conf`).
+
+Backups from the 2026-08-04 hardening: `/root/config-backups/nginx-php-hardening-*`.
+
+Also see **`docs/production-runbook.md`**.
+
 ## Supervisor — `fundflow-reverb`
 
 | File | Service |

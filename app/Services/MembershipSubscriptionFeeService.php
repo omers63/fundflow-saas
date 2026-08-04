@@ -133,7 +133,7 @@ class MembershipSubscriptionFeeService
                         continue;
                     }
 
-                    if (!$this->expectsSubscriptionFeeLedger($application)) {
+                    if (! $this->expectsSubscriptionFeeLedger($application)) {
                         continue;
                     }
 
@@ -290,11 +290,13 @@ class MembershipSubscriptionFeeService
             return null;
         }
 
+        // Prefer reference + mirror suffix — description may be bilingual (e.g. "application #id" vs "طلب #id").
         return Transaction::query()
             ->where('account_id', $masterCashId)
             ->where('type', 'credit')
+            ->where('reference_type', $application->getMorphClass())
+            ->where('reference_id', $application->id)
             ->where('description', 'like', '%(subscription deposit mirror)%')
-            ->where('description', 'like', '%application #:'.$application->id.'%')
             ->orderByDesc('id')
             ->first();
     }
@@ -302,6 +304,45 @@ class MembershipSubscriptionFeeService
     protected function hasSubscriptionFeePosted(MembershipApplication $application): bool
     {
         return $this->masterCashCreditTransaction($application) !== null;
+    }
+
+    /**
+     * Create uncleared bank clearance rows for fees already on the ledger (historical approvals / CSV).
+     *
+     * @return int Number of bank lines created
+     */
+    public function backfillMissingUnclearedBankLines(): int
+    {
+        $created = 0;
+
+        MembershipApplication::query()
+            ->where('status', 'approved')
+            ->where('membership_fee_amount', '>', 0)
+            ->whereNotNull('member_id')
+            ->orderBy('id')
+            ->chunkById(100, function ($rows) use (&$created): void {
+                foreach ($rows as $application) {
+                    if (! $application instanceof MembershipApplication) {
+                        continue;
+                    }
+
+                    if (! $this->hasSubscriptionFeePosted($application)) {
+                        continue;
+                    }
+
+                    $member = $application->member;
+
+                    if ($member === null) {
+                        continue;
+                    }
+
+                    if ($this->ensureUnclearedBankLine($application, $member)) {
+                        $created++;
+                    }
+                }
+            });
+
+        return $created;
     }
 
     /**

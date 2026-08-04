@@ -150,8 +150,180 @@ test('view member places allocate as the first treasury header action', function
             'memberLoanRepayment',
             'adjustMemberCash',
             'adjustMemberFund',
+            'cashOutMember',
+            'fundOutMember',
             'cashOutMemberFund',
         );
+});
+
+test('view member cash out and fund out actions open locked-member new-request modals', function () {
+    $admin = User::create([
+        'name' => 'Cash Fund Out Admin',
+        'email' => 'admin-cash-fund-out-header@test.com',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $member = Member::create([
+        'user_id' => User::create([
+            'name' => 'Cash Fund Out Member',
+            'email' => 'cash-fund-out-member@fund.test',
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+            'is_admin' => false,
+        ])->id,
+        'member_number' => 'MEM-CF-OUT',
+        'name' => 'Cash Fund Out Member',
+        'email' => 'cash-fund-out-member@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    AccountingService::withoutMemberCashCollection(function () use ($member): void {
+        app(AccountingService::class)->credit(
+            $member->cashAccount,
+            3000,
+            'Seed cash for member cash-out action',
+        );
+    });
+
+    app(AccountingService::class)->creditMemberFundWithMasterMirror(
+        $member->fundAccount,
+        2000,
+        'Seed fund for member fund-out action',
+        __('(master fund mirror)'),
+        $member,
+    );
+
+    Filament::setCurrentPanel('tenant');
+
+    $component = Livewire::actingAs($admin, 'tenant')
+        ->test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->assertSuccessful()
+        ->assertActionExists('cashOutMember')
+        ->assertActionExists('fundOutMember')
+        ->mountAction('cashOutMember')
+        ->assertActionDataSet([
+            'member_id' => $member->id,
+        ])
+        ->unmountAction()
+        ->mountAction('fundOutMember')
+        ->assertActionDataSet([
+            'member_id' => $member->id,
+        ]);
+
+    $treasury = collect($component->instance()->getCachedHeaderActions())->first(
+        fn ($action) => $action instanceof ActionGroup
+        && $action->getLabel() === __('Treasury'),
+    );
+
+    expect($treasury)->not->toBeNull();
+
+    $cashOutAction = collect($treasury->getActions())
+        ->first(fn (Action $action): bool => $action->getName() === 'cashOutMember');
+    $fundOutAction = collect($treasury->getActions())
+        ->first(fn (Action $action): bool => $action->getName() === 'fundOutMember');
+
+    expect($cashOutAction)->not->toBeNull()
+        ->and($cashOutAction->getModalHeading())->toBe(__('New cash out'))
+        ->and($cashOutAction->getUrl())->toBeNull()
+        ->and($fundOutAction)->not->toBeNull()
+        ->and($fundOutAction->getModalHeading())->toBe(__('New fund out'))
+        ->and($fundOutAction->getUrl())->toBeNull();
+});
+
+test('view member cash out action creates cash out for locked member', function () {
+    $admin = User::create([
+        'name' => 'Cash Out Run Admin',
+        'email' => 'admin-cash-out-run@test.com',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-CO-RUN',
+        'name' => 'Cash Out Run Member',
+        'email' => 'cash-out-run@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+
+    AccountingService::withoutMemberCashCollection(function () use ($accounting, $member): void {
+        $accounting->credit(
+            $member->cashAccount,
+            4000,
+            'Seed cash for locked cash-out action',
+        );
+    });
+
+    Filament::setCurrentPanel('tenant');
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->callAction('cashOutMember', data: [
+            'member_id' => $member->id,
+            'amount' => 500,
+            'cash_out_date' => now()->toDateString(),
+            'notes' => 'From member workspace',
+        ])
+        ->assertHasNoActionErrors()
+        ->assertNotified();
+
+    expect((float) $member->cashAccount->fresh()->balance)->toBe(3500.0);
+});
+
+test('view member fund out action creates fund out for locked member', function () {
+    $admin = User::create([
+        'name' => 'Fund Out Run Admin',
+        'email' => 'admin-fund-out-run@test.com',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-FO-RUN',
+        'name' => 'Fund Out Run Member',
+        'email' => 'fund-out-run@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+    $accounting->creditMemberFundWithMasterMirror(
+        $member->fundAccount,
+        2500,
+        'Seed fund for locked fund-out action',
+        __('(master fund mirror)'),
+        $member,
+    );
+
+    Filament::setCurrentPanel('tenant');
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->callAction('fundOutMember', data: [
+            'member_id' => $member->id,
+            'amount' => 750,
+            'fund_out_date' => now()->toDateString(),
+            'notes' => 'From member workspace',
+        ])
+        ->assertHasNoActionErrors()
+        ->assertNotified();
+
+    expect((float) $member->fundAccount->fresh()->balance)->toBe(1750.0)
+        ->and((float) $member->cashAccount->fresh()->balance)->toBe(750.0);
 });
 
 test('edit member can assign household parent for independent member with unique email', function () {

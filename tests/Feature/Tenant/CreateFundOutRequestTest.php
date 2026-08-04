@@ -3,10 +3,9 @@
 declare(strict_types=1);
 
 use App\Filament\Support\MemberFilamentActions;
-use App\Filament\Tenant\Resources\CashOutRequests\Pages\ListCashOutRequests;
+use App\Filament\Tenant\Resources\FundOutRequests\Pages\ListFundOutRequests;
 use App\Models\Tenant\Account;
-use App\Models\Tenant\BankTransaction;
-use App\Models\Tenant\CashOutRequest;
+use App\Models\Tenant\FundOutRequest;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
@@ -25,9 +24,8 @@ beforeEach(function () {
 
     Account::query()->delete();
     Member::query()->delete();
-    CashOutRequest::query()->delete();
+    FundOutRequest::query()->delete();
     Transaction::query()->delete();
-    BankTransaction::query()->delete();
 
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 100000, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 100000, 'is_master' => true]);
@@ -35,15 +33,15 @@ beforeEach(function () {
 
     $this->admin = User::create([
         'name' => 'Fund Admin',
-        'email' => 'admin-create-cashout@test.com',
+        'email' => 'admin-create-fundout@test.com',
         'password' => bcrypt('password'),
         'email_verified_at' => now(),
         'is_admin' => true,
     ]);
 
     $this->member = Member::create([
-        'member_number' => 'MEM-CO99',
-        'name' => 'Cash Out Target',
+        'member_number' => 'MEM-FO99',
+        'name' => 'Fund Out Target',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subYear(),
         'status' => 'active',
@@ -53,22 +51,22 @@ beforeEach(function () {
     $accounting->createMemberAccounts($this->member);
     $this->member->refresh();
 
-    AccountingService::withoutMemberCashCollection(function () use ($accounting): void {
-        $accounting->credit(
-            $this->member->cashAccount,
-            5000,
-            'Seed cash for admin cash-out test',
-        );
-    });
+    $accounting->creditMemberFundWithMasterMirror(
+        $this->member->fundAccount,
+        4000,
+        'Seed fund for admin fund-out test',
+        __('(master fund mirror)'),
+        $this->member,
+    );
 
     $this->member->refresh();
 });
 
-test('cash outs list shows new cash out as a table header modal action', function () {
+test('fund outs list shows new fund out as a table header modal action', function () {
     $component = Livewire::actingAs($this->admin, 'tenant')
-        ->test(ListCashOutRequests::class)
+        ->test(ListFundOutRequests::class)
         ->assertSuccessful()
-        ->assertSee(__('New cash out'))
+        ->assertSee(__('New fund out'))
         ->assertTableColumnExists('id')
         ->assertTableActionExists('create');
 
@@ -88,42 +86,37 @@ test('cash outs list shows new cash out as a table header modal action', functio
 
     expect($createAction)->not->toBeNull()
         ->and($createAction->getUrl())->toBeNull()
-        ->and($createAction->getModalHeading())->toBe(__('New cash out'));
+        ->and($createAction->getModalHeading())->toBe(__('New fund out'));
 });
 
-test('admin can create and auto-approve a cash out for any member via modal with date', function () {
+test('admin can create and auto-approve a fund out for any member via modal with date', function () {
     Notification::fake();
 
-    $cashOutDate = BusinessDay::today()->subDays(3);
+    $fundOutDate = BusinessDay::today()->subDays(2);
 
     Livewire::actingAs($this->admin, 'tenant')
-        ->test(ListCashOutRequests::class)
+        ->test(ListFundOutRequests::class)
         ->callTableAction('create', data: [
             'member_id' => $this->member->id,
             'amount' => 1500,
-            'cash_out_date' => $cashOutDate->toDateString(),
-            'notes' => 'Admin-initiated cash out',
+            'fund_out_date' => $fundOutDate->toDateString(),
+            'notes' => 'Admin-initiated fund out',
         ])
         ->assertHasNoTableActionErrors()
         ->assertNotified();
 
-    $request = CashOutRequest::query()->where('member_id', $this->member->id)->first();
-    $expectedAt = MemberFilamentActions::resolveCashOutDate($cashOutDate->toDateString());
+    $request = FundOutRequest::query()->where('member_id', $this->member->id)->first();
+    $expectedAt = MemberFilamentActions::resolveCashOutDate($fundOutDate->toDateString());
 
     expect($request)->not->toBeNull()
         ->and($request->status)->toBe('accepted')
         ->and($request->reviewed_by)->toBe($this->admin->id)
         ->and($request->reviewed_at?->toDateTimeString())->toBe($expectedAt->toDateTimeString())
         ->and($request->amount)->toBe('1500.00')
-        ->and($request->notes)->toBe('Admin-initiated cash out')
-        ->and($request->admin_remarks)->toBe('Admin-initiated cash out')
-        ->and($request->bank_transaction_id)->not->toBeNull()
-        ->and((float) $this->member->cashAccount->fresh()->balance)->toBe(3500.0);
-
-    $bankTxn = BankTransaction::query()->find($request->bank_transaction_id);
-
-    expect($bankTxn)->not->toBeNull()
-        ->and($bankTxn->transaction_date->toDateString())->toBe($cashOutDate->toDateString());
+        ->and($request->notes)->toBe('Admin-initiated fund out')
+        ->and($request->admin_remarks)->toBe('Admin-initiated fund out')
+        ->and((float) $this->member->fundAccount->fresh()->balance)->toBe(2500.0)
+        ->and((float) $this->member->cashAccount->fresh()->balance)->toBe(1500.0);
 
     $ledgerTxn = Transaction::query()
         ->where('reference_type', $request->getMorphClass())

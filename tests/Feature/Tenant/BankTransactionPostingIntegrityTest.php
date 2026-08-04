@@ -7,6 +7,7 @@ use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
@@ -15,6 +16,7 @@ use App\Services\ContributionCollectionCycleService;
 use App\Services\FundPostingService;
 use App\Services\MasterExpenseDisbursementService;
 use App\Services\MemberCashOutService;
+use App\Services\MembershipApplicationApprovalService;
 use App\Services\ReconciliationReportService;
 use Tests\Concerns\InitializesTenancy;
 
@@ -34,6 +36,7 @@ beforeEach(function () {
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 50_000, 'is_master' => true]);
     Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'expense', 'name' => 'Master Expense', 'balance' => 5_000, 'is_master' => true]);
+    Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
 
     $this->accounting = app(AccountingService::class);
 });
@@ -329,4 +332,116 @@ test('accepted deposit passes member portal cash mirror integrity with null-ref 
     expect($check['severity'])->toBe('ok')
         ->and($check['issue_count'])->toBe(0)
         ->and(collect($check['issues'])->pluck('fund_posting_id'))->not->toContain($posting->id);
+});
+
+test('subscription fee operational bank row passes posting integrity without master cash', function () {
+    $application = MembershipApplication::create([
+        'name' => 'Fee Integrity Applicant',
+        'email' => 'fee-integrity@example.com',
+        'password' => 'SecurePass1!',
+        'phone' => '+966501111111',
+        'application_type' => 'new',
+        'national_id' => '1111222233',
+        'date_of_birth' => '1991-02-01',
+        'address' => '1 Fee St',
+        'city' => 'Riyadh',
+        'mobile_phone' => '+966501111111',
+        'bank_account_number' => '1234567890123456',
+        'iban' => 'SA0380000000608010167519',
+        'membership_fee_amount' => 75,
+        'membership_fee_required_amount' => 50,
+        'membership_fee_transfer_date' => now()->toDateString(),
+        'membership_fee_transfer_reference' => 'FEE-INT-OPS',
+        'membership_fee_receipt_path' => 'applications/receipts/fee-int.jpg',
+        'status' => 'pending',
+    ]);
+
+    app(MembershipApplicationApprovalService::class)->approve($application);
+
+    $opsLine = BankTransaction::query()
+        ->where('membership_application_id', $application->fresh()->id)
+        ->first();
+
+    expect($opsLine)->not->toBeNull()
+        ->and($opsLine->status)->toBe('posted')
+        ->and($opsLine->is_cleared)->toBeFalse()
+        ->and($opsLine->master_cash_transaction_id)->toBeNull();
+
+    $check = app(ReconciliationReportService::class)
+        ->buildReport(ReconciliationSnapshot::MODE_REALTIME)['checks']['bank_transaction_posting_integrity'];
+
+    expect($check['severity'])->toBe('ok')
+        ->and(collect($check['issues'])->pluck('bank_transaction_id'))->not->toContain($opsLine->id);
+});
+
+test('matched subscription fee import requires master bank ledger for integrity', function () {
+    $application = MembershipApplication::create([
+        'name' => 'Fee Integrity Match Applicant',
+        'email' => 'fee-integrity-match@example.com',
+        'password' => 'SecurePass1!',
+        'phone' => '+966502222222',
+        'application_type' => 'new',
+        'national_id' => '2222333344',
+        'date_of_birth' => '1992-03-01',
+        'address' => '2 Fee St',
+        'city' => 'Riyadh',
+        'mobile_phone' => '+966502222222',
+        'bank_account_number' => '1234567890123456',
+        'iban' => 'SA0380000000608010167519',
+        'membership_fee_amount' => 75,
+        'membership_fee_required_amount' => 50,
+        'membership_fee_transfer_date' => now()->toDateString(),
+        'membership_fee_transfer_reference' => 'FEE-INT-MATCH',
+        'membership_fee_receipt_path' => 'applications/receipts/fee-int-match.jpg',
+        'status' => 'pending',
+    ]);
+
+    app(MembershipApplicationApprovalService::class)->approve($application);
+
+    $opsLine = BankTransaction::query()
+        ->where('membership_application_id', $application->fresh()->id)
+        ->first();
+
+    $statement = BankStatement::create([
+        'filename' => 'fee-integrity-match.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now()->toDateString(),
+        'description' => 'Imported fee',
+        'amount' => 75,
+        'status' => 'imported',
+        'hash' => md5('fee-integrity-match-import'),
+        'is_cleared' => false,
+    ]);
+
+    app(BankClearingMatchService::class)->clearMatchPair($opsLine->fresh(), $imported->fresh());
+
+    $imported = $imported->fresh();
+
+    expect($imported->status)->toBe('posted')
+        ->and($imported->membership_application_id)->toBe($application->fresh()->id)
+        ->and($imported->master_bank_transaction_id)->not->toBeNull();
+
+    $okCheck = app(ReconciliationReportService::class)
+        ->buildReport(ReconciliationSnapshot::MODE_REALTIME)['checks']['bank_transaction_posting_integrity'];
+
+    expect($okCheck['severity'])->toBe('ok')
+        ->and(collect($okCheck['issues'])->pluck('bank_transaction_id')->all())
+        ->not->toContain($opsLine->id, $imported->id);
+
+    $imported->forceFill(['master_bank_transaction_id' => null])->saveQuietly();
+    $imported->transactions()->delete();
+
+    $badCheck = app(ReconciliationReportService::class)
+        ->buildReport(ReconciliationSnapshot::MODE_REALTIME)['checks']['bank_transaction_posting_integrity'];
+
+    expect($badCheck['severity'])->toBe('critical')
+        ->and(collect($badCheck['issues'])->pluck('issue'))
+        ->toContain('matched clearance bank row missing master bank ledger line');
 });

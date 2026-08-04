@@ -71,6 +71,9 @@ location /app/ {
 
 Reload nginx: `sudo nginx -t && sudo systemctl reload nginx`
 
+**Full production vhost** (body size, HTTP/2, PHP 8.4 socket, timeouts): `deploy/nginx/fundflow-saas.conf`.  
+**PHP-FPM limits + pool**: `deploy/php/99-fundflow-production.ini`, `deploy/php/php8.4-fpm-pool-www.conf`.
+
 Filament Echo uses `/broadcasting/auth` on the main app for private channels; the `/app/` path is for the Reverb/Pusher protocol.
 
 ### Smoke checks

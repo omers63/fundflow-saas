@@ -46,6 +46,7 @@ final class BankClearingQueuePresenter
             BankClearingQueueKind::ReturnIn => 'success',
             BankClearingQueueKind::InvestOut => 'warning',
             BankClearingQueueKind::Fee => 'info',
+            BankClearingQueueKind::SubscriptionFee => 'info',
             BankClearingQueueKind::Expense => 'danger',
             BankClearingQueueKind::CashOut => 'warning',
             BankClearingQueueKind::Deposit => 'success',

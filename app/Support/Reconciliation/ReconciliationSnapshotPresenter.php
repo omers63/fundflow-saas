@@ -640,14 +640,27 @@ final class ReconciliationSnapshotPresenter
 
     public static function bankLineLink(int $bankTransactionId): Htmlable
     {
-        $url = BankAccountsResource::getUrl('index', [
-            'activeTab' => BankClearingTabRegistry::TAB_QUEUE,
-        ]);
+        $url = self::bankLineWorkQueueUrl($bankTransactionId);
 
         return new HtmlString(
             '<a href="'.e($url).'" class="font-semibold text-sky-600 hover:underline dark:text-sky-400">#'
             .e((string) $bankTransactionId).'</a>'
         );
+    }
+
+    public static function bankLineWorkQueueUrl(int $bankTransactionId): string
+    {
+        if ($bankTransactionId <= 0) {
+            return BankAccountsResource::listUrl(BankClearingTabRegistry::TAB_QUEUE);
+        }
+
+        $record = BankTransaction::query()
+            ->with('bankStatement')
+            ->find($bankTransactionId);
+
+        return $record instanceof BankTransaction
+            ? BankAccountsResource::workQueueUrlForBankLine($record)
+            : BankAccountsResource::workQueueUrlForBankLine($bankTransactionId);
     }
 
     /**
@@ -824,9 +837,7 @@ final class ReconciliationSnapshotPresenter
                 fn (): string => MemberResource::getUrl('view', ['record' => $referenceId]),
             ),
             BankTransaction::class => self::safeResourceUrl(
-                fn (): string => BankAccountsResource::getUrl('index', [
-                    'activeTab' => BankClearingTabRegistry::TAB_QUEUE,
-                ]),
+                fn (): string => self::bankLineWorkQueueUrl($referenceId),
             ),
             CashOutRequest::class => self::cashOutRequestUrl($referenceId),
             FeeDeduction::class => self::feeDeductionUrl($referenceId),

@@ -18,6 +18,8 @@ enum BankClearingQueueKind: string
 
     case Fee = 'fee';
 
+    case SubscriptionFee = 'subscription_fee';
+
     case Expense = 'expense';
 
     case CashOut = 'cash_out';
@@ -31,6 +33,7 @@ enum BankClearingQueueKind: string
             self::ReturnIn => __('Return in'),
             self::InvestOut => __('Invest out'),
             self::Fee => __('Fee'),
+            self::SubscriptionFee => __('Subscription fee'),
             self::Expense => __('Expense'),
             self::CashOut => __('Cash out'),
             self::Deposit => __('Deposit'),
@@ -61,6 +64,7 @@ enum BankClearingQueueKind: string
             $record->invest_return_id !== null => self::ReturnIn,
             $record->invest_disbursement_id !== null => self::InvestOut,
             $record->fee_disbursement_id !== null => self::Fee,
+            $record->membership_application_id !== null => self::SubscriptionFee,
             $record->expense_disbursement_id !== null => self::Expense,
             $record->cash_out_request_id !== null => self::CashOut,
             default => self::Deposit,
@@ -78,6 +82,7 @@ enum BankClearingQueueKind: string
             self::ReturnIn => $query->whereNotNull('invest_return_id'),
             self::InvestOut => $query->whereNotNull('invest_disbursement_id'),
             self::Fee => $query->whereNotNull('fee_disbursement_id'),
+            self::SubscriptionFee => $query->whereNotNull('membership_application_id'),
             self::Expense => $query->whereNotNull('expense_disbursement_id'),
             self::CashOut => $query->whereNotNull('cash_out_request_id'),
             self::Deposit => $query->whereNotNull('fund_posting_id'),

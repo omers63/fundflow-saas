@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Tenant\Resources\CashOutRequests\Schemas;
+namespace App\Filament\Tenant\Resources\FundOutRequests\Schemas;
 
 use App\Filament\Support\MemberFilamentActions;
 use App\Filament\Support\MemberSelect;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
-use App\Services\MemberCashOutService;
+use App\Services\MemberFundOutService;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -18,7 +18,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\HtmlString;
 
-class CashOutRequestForm
+class FundOutRequestForm
 {
     /**
      * @return list<Component|\Filament\Forms\Components\Component>
@@ -40,13 +40,13 @@ class CashOutRequestForm
         return [
             $memberField,
             Placeholder::make('availability')
-                ->label(__('Available to withdraw'))
-                ->content(function (MemberCashOutService $service, Get $get): HtmlString {
+                ->label(__('Available fund balance'))
+                ->content(function (MemberFundOutService $service, Get $get): HtmlString {
                     $memberId = $get('member_id');
 
                     if (! filled($memberId)) {
                         return new HtmlString(
-                            '<span class="text-gray-500">'.e(__('Select a member to see available cash.')).'</span>'
+                            '<span class="text-gray-500">'.e(__('Select a member to see available fund balance.')).'</span>'
                         );
                     }
 
@@ -58,25 +58,22 @@ class CashOutRequestForm
                         );
                     }
 
-                    $available = $service->availableCashForWithdrawal($member);
-                    $reserved = $service->reservedForNextEmi($member);
+                    $available = $service->availableFundForTransfer($member);
 
                     return new HtmlString(
                         '<div class="space-y-1 text-sm">'
                         .e(__('Available: :amount', ['amount' => number_format($available, 2)]))
-                        .'<br><span class="text-gray-500">'
-                        .e(__('Reserved for next EMI: :amount', ['amount' => number_format($reserved, 2)]))
-                        .'</span></div>'
+                        .'</div>'
                     );
                 }),
             TextInput::make('amount')
-                ->label(__('Withdrawal amount'))
+                ->label(__('Transfer amount'))
                 ->numeric()
                 ->required()
                 ->minValue(0.01)
                 ->prefix($currency)
-                ->helperText(__('Cash out draws from the member cash account, not the fund account.')),
-            MemberFilamentActions::cashOutDateField(),
+                ->helperText(__('Fund out moves money from the member fund account to their cash account. It does not create a bank remittance.')),
+            MemberFilamentActions::fundOutDateField(),
             Textarea::make('notes')
                 ->label(__('Notes'))
                 ->rows(3)
@@ -90,7 +87,7 @@ class CashOutRequestForm
     {
         return $schema
             ->components([
-                Section::make(__('Cash-out details'))
+                Section::make(__('Fund-out details'))
                     ->columnSpanFull()
                     ->columns(2)
                     ->schema(self::components()),

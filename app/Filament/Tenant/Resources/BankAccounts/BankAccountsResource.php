@@ -15,7 +15,9 @@ use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Filament\Tenant\Support\SmsClearingTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\BankStatement;
+use App\Models\Tenant\BankTransaction;
 use App\Services\BankClearingQueueService;
+use App\Support\BankTransactionWorkflow;
 use BackedEnum;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Resources\Resource;
@@ -206,6 +208,35 @@ class BankAccountsResource extends Resource
         }
 
         return static::getUrl('index', $parameters);
+    }
+
+    /**
+     * Work-queue URL for a bank statement line (operations vs bank file, focused via table search).
+     */
+    public static function workQueueUrlForBankLine(int|BankTransaction $bankLine, ?string $queueFilter = null): string
+    {
+        $id = $bankLine instanceof BankTransaction ? (int) $bankLine->getKey() : $bankLine;
+
+        if ($queueFilter === null && $bankLine instanceof BankTransaction) {
+            $queue = app(BankClearingQueueService::class);
+
+            $queueFilter = $queue->isBankFileItem($bankLine)
+                ? BankClearingTabRegistry::FILTER_BANK_FILE
+                : ($queue->isOperationsItem($bankLine) || BankTransactionWorkflow::isSyntheticOperationalStatement($bankLine)
+                    ? BankClearingTabRegistry::FILTER_OPERATIONS
+                    : BankClearingTabRegistry::FILTER_ALL);
+        }
+
+        $url = static::listUrl(
+            BankClearingTabRegistry::TAB_QUEUE,
+            queueFilter: $queueFilter,
+        );
+
+        if ($id > 0) {
+            $url .= (str_contains($url, '?') ? '&' : '?').'tableSearch='.urlencode((string) $id);
+        }
+
+        return $url;
     }
 
     public static function getRelations(): array

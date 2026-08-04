@@ -9,11 +9,13 @@ use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\ExpenseDisbursement;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
@@ -45,6 +47,7 @@ beforeEach(function () {
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'fees', 'name' => 'Master Fees', 'balance' => 0, 'is_master' => true]);
+    Account::create(['type' => 'expense', 'name' => 'Master Expense', 'balance' => 10_000, 'is_master' => true]);
 });
 
 test('reconciliation report includes legacy check keys and control layer', function () {
@@ -265,6 +268,133 @@ test('global trial diagnostics exclude expected one-sided lifecycle reference gr
         ->and($check['suspected_postings'][0]['reference_id'])->toBe(9001)
         ->and(collect($check['suspected_postings'])->pluck('reference_type'))
         ->not->toContain(CashOutRequest::class, FundPosting::class);
+});
+
+test('global trial diagnostics exclude membership application fee and expense disbursement groups', function () {
+    $masterCash = Account::masterCash();
+    $masterExpense = Account::masterExpense();
+    expect($masterCash)->not->toBeNull()
+        ->and($masterExpense)->not->toBeNull();
+
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 500,
+        'reference_type' => Contribution::class,
+        'reference_id' => 9001,
+        'description' => 'Suspicious contribution test credit',
+        'balance_after' => 500,
+    ]);
+
+    // Subscription approval shape: cash credits + fee (unbalanced under application by design).
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 150,
+        'reference_type' => MembershipApplication::class,
+        'reference_id' => 55,
+        'description' => 'Subscription deposit master cash',
+        'balance_after' => 650,
+    ]);
+    Transaction::factory()->for($masterCash)->debit()->create([
+        'amount' => 150,
+        'reference_type' => MembershipApplication::class,
+        'reference_id' => 55,
+        'description' => 'Subscription fee master cash',
+        'balance_after' => 500,
+    ]);
+    Transaction::factory()->for(Account::masterFees())->credit()->create([
+        'amount' => 150,
+        'reference_type' => MembershipApplication::class,
+        'reference_id' => 55,
+        'description' => 'Subscription fee master fees',
+        'balance_after' => 150,
+    ]);
+
+    Transaction::factory()->for($masterExpense)->debit()->create([
+        'amount' => 4300,
+        'reference_type' => ExpenseDisbursement::class,
+        'reference_id' => 2,
+        'description' => 'Expense disbursement #2 (expense out)',
+        'balance_after' => 5700,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+
+    expect($check['severity'])->toBe('warning')
+        ->and($check['unbalanced_posting_group_count'])->toBe(1)
+        ->and($check['suspected_postings'])->toHaveCount(1)
+        ->and($check['suspected_postings'][0]['reference_type'])->toBe(Contribution::class)
+        ->and(collect($check['suspected_postings'])->pluck('reference_type'))
+        ->not->toContain(MembershipApplication::class, ExpenseDisbursement::class);
+});
+
+test('global trial diagnostics exclude loan installment cash-flow groups and reserve-funding null refs', function () {
+    $masterCash = Account::masterCash();
+    $masterFund = Account::masterFund();
+    $masterExpense = Account::masterExpense();
+    expect($masterCash)->not->toBeNull()
+        ->and($masterFund)->not->toBeNull()
+        ->and($masterExpense)->not->toBeNull();
+
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 500,
+        'reference_type' => Contribution::class,
+        'reference_id' => 9001,
+        'description' => 'Suspicious contribution test credit',
+        'balance_after' => 500,
+    ]);
+
+    // EMI / guarantor collection shape under LoanInstallment (same rule as LoanRepayment).
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 3000,
+        'reference_type' => LoanInstallment::class,
+        'reference_id' => 1787,
+        'description' => 'Guarantor top-up cash',
+        'balance_after' => 3500,
+    ]);
+    Transaction::factory()->for($masterCash)->debit()->create([
+        'amount' => 3000,
+        'reference_type' => LoanInstallment::class,
+        'reference_id' => 1787,
+        'description' => 'Installment cash collection',
+        'balance_after' => 500,
+    ]);
+    Transaction::factory()->for($masterFund)->credit()->create([
+        'amount' => 3000,
+        'reference_type' => LoanInstallment::class,
+        'reference_id' => 1787,
+        'description' => 'Installment fund credit',
+        'balance_after' => 3000,
+    ]);
+
+    // Reserve funding: balanced globally, null reference by design.
+    Transaction::factory()->for($masterFund)->debit()->create([
+        'amount' => 4300,
+        'reference_type' => null,
+        'reference_id' => null,
+        'description' => 'Expense funding from master fund (reserve funding) (master fund transfer)',
+        'balance_after' => -1300,
+    ]);
+    Transaction::factory()->for($masterExpense)->credit()->create([
+        'amount' => 4300,
+        'reference_type' => null,
+        'reference_id' => null,
+        'description' => 'Expense funding from master fund (reserve funding) (reserve funding)',
+        'balance_after' => 14_300,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+
+    expect($check['severity'])->toBe('warning')
+        ->and($check['unbalanced_posting_group_count'])->toBe(1)
+        ->and($check['suspected_postings'][0]['reference_type'])->toBe(Contribution::class)
+        ->and(collect($check['suspected_postings'])->pluck('reference_type'))->not->toContain(LoanInstallment::class)
+        ->and($check['null_reference_line_count'] ?? 0)->toBe(0);
 });
 
 test('global trial diagnostics exclude expected master-bank-only bank transaction groups', function () {

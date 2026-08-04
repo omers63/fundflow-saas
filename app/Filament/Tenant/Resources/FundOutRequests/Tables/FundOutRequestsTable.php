@@ -6,11 +6,15 @@ namespace App\Filament\Tenant\Resources\FundOutRequests\Tables;
 
 use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\DateColumnRangeFilter;
+use App\Filament\Support\MemberFilamentActions;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
+use App\Filament\Support\TableHeaderIconAction;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\FundOutRequests\FundOutRequestResource;
+use App\Filament\Tenant\Resources\FundOutRequests\Schemas\FundOutRequestForm;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\MemberFundOutService;
 use Filament\Actions\Action;
@@ -30,6 +34,53 @@ class FundOutRequestsTable
     {
         return TableGrouping::apply(
             $table
+                ->headerActions([
+                    TableHeaderIconAction::apply(
+                        Action::make('create')
+                            ->label(__('New fund out'))
+                            ->icon('heroicon-o-plus-circle')
+                            ->modalHeading(__('New fund out'))
+                            ->modalDescription(__('Creates and approves a fund-out on the selected date. Moves fund balance to cash with master mirrors. No bank remittance is created.'))
+                            ->modalWidth('2xl')
+                            ->schema(FundOutRequestForm::components())
+                            ->action(function (array $data, Action $action, MemberFundOutService $service, Component $livewire): void {
+                                if (
+                                    ! ActionModalFailure::attemptThrowable(
+                                        $action,
+                                        function () use ($data, $service): void {
+                                            $member = Member::query()->findOrFail($data['member_id']);
+                                            $notes = filled($data['notes'] ?? null) ? (string) $data['notes'] : null;
+                                            $transactedAt = MemberFilamentActions::resolveCashOutDate($data['fund_out_date'] ?? null);
+
+                                            $request = $service->submit(
+                                                member: $member,
+                                                amount: (float) $data['amount'],
+                                                notes: $notes,
+                                            );
+
+                                            $service->accept(
+                                                $request,
+                                                auth('tenant')->id(),
+                                                $notes,
+                                                $transactedAt,
+                                            );
+                                        },
+                                        __('Could not create fund out'),
+                                    )
+                                ) {
+                                    return;
+                                }
+
+                                Notification::make()
+                                    ->title(__('Fund out approved'))
+                                    ->body(__('The amount was moved from the member’s fund account to cash (with master mirrors). No bank remittance is created — use cash out if money must leave the bank.'))
+                                    ->success()
+                                    ->send();
+
+                                FundOutRequestResource::dispatchInsightsRefresh($livewire);
+                            }),
+                    ),
+                ])
                 ->columns([
                     TextColumn::make('id')
                         ->label(__('Request #'))

@@ -6,16 +6,19 @@ namespace App\Filament\Tenant\Resources\FundOutRequests;
 
 use App\Filament\Concerns\TranslatesFilamentNavigationLabels;
 use App\Filament\Support\DatabaseNotificationsRefresh;
+use App\Filament\Tenant\Resources\FundOutRequests\Pages\CreateFundOutRequest;
 use App\Filament\Tenant\Resources\FundOutRequests\Pages\ListFundOutRequests;
+use App\Filament\Tenant\Resources\FundOutRequests\Schemas\FundOutRequestForm;
 use App\Filament\Tenant\Resources\FundOutRequests\Tables\FundOutRequestsTable;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Models\Tenant\FundOutRequest;
 use App\Models\Tenant\Member;
 use BackedEnum;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Schema as DatabaseSchema;
 use Livewire\Component;
 use UnitEnum;
 
@@ -39,7 +42,12 @@ class FundOutRequestResource extends Resource
 
     public static function canCreate(): bool
     {
-        return false;
+        return auth()->guard('tenant')->check();
+    }
+
+    public static function form(Schema $schema): Schema
+    {
+        return FundOutRequestForm::configure($schema);
     }
 
     public static function table(Table $table): Table
@@ -49,7 +57,7 @@ class FundOutRequestResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        if (! Schema::hasTable('fund_out_requests')) {
+        if (! DatabaseSchema::hasTable('fund_out_requests')) {
             return null;
         }
 
@@ -113,6 +121,7 @@ class FundOutRequestResource extends Resource
     {
         return [
             'index' => ListFundOutRequests::route('/'),
+            'create' => CreateFundOutRequest::route('/create'),
         ];
     }
 }

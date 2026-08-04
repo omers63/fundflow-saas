@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Tenant\Resources\CashOutRequests\Pages;
+namespace App\Filament\Tenant\Resources\FundOutRequests\Pages;
 
 use App\Filament\Support\MemberFilamentActions;
-use App\Filament\Tenant\Resources\CashOutRequests\CashOutRequestResource;
+use App\Filament\Tenant\Resources\FundOutRequests\FundOutRequestResource;
 use App\Models\Tenant\Member;
-use App\Services\MemberCashOutService;
+use App\Services\MemberFundOutService;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Enums\Width;
 use Illuminate\Database\Eloquent\Model;
 
-class CreateCashOutRequest extends CreateRecord
+class CreateFundOutRequest extends CreateRecord
 {
-    protected static string $resource = CashOutRequestResource::class;
+    protected static string $resource = FundOutRequestResource::class;
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
@@ -27,22 +27,22 @@ class CreateCashOutRequest extends CreateRecord
         if (filled($memberId)) {
             $this->form->fill([
                 'member_id' => $memberId,
-                'cash_out_date' => MemberFilamentActions::businessDayPickerDefault(),
+                'fund_out_date' => MemberFilamentActions::businessDayPickerDefault(),
             ]);
         }
     }
 
     public function getTitle(): string
     {
-        return __('New cash out');
+        return __('New fund out');
     }
 
     protected function handleRecordCreation(array $data): Model
     {
         $member = Member::findOrFail($data['member_id']);
-        $service = app(MemberCashOutService::class);
+        $service = app(MemberFundOutService::class);
         $notes = filled($data['notes'] ?? null) ? (string) $data['notes'] : null;
-        $transactedAt = MemberFilamentActions::resolveCashOutDate($data['cash_out_date'] ?? null);
+        $transactedAt = MemberFilamentActions::resolveCashOutDate($data['fund_out_date'] ?? null);
 
         $request = $service->submit(
             member: $member,
@@ -63,8 +63,8 @@ class CreateCashOutRequest extends CreateRecord
     protected function getCreatedNotification(): ?Notification
     {
         return Notification::make()
-            ->title(__('Cash out approved'))
-            ->body(__('Member and master cash have been debited. Complete the remittance checklist under Audit & System, then clear the bank line when the statement imports.'))
+            ->title(__('Fund out approved'))
+            ->body(__('The amount was moved from the member’s fund account to cash (with master mirrors). No bank remittance is created — use cash out if money must leave the bank.'))
             ->success();
     }
 }

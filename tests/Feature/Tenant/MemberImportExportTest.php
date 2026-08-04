@@ -702,16 +702,33 @@ test('withdraw header action updates status to withdrawn', function () {
     ]);
     $this->accounting->createMemberAccounts($member);
 
-    Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()])
-        ->callAction('withdrawMember', data: [
-            'reason' => 'Left the fund',
-            'hold_payout' => true,
-            'withdraw_date' => now()->toDateString(),
-        ])
+    AccountingService::withoutMemberCashCollection(function () use ($member): void {
+        $this->accounting->creditMemberFundWithMasterMirror(
+            $member->fundAccount,
+            2500,
+            'Seed fund for withdraw stats',
+            __('(master fund mirror)'),
+            $member,
+        );
+    });
+    $member->load(['cashAccount', 'fundAccount']);
+
+    $page = Livewire::test(ViewMember::class, ['record' => $member->getRouteKey()]);
+
+    expect((float) $page->instance()->workspaceSummary()['balances']['fund']['amount'])->toBe(2500.0);
+
+    // Full settlement (no payout hold) moves residual fund → cash → auto cash-out.
+    $page->callAction('withdrawMember', data: [
+        'reason' => 'Left the fund',
+        'hold_payout' => false,
+        'withdraw_date' => now()->toDateString(),
+    ])
         ->assertNotified();
 
     expect($member->fresh()->status)->toBe('withdrawn')
-        ->and($member->fresh()->payout_frozen_at)->not->toBeNull();
+        ->and((float) $member->fresh(['fundAccount'])->fundAccount->balance)->toBe(0.0)
+        ->and((float) $page->instance()->workspaceSummary()['balances']['fund']['amount'])->toBe(0.0)
+        ->and($page->instance()->getRecord()->status)->toBe('withdrawn');
 });
 
 test('adjust cash row action posts manual credit', function () {
