@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Models\Tenant\FundTier;
+use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Setting;
 use App\Support\AutomationScheduleSettings;
 use App\Support\CommunicationSettings;
@@ -258,6 +260,20 @@ it('ensureInstalled does not overwrite an existing tenant setting', function () 
         ->and(Setting::get('general', 'currency'))->toBe('USD')
         // Missing automation keys still backfill
         ->and(Setting::get(AutomationScheduleSettings::GROUP, 'fund_status_digest_times'))->toBe('23:00');
+});
+
+it('seeds fund and loan tier catalogs on fresh install', function () {
+    FundTier::query()->forceDelete();
+    LoanTier::query()->forceDelete();
+
+    DefaultTenantSettings::seed();
+
+    expect(LoanTier::query()->count())->toBe(11)
+        ->and(FundTier::query()->count())->toBe(6)
+        ->and((float) FundTier::query()->where('tier_number', 1)->value('percentage'))->toBe(90.0)
+        ->and((int) FundTier::query()->where('tier_number', 1)->value('priority'))->toBe(1)
+        ->and((float) FundTier::query()->where('tier_number', 3)->value('percentage'))->toBe(70.0)
+        ->and((int) FundTier::query()->where('tier_number', 3)->value('priority'))->toBe(2);
 });
 
 it('aligns loan queue arrears default with samman policy', function () {

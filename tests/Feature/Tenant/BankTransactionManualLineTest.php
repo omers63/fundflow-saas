@@ -86,10 +86,10 @@ test('manual service creates credit and debit imported lines on a real statement
         ->and($this->statement->fresh()->imported_rows)->toBe(2);
 });
 
-test('manual service rejects membership import placeholder statements', function () {
+test('manual service rejects cut-off placeholder statements', function () {
     $placeholder = BankStatement::create([
-        'filename' => 'membership-subscription-fees',
-        'bank_name' => __('Membership subscription fees'),
+        'filename' => 'import-cutoff-balances',
+        'bank_name' => __('Import cut-off balances'),
         'status' => 'completed',
         'total_rows' => 0,
         'imported_rows' => 0,

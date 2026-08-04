@@ -66,7 +66,8 @@ class BankClearingMatchService
                     ->orWhereNotNull('expense_disbursement_id')
                     ->orWhereNotNull('fee_disbursement_id')
                     ->orWhereNotNull('invest_disbursement_id')
-                    ->orWhereNotNull('invest_return_id');
+                    ->orWhereNotNull('invest_return_id')
+                    ->orWhereNotNull('membership_application_id');
             })
             ->whereHas('bankStatement', function (Builder $statementQuery): void {
                 $statementQuery->whereIn('filename', BankStatementBuckets::OPERATIONAL_CLEARANCE);
@@ -97,7 +98,8 @@ class BankClearingMatchService
         return match ($account->type) {
             'cash' => $scoped->where(function (Builder $cashQuery): void {
                 $cashQuery->whereNotNull('fund_posting_id')
-                    ->orWhereNotNull('cash_out_request_id');
+                    ->orWhereNotNull('cash_out_request_id')
+                    ->orWhereNotNull('membership_application_id');
             }),
             'expense' => $scoped->whereNotNull('expense_disbursement_id'),
             'fees' => $scoped->whereNotNull('fee_disbursement_id'),
@@ -479,7 +481,8 @@ class BankClearingMatchService
             || $transaction->expense_disbursement_id !== null
             || $transaction->fee_disbursement_id !== null
             || $transaction->invest_disbursement_id !== null
-            || $transaction->invest_return_id !== null;
+            || $transaction->invest_return_id !== null
+            || $transaction->membership_application_id !== null;
     }
 
     /**
@@ -612,7 +615,8 @@ class BankClearingMatchService
                     ->orWhereNotNull('expense_disbursement_id')
                     ->orWhereNotNull('fee_disbursement_id')
                     ->orWhereNotNull('invest_disbursement_id')
-                    ->orWhereNotNull('invest_return_id');
+                    ->orWhereNotNull('invest_return_id')
+                    ->orWhereNotNull('membership_application_id');
             })
             ->whereDoesntHave('bankStatement', function ($query): void {
                 $query->whereIn('filename', BankStatementBuckets::MEMBERSHIP_IMPORT_PLACEHOLDERS);

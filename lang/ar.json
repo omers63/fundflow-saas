@@ -6970,5 +6970,7 @@
     "••••••••": "••••••••",
     "…and :count more.": "…و :count أخرى.",
     "≥90%": "≥90%",
-    "✓ Saved at :time": "✓ حُفظ في :time"
+    "✓ Saved at :time": "✓ حُفظ في :time",
+    "Review declared transfer details before approving. When the declared transfer is below the required subscription fee, approval is still allowed and the shortfall is flagged as subscription fee arrears. On approval, the transfer posts to member and master cash and creates an uncleared bank line for clearance against the real bank statement (same path as deposits).": "راجع تفاصيل التحويل المُعلَنة قبل الموافقة. عندما يكون التحويل المُعلَن أقل من رسوم الاشتراك المطلوبة، تبقى الموافقة مسموحة ويُوسَم النقص كمتأخرات رسوم اشتراك. عند الموافقة يُرحَّل التحويل إلى نقد العضو ونقد الصندوق ويُنشأ سطر بنكي غير مُصفّى للمطابقة مع كشف البنك الحقيقي (نفس مسار الإيداعات).",
+    "Subscription fee transfer — :name (application #:id)": "تحويل رسوم الاشتراك — :name (طلب #:id)"
 }

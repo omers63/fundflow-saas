@@ -13,6 +13,13 @@ use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
+/**
+ * Charge the yearly subscription fee from member cash already on the books.
+ *
+ * This is an internal cash → master fees allocation (no new bank transfer), so no uncleared
+ * bank statement line is created. Bank-funded application / renewal fees use
+ * {@see MembershipSubscriptionFeeService} instead.
+ */
 final class MemberAnnualSubscriptionFeeService
 {
     public function __construct(

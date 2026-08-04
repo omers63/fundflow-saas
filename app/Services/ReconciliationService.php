@@ -792,6 +792,7 @@ class ReconciliationService
             ->whereNull('fee_disbursement_id')
             ->whereNull('invest_disbursement_id')
             ->whereNull('invest_return_id')
+            ->whereNull('membership_application_id')
             ->where('created_at', '<', $staleCutoff)
             ->whereDoesntHave('bankStatement', function ($query): void {
                 $query->whereIn('filename', $this->bankClearing->membershipImportPlaceholderStatementFilenames());

@@ -55,17 +55,23 @@ final class MemberMembershipProfileService
             return null;
         }
 
+        // Only claim orphan approved applications (no member yet). Do not fall back to
+        // another member's profile by shared household email — that overwrites the
+        // parent's gender/occupation/etc. when importing dependents.
         $application = MembershipApplication::query()
             ->where('email', $member->email)
+            ->whereNull('member_id')
             ->where('status', 'approved')
             ->latest('id')
             ->first();
 
-        if ($application !== null && $application->member_id === null) {
+        if ($application !== null) {
             $application->update(['member_id' => $member->id]);
+
+            return $application->fresh();
         }
 
-        return $application?->fresh();
+        return null;
     }
 
     public function resolveForMember(Member $member): MembershipApplication

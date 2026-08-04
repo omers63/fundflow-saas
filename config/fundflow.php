@@ -20,8 +20,9 @@ return [
     |
     | Canonical defaults for Settings tabs live in App\Support\*Settings::defaults()
     | and are persisted on provision via App\Support\DefaultTenantSettings
-    | (wired from Database\Seeders\Tenant\TenantDatabaseSeeder). Fund/loan tiers
-    | and bank CSV templates are seeded alongside that seeder.
+    | (wired from Database\Seeders\Tenant\TenantDatabaseSeeder and tenant
+    | ensureInstalled migrations). Fund/loan tiers, bank CSV templates, and
+    | missing notification templates are seeded with the same helper.
     |
     */
 

@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Canonical fund / loan tier defaults for a fresh tenant (Samman production shape).
  *
- * Loan amount bands stay 0–10; fund pools consolidate bands with overlapping allocation
- * percentages. Emergency pool stays unlinked.
+ * Loan amount bands stay 0–10; fund pools consolidate bands with allocation
+ * percentages and intake priorities from the live Settings → Fund tiers policy.
+ * Emergency pool stays unlinked.
  */
 final class DefaultFundAndLoanTiers
 {
@@ -40,18 +41,20 @@ final class DefaultFundAndLoanTiers
      */
     public static function fundTiers(): array
     {
+        // Percentages / priorities mirror Samman production Settings → Fund tier allocations.
         return [
             ['tier_number' => 0, 'priority' => 0, 'label' => 'Emergency', 'percentage' => 100, 'loan_tier_numbers' => []],
-            ['tier_number' => 1, 'priority' => 1, 'label' => 'Tier 1', 'percentage' => 40, 'loan_tier_numbers' => [0, 1]],
-            ['tier_number' => 2, 'priority' => 2, 'label' => 'Tier 2', 'percentage' => 30, 'loan_tier_numbers' => [2, 3]],
-            ['tier_number' => 3, 'priority' => 3, 'label' => 'Tier 3', 'percentage' => 10, 'loan_tier_numbers' => [4, 5]],
-            ['tier_number' => 4, 'priority' => 4, 'label' => 'Tier 4', 'percentage' => 10, 'loan_tier_numbers' => [6, 7]],
-            ['tier_number' => 5, 'priority' => 5, 'label' => 'Tier 5', 'percentage' => 10, 'loan_tier_numbers' => [8, 9, 10]],
+            ['tier_number' => 1, 'priority' => 1, 'label' => 'Tier 1', 'percentage' => 90, 'loan_tier_numbers' => [0, 1]],
+            ['tier_number' => 2, 'priority' => 2, 'label' => 'Tier 2', 'percentage' => 80, 'loan_tier_numbers' => [2, 3]],
+            ['tier_number' => 3, 'priority' => 2, 'label' => 'Tier 3', 'percentage' => 70, 'loan_tier_numbers' => [4, 5]],
+            ['tier_number' => 4, 'priority' => 2, 'label' => 'Tier 4', 'percentage' => 70, 'loan_tier_numbers' => [6, 7]],
+            ['tier_number' => 5, 'priority' => 2, 'label' => 'Tier 5', 'percentage' => 70, 'loan_tier_numbers' => [8, 9, 10]],
         ];
     }
 
     /**
      * Insert defaults when both tier tables exist and are empty (fresh tenant / empty reset).
+     * Never overwrites tiers that already exist.
      */
     public static function seedIfEmpty(): void
     {

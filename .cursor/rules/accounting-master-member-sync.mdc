@@ -45,5 +45,5 @@ Keep **member** and **master** ledger legs in sync wherever they represent the s
 | Cash-out approve | `MemberCashOutService::accept()` | DR member cash + DR master cash + uncleared bank txn |
 | Contribution / late fee / subscription fee | `AccountingService::postContribution*()`, `MembershipSubscriptionFeeService` | DR member cash + DR master cash mirror; fund/fees legs unchanged |
 | CSV import cut-off balances | `MemberOpeningBalanceService` | Signed pool mirrors on member + master cash/fund only (no bank statement lines or master bank ledger) |
-| CSV subscription fee on approval | `MembershipSubscriptionFeeService` | Member + master cash mirror and fee to master fees (no bank statement lines or master bank ledger) |
+| CSV / application subscription fee | `MembershipSubscriptionFeeService` | Member + master cash mirror, fee to master fees, uncleared bank line for transfer amount (clear later; master bank on match) |
 | Bank import mirror | `FundFlowService::mirrorToCash()` | Master bank ↔ master cash |

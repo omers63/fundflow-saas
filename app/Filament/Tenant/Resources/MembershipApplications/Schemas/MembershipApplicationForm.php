@@ -195,7 +195,7 @@ class MembershipApplicationForm
 
             Section::make(__('Application fee'))
                 ->icon('heroicon-o-banknotes')
-                ->description(__('Review declared transfer details before approving. When the declared transfer is below the required subscription fee, approval is still allowed and the shortfall is flagged as subscription fee arrears. Subscription transfers are posted to member and master cash only (not the bank accounts module).'))
+                ->description(__('Review declared transfer details before approving. When the declared transfer is below the required subscription fee, approval is still allowed and the shortfall is flagged as subscription fee arrears. On approval, the transfer posts to member and master cash and creates an uncleared bank line for clearance against the real bank statement (same path as deposits).'))
                 ->schema([
                     TextInput::make('membership_fee_required_amount')
                         ->label(__('Required subscription fee'))

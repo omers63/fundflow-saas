@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\Account;
+use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\Transaction;
 use App\Support\BusinessDay;
 use App\Support\PublicPageSettings;
+use Carbon\Carbon;
+use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -17,6 +20,7 @@ class MembershipSubscriptionFeeService
 {
     public function __construct(
         private readonly AccountingService $accounting,
+        private readonly SyntheticBankStatementFactory $syntheticStatements,
     ) {}
 
     public function applicationRequiresSubscriptionFee(MembershipApplication $application): bool
@@ -74,8 +78,9 @@ class MembershipSubscriptionFeeService
     /**
      * Post subscription fee accounting when a membership application is approved.
      *
-     * Mirrors transfer to member and master cash, then allocates the required fee to master fees.
-     * Does not create bank statement lines or master bank ledger entries.
+     * Mirrors the declared bank transfer to member and master cash, allocates the required fee
+     * to master fees, and creates an uncleared operational bank line for the transfer amount
+     * (same deposit-style clearance path). Master bank is credited only when that line is matched.
      */
     public function postOnApproval(MembershipApplication $application, Member $member): void
     {
@@ -85,6 +90,7 @@ class MembershipSubscriptionFeeService
     /**
      * Post fee legs for member roster / legacy import when application_fee_amount is declared.
      * Idempotent when legs already exist. Suppresses contribution collection on cash credits.
+     * Ensures an uncleared bank clearance line exists when the transfer amount is positive.
      */
     public function postOnLegacyMemberImport(MembershipApplication $application, Member $member): void
     {
@@ -109,14 +115,6 @@ class MembershipSubscriptionFeeService
                         continue;
                     }
 
-                    if ($this->hasSubscriptionFeePosted($application)) {
-                        continue;
-                    }
-
-                    if (! $this->expectsSubscriptionFeeLedger($application)) {
-                        continue;
-                    }
-
                     $member = $application->member;
 
                     if ($member === null) {
@@ -124,6 +122,18 @@ class MembershipSubscriptionFeeService
                     }
 
                     if ($member->cashAccount === null) {
+                        continue;
+                    }
+
+                    if ($this->hasSubscriptionFeePosted($application)) {
+                        if ($this->ensureUnclearedBankLine($application, $member)) {
+                            $posted++;
+                        }
+
+                        continue;
+                    }
+
+                    if (!$this->expectsSubscriptionFeeLedger($application)) {
                         continue;
                     }
 
@@ -163,6 +173,8 @@ class MembershipSubscriptionFeeService
 
         if ($this->hasSubscriptionFeePosted($application)) {
             if ($legacyMemberImport) {
+                $this->ensureUnclearedBankLine($application, $member);
+
                 return;
             }
 
@@ -224,6 +236,13 @@ class MembershipSubscriptionFeeService
                         $transferDate,
                         $member->id,
                     );
+
+                    $this->createUnclearedBankTransaction(
+                        $application,
+                        $member,
+                        $transferred,
+                        $transferDate,
+                    );
                 }
 
                 if ($settledFee > 0) {
@@ -283,5 +302,69 @@ class MembershipSubscriptionFeeService
     protected function hasSubscriptionFeePosted(MembershipApplication $application): bool
     {
         return $this->masterCashCreditTransaction($application) !== null;
+    }
+
+    /**
+     * Create an uncleared operational bank line for the inbound fee transfer when missing.
+     *
+     * @return bool True when a new bank line was created
+     */
+    public function ensureUnclearedBankLine(MembershipApplication $application, Member $member): bool
+    {
+        $transferred = (float) ($application->membership_fee_amount ?? 0);
+
+        if ($transferred <= 0.00001) {
+            return false;
+        }
+
+        if (BankTransaction::query()->where('membership_application_id', $application->id)->exists()) {
+            return false;
+        }
+
+        $this->createUnclearedBankTransaction(
+            $application,
+            $member,
+            $transferred,
+            $application->membership_fee_transfer_date ?? BusinessDay::now(),
+        );
+
+        return true;
+    }
+
+    private function createUnclearedBankTransaction(
+        MembershipApplication $application,
+        Member $member,
+        float $amount,
+        DateTimeInterface|string $transferDate,
+    ): BankTransaction {
+        $existing = BankTransaction::query()
+            ->where('membership_application_id', $application->id)
+            ->first();
+
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        $postingDate = Carbon::parse($transferDate)->toDateString();
+        $statement = $this->syntheticStatements->membershipSubscriptionFees();
+        $reference = filled($application->membership_fee_transfer_reference)
+            ? (string) $application->membership_fee_transfer_reference
+            : (string) $application->id;
+
+        return BankTransaction::create([
+            'bank_statement_id' => $statement->id,
+            'transaction_date' => $postingDate,
+            'description' => __('Subscription fee transfer — :name (application #:id)', [
+                'name' => $member->name,
+                'id' => $application->id,
+            ]),
+            'amount' => $amount,
+            'reference' => $reference,
+            'status' => 'posted',
+            'member_id' => $member->id,
+            'hash' => md5("membership-subscription-{$application->id}-{$postingDate}-{$amount}"),
+            'is_cleared' => false,
+            'membership_application_id' => $application->id,
+        ]);
     }
 }

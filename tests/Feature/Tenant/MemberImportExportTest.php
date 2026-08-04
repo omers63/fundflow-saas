@@ -135,10 +135,10 @@ test('member import skips existing email', function () {
 
 test('member import links subsequent shared-email rows as dependents without parent_member_number', function () {
     $path = writeMemberImportCsv(
-        "member_number,name,email,parent_member_number\n" .
-        "1,Household Head,shared.email-first@fund.test,\n" .
-        "2,Household Dependent A,shared.email-first@fund.test,\n" .
-        "3,Household Dependent B,shared.email-first@fund.test,\n" .
+        "member_number,name,email,parent_member_number\n".
+        "1,Household Head,shared.email-first@fund.test,\n".
+        "2,Household Dependent A,shared.email-first@fund.test,\n".
+        "3,Household Dependent B,shared.email-first@fund.test,\n".
         "4,Independent Member,independent@fund.test,\n"
     );
 
@@ -162,9 +162,9 @@ test('member import links subsequent shared-email rows as dependents without par
 test('member re-import rebuilds parent links from email-first and parent_member_number', function () {
     // Flat import (no parents) first — email-first also links #11 during first run.
     $flat = writeMemberImportCsv(
-        "member_number,name,email,parent_member_number\n" .
-        "10,Reimport Head,reimport.household@fund.test,\n" .
-        "11,Reimport Dep Email,reimport.household@fund.test,\n" .
+        "member_number,name,email,parent_member_number\n".
+        "10,Reimport Head,reimport.household@fund.test,\n".
+        "11,Reimport Dep Email,reimport.household@fund.test,\n".
         "12,Reimport Dep By Number,other@fund.test,\n"
     );
 
@@ -177,9 +177,9 @@ test('member re-import rebuilds parent links from email-first and parent_member_
     Member::query()->update(['parent_member_id' => null]);
 
     $relink = writeMemberImportCsv(
-        "member_number,name,email,parent_member_number\n" .
-        "10,Reimport Head,reimport.household@fund.test,\n" .
-        "11,Reimport Dep Email,reimport.household@fund.test,\n" .
+        "member_number,name,email,parent_member_number\n".
+        "10,Reimport Head,reimport.household@fund.test,\n".
+        "11,Reimport Dep Email,reimport.household@fund.test,\n".
         "12,Reimport Dep By Number,other@fund.test,10\n"
     );
 
@@ -197,10 +197,10 @@ test('member re-import rebuilds parent links from email-first and parent_member_
 
 test('member import prefers parent_member_number over shared-email inference', function () {
     $path = writeMemberImportCsv(
-        "member_number,name,email,parent_member_number\n" .
-        "1,Email Household A,shared.prefer@fund.test,\n" .
-        "2,Email Household B,shared.prefer@fund.test,\n" .
-        "3,Explicit Parent,explicit.parent@fund.test,\n" .
+        "member_number,name,email,parent_member_number\n".
+        "1,Email Household A,shared.prefer@fund.test,\n".
+        "2,Email Household B,shared.prefer@fund.test,\n".
+        "3,Explicit Parent,explicit.parent@fund.test,\n".
         "4,Explicit Dependent,shared.prefer@fund.test,3\n"
     );
 
@@ -395,6 +395,44 @@ test('member import accepts arabic legacy status labels', function () {
 
     expect(Member::query()->where('member_number', 'AR-ACTIVE')->value('status'))->toBe('active')
         ->and(Member::query()->where('member_number', 'AR-WITHDRAWN')->value('status'))->toBe('withdrawn');
+});
+
+test('member import keeps distinct profiles for household members sharing contact email', function () {
+    $path = writeMemberImportCsv(
+        "member_number,name,email,parent_member_number,gender,marital_status,occupation,employer,city\n".
+        "23,عمر غازي سليمان سمان,omer.shared@fund.test,,ذكر,married,مهندس,مهندس,جده\n".
+        "28,سماح سعد صالح حلواني السيد,omer.shared@fund.test,,أنثى,married,معلمة,معلمة,جده\n"
+    );
+
+    $result = app(MemberImportService::class)->import($path, 'TempPass@123');
+
+    expect($result['created'])->toBe(2)
+        ->and($result['failed'])->toBe(0);
+
+    $head = Member::query()->where('member_number', '23')->first();
+    $dependent = Member::query()->where('member_number', '28')->first();
+    $profiles = app(MemberMembershipProfileService::class);
+
+    expect($head)->not->toBeNull()
+        ->and($dependent)->not->toBeNull()
+        ->and($dependent->parent_member_id)->toBe($head->id)
+        ->and($head->email)->toBe('omer.shared@fund.test')
+        ->and($dependent->email)->toBe('omer.shared@fund.test');
+
+    $headProfile = $profiles->findForMember($head);
+    $dependentProfile = $profiles->findForMember($dependent);
+
+    expect($headProfile)->not->toBeNull()
+        ->and($dependentProfile)->not->toBeNull()
+        ->and($headProfile->id)->not->toBe($dependentProfile->id)
+        ->and($headProfile->member_id)->toBe($head->id)
+        ->and($dependentProfile->member_id)->toBe($dependent->id)
+        ->and($headProfile->gender)->toBe('male')
+        ->and($headProfile->occupation)->toBe('مهندس')
+        ->and($headProfile->employer)->toBe('مهندس')
+        ->and($dependentProfile->gender)->toBe('female')
+        ->and($dependentProfile->occupation)->toBe('معلمة')
+        ->and($dependentProfile->employer)->toBe('معلمة');
 });
 
 test('member import populates membership profile from optional columns', function () {

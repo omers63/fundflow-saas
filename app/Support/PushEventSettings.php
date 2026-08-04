@@ -13,6 +13,22 @@ final class PushEventSettings
     public const GROUP = 'push_events';
 
     /**
+     * Default: all push-capable catalog events enabled (matches form default).
+     *
+     * @return array<string, bool>
+     */
+    public static function defaults(): array
+    {
+        $defaults = [];
+
+        foreach (array_keys(self::eventOptions()) as $key) {
+            $defaults[$key] = true;
+        }
+
+        return $defaults;
+    }
+
+    /**
      * Events that support browser push (catalog keys → translated labels).
      *
      * @return array<string, string>

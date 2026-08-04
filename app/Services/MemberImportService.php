@@ -53,7 +53,7 @@ final class MemberImportService
      * application_fee_amount, membership_fee_transfer_date / application_fee_transfer_date,
      * membership_fee_transfer_reference / application_fee_transfer_reference, message / applicant_message).
      * Declared application / membership fees are posted like approval (member + master cash deposit mirror,
-     * then fee to master fees; no bank statement lines).
+     * then fee to master fees; uncleared bank line for transfer clearance).
      *
      * Household links:
      * - When parent_member_number (or name/email parent columns) is set, that reference is used.
@@ -184,6 +184,7 @@ final class MemberImportService
 
         if ($existing !== null) {
             $this->syncHouseholdFromImport($existing, $parentMember);
+            $this->membershipProfiles->syncFromImportAttributes($existing, $this->parseProfileAttributes($row));
 
             return 'skipped';
         }
