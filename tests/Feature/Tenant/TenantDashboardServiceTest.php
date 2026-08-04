@@ -19,6 +19,7 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use App\Services\TenantDashboardService;
 use App\Support\BusinessDay;
 use App\Support\Lang;
@@ -205,11 +206,11 @@ test('tenant dashboard snapshot includes greeting and workspace links', function
         ->and($this->service->coreSnapshot())->not->toHaveKey('pool_health')
         ->and($this->service->coreSnapshot())->not->toHaveKey('contribution_trend')
         ->and($this->service->detailsSnapshot())->toHaveKeys([
-                'pool_health',
-                'contribution_trend',
-                'lifetime_fund_activity',
-                'forecast_summary',
-            ]);
+            'pool_health',
+            'contribution_trend',
+            'lifetime_fund_activity',
+            'forecast_summary',
+        ]);
 });
 
 test('tenant dashboard widget defers analytics until unfolded', function () {
@@ -261,7 +262,7 @@ test('jobs page registers in tenant panel navigation', function () {
         ->and(JobsPage::getUrl())->toContain('/admin/jobs');
 });
 
-test('tenant dashboard pool health includes thirty day sparkline', function () {
+test('tenant dashboard pool health includes twelve cycle flow trend', function () {
     $user = User::create([
         'name' => 'Pool Admin',
         'email' => 'pool-admin@fund.test',
@@ -271,8 +272,10 @@ test('tenant dashboard pool health includes thirty day sparkline', function () {
 
     $this->actingAs($user, 'tenant');
 
-    $cash = Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 1000, 'is_master' => true]);
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 1000, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 5000, 'is_master' => true]);
+
+    $cash = Account::query()->where('type', 'cash')->where('is_master', true)->firstOrFail();
 
     Transaction::create([
         'account_id' => $cash->id,
@@ -283,12 +286,40 @@ test('tenant dashboard pool health includes thirty day sparkline', function () {
         'transacted_at' => BusinessDay::now()->subDay(),
     ]);
 
+    $member = Member::create([
+        'member_number' => 'MEM-POOL-FLOW',
+        'name' => 'Flow Member',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $cycles = app(ContributionCycleService::class);
+    [$openMonth, $openYear] = $cycles->currentOpenPeriod();
+    $openPeriod = Contribution::periodDate($openMonth, $openYear);
+
+    Contribution::factory()->for($member)->posted()->create([
+        'period' => $openPeriod,
+        'amount' => 250,
+        'posted_at' => BusinessDay::now()->subDay(),
+    ]);
+
     $pool = $this->service->snapshot()['pool_health'];
 
     expect($pool['sparkline'])->toHaveCount(30)
         ->and($pool['sparkline_max'])->toBeGreaterThan(0)
         ->and($pool['sparkline_end'])->toBe(6000.0)
-        ->and($pool['sparkline_start'])->toBe(5800.0);
+        ->and($pool['sparkline_start'])->toBe(5800.0)
+        ->and($pool['flow_trend']['points'])->toHaveCount(12)
+        ->and($pool['flow_trend']['inflow_series'])->toHaveCount(2)
+        ->and($pool['flow_trend']['outflow_series'])->toHaveCount(3)
+        ->and($pool['flow_trend']['lines']['inflow'])->toHaveKey('contributions')
+        ->and($pool['flow_trend']['lines']['inflow'])->toHaveKey('emi');
+
+    $cycle = collect($pool['flow_trend']['points'])->firstWhere('period', $openPeriod);
+
+    expect($cycle)->not->toBeNull()
+        ->and($cycle['in']['contributions'])->toBe(250.0);
 });
 
 test('tenant dashboard pool health renders readable variance status markup', function () {

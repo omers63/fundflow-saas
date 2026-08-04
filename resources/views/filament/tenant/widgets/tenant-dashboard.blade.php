@@ -348,6 +348,7 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                 </div>
             </div>
         @endif
+        @include('filament.tenant.widgets.partials.pool-flow-trend', ['pool' => $pool])
     </div>
 
     {{-- ── Row 2: Loan queue preview (left, wide) + Recon alerts (right) ── --}}
@@ -367,15 +368,15 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                             ['label' => __('Process'), 'count' => $pipeline['process'] ?? 0, 'url' => $pipeline['queue_process_url'] ?? '#', 'tone' => 'emerald'],
                             ['label' => __('Running'), 'count' => $pipeline['running'] ?? 0, 'url' => $pipeline['queue_tiers_url'] ?? '#', 'tone' => 'teal'],
                         ] as $stage)
-                            <a href="{{ $stage['url'] }}" @class([
-                                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold transition hover:opacity-80',
-                                'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $stage['tone'] === 'amber',
-                                'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' => $stage['tone'] === 'sky',
-                                'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' => $stage['tone'] === 'emerald',
-                                'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200' => $stage['tone'] === 'teal',
-                            ])>
-                                {{ $stage['label'] }} <span class="tabular-nums">{{ $stage['count'] }}</span>
-                            </a>
+                                <a href="{{ $stage['url'] }}" @class([
+                                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold transition hover:opacity-80',
+                                    'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $stage['tone'] === 'amber',
+                                    'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' => $stage['tone'] === 'sky',
+                                    'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' => $stage['tone'] === 'emerald',
+                                    'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200' => $stage['tone'] === 'teal',
+                                ])>
+                                    {{ $stage['label'] }} <span class="tabular-nums">{{ $stage['count'] }}</span>
+                                </a>
                     @endforeach
                     <a href="{{ \App\Filament\Tenant\Pages\LoanQueueWorkbenchPage::getUrl() }}"
                         class="ms-1 text-[11px] font-medium text-sky-600 hover:underline dark:text-sky-400">{{ __('Open workbench →') }}</a>

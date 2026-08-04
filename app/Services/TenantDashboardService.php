@@ -40,6 +40,7 @@ use App\Services\Loans\LoanDelinquencyService;
 use App\Services\Loans\LoanQueueService;
 use App\Support\BusinessDay;
 use App\Support\Insights\InsightFormatter;
+use App\Support\Insights\PoolFlowTrendBuilder;
 use App\Support\Lang;
 use App\Support\PublicPageSettings;
 use App\Support\TenantRuntimeCache;
@@ -461,6 +462,7 @@ final class TenantDashboardService
         $poolTotal = $masterCash + $masterFund;
         $solvency = $loanExposure > 0.01 ? round($poolTotal / $loanExposure, 2) : null;
         $sparkline = $this->poolHealthSparkline($poolTotal);
+        $flowTrend = PoolFlowTrendBuilder::twelveCycles();
 
         return [
             'master_cash' => $masterCash,
@@ -478,6 +480,7 @@ final class TenantDashboardService
             'sparkline_max' => $sparkline['max'],
             'sparkline_start' => $sparkline['start'],
             'sparkline_end' => $sparkline['end'],
+            'flow_trend' => $flowTrend,
         ];
     }
 
