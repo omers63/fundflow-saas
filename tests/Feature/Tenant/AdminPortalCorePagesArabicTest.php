@@ -3,10 +3,10 @@
 declare(strict_types=1);
 
 use App\Filament\Tenant\Pages\AuditSystemPage;
-use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Pages\LegacyMigrationPage;
 use App\Filament\Tenant\Pages\ReportsPage;
 use App\Filament\Tenant\Pages\Settings;
+use App\Filament\Tenant\Widgets\TenantDashboardWidget;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use Filament\Facades\Filament;
@@ -33,6 +33,17 @@ test('admin portal core page translation keys have arabic entries', function ():
         'Legacy migration wizard',
         'Review & classify',
         'Readiness report',
+        'Active loan portfolio',
+        'More analytics',
+        'Lifetime fund activity',
+        'Delinquency insights',
+        'Announcements',
+        'Member conversations and direct messages.',
+        'Projected approval',
+        'Members who still owe for :period. Apply from cash balance or post manually on the ledger.',
+        'Review member fund-to-cash transfer requests. Accepting moves money from fund to cash with master mirrors.',
+        'Queue projection',
+        'Expand',
     ];
 
     /** @var array<string, string> $arabic */
@@ -80,8 +91,10 @@ test('settings reports audit and dashboard render primary arabic headings', func
         ->assertSee(__('Step 3: Classify payments'), false)
         ->assertSee(__('Classify payments', locale: 'ar'), false);
 
+    // Dashboard shell is a lazy widget host — assert the widget body in Arabic.
     Livewire::actingAs($admin, 'tenant')
-        ->test(Dashboard::class)
+        ->test(TenantDashboardWidget::class)
         ->assertSuccessful()
-        ->assertSee(__('Fund pool health', locale: 'ar'), false);
+        ->assertSee(__('Active loan portfolio', locale: 'ar'), false)
+        ->assertSee(__('More analytics', locale: 'ar'), false);
 });

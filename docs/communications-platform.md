@@ -37,7 +37,15 @@ Tenant table `notification_templates` keyed by `key` + `locale` + `channel_famil
 | `in_app` | Member bell / database notifications + Alerts history |
 | `sms_push` | Web push, SMS, and WhatsApp (plain text; Markdown stripped) |
 
-Open **Communications → Templates**, pick an event under **Members** or **Admin & automation**, then switch **Email / In-app (bell) / Push & SMS** to edit each channel separately (EN/AR). Restore defaults resets all channel families for that event.
+Open **Communications → Templates** for a mobile-first picker → editor:
+
+1. **Browse** — search, audience filter (Members / Admin), grouped list; mobile shows only this pane until an event is chosen
+2. **Edit** — sticky Save, channel family (Email / Bell / Push·SMS), one language at a time (optional EN/AR compare on larger screens), variable chips, channel-shaped preview
+3. **Email brand** — product-wide from-name / color / footers on the list pane (saved independently), not inside each event’s editor
+
+Restore defaults resets all channel families for that event. Unsaved edits block template/channel switches until Save or Discard.
+
+See [communications-templates-ux.md](./communications-templates-ux.md) for layout goals and acceptance criteria.
 
 Member **bell** alerts use the **In-app (bell)** family. Admin automation digests and operational review alerts (loan/deposit/cash-out requests, reconciliation, delinquency) appear under **Admin & automation** and use the same In-app / Push families for the admin bell and browser push.
 

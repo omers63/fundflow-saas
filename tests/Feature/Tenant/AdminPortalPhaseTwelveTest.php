@@ -62,7 +62,7 @@ const ADMIN_PORTAL_HTTP_SMOKE_ROUTES = [
     ['path' => '/admin/collection-calendar', 'label' => 'collection calendar'],
 ];
 
-function createTenantAdmin(string $suffix): User
+function createTenantAdmin(string $suffix, ?string $preferredLocale = null): User
 {
     return User::create([
         'name' => 'Phase Twelve Admin '.$suffix,
@@ -70,6 +70,7 @@ function createTenantAdmin(string $suffix): User
         'password' => bcrypt('password'),
         'email_verified_at' => now(),
         'is_admin' => true,
+        'preferred_locale' => $preferredLocale,
     ]);
 }
 
@@ -105,11 +106,12 @@ test('consolidated admin routes respond successfully over http in english', func
 })->with(array_map(fn (array $route): array => [$route], ADMIN_PORTAL_HTTP_SMOKE_ROUTES));
 
 test('consolidated admin routes respond successfully over http in arabic', function (array $route) {
-    $admin = createTenantAdmin('ar-'.$route['label']);
+    $admin = createTenantAdmin('ar-'.$route['label'], 'ar');
 
     App::setLocale('ar');
 
     $this->actingAs($admin, 'tenant')
+        ->withSession(['locale' => 'ar'])
         ->get('http://'.adminPortalTenantDomain().$route['path'])
         ->assertSuccessful()
         ->assertSee('dir="rtl"', false)
@@ -117,11 +119,12 @@ test('consolidated admin routes respond successfully over http in arabic', funct
 })->with(array_map(fn (array $route): array => [$route], ADMIN_PORTAL_HTTP_SMOKE_ROUTES));
 
 test('admin dashboard http response includes redesign chrome', function () {
-    $admin = createTenantAdmin('dashboard-chrome');
+    $admin = createTenantAdmin('dashboard-chrome', 'ar');
 
     App::setLocale('ar');
 
     $this->actingAs($admin, 'tenant')
+        ->withSession(['locale' => 'ar'])
         ->get('http://'.adminPortalTenantDomain().'/admin')
         ->assertSuccessful()
         ->assertSee('ff-portal-topbar-chip', false);
@@ -140,8 +143,7 @@ test('admin dashboard http response includes redesign chrome', function () {
 test('admin dashboard hero balances render riyal symbol before digits in arabic', function () {
     App::setLocale('ar');
 
-    $admin = createTenantAdmin('dashboard-money-rtl');
-
+    $admin = createTenantAdmin('dashboard-money-rtl', 'ar');
     Account::query()->delete();
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 3240, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 5000, 'is_master' => true]);

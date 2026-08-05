@@ -479,3 +479,43 @@ test('tier queues tab shows per-tier and all-tiers summary footers', function ()
         ->and($summary['running_count'])->toBe(0)
         ->and($summary['running_outstanding'])->toBe(0.0);
 });
+
+test('loan queue workbench kpi and projection keys have arabic translations', function () {
+    app()->setLocale('ar');
+
+    /** @var array<string, string> $arabic */
+    $arabic = json_decode((string) file_get_contents(base_path('lang/ar.json')), true, 512, JSON_THROW_ON_ERROR);
+
+    $keys = [
+        'Intake',
+        'In tier queues',
+        'Queued demand',
+        'Ready to process',
+        'Awaiting triage',
+        'Approved, waiting',
+        'Remaining to fund',
+        'On hand (shared across tiers)',
+        'Fundable now',
+        'Waiting on pool headroom',
+        'Loans in repayment',
+        'Ready now',
+        'No projected inflow',
+        'Waiting to fund',
+        'Tier total',
+        'All tiers',
+    ];
+
+    foreach ($keys as $key) {
+        expect($arabic)->toHaveKey($key)
+            ->and($arabic[$key])->not->toBe($key)
+            ->and(preg_match('/\p{Arabic}/u', $arabic[$key]))->toBe(1);
+    }
+
+    Livewire::test(LoanQueueWorkbenchPage::class)
+        ->assertSuccessful()
+        ->assertSee(__('Intake', locale: 'ar'), false)
+        ->assertSee(__('In tier queues', locale: 'ar'), false)
+        ->assertSee(__('Queued demand', locale: 'ar'), false)
+        ->assertSee(__('Ready to process', locale: 'ar'), false)
+        ->assertSee(__('Loans in repayment', locale: 'ar'), false);
+});

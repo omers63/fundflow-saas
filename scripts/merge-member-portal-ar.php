@@ -16,6 +16,7 @@ $supplements = [
     require __DIR__.'/../lang/app_ar_misc.php',
     require __DIR__.'/../lang/app_ar_misc_b.php',
     require __DIR__.'/../lang/app_ar_gap.php',
+    require __DIR__.'/../lang/app_ar_portal_ui_gap.php',
     require __DIR__.'/../lang/app_ar_freeze_withdraw.php',
     require __DIR__.'/../lang/app_ar_legacy_migration.php',
 ];

@@ -52,9 +52,20 @@ test('tenant admin dashboard renders rtl layout and arabic dashboard copy', func
 
     $this->actingAs($admin, 'tenant');
 
-    $this->get('http://'.$this->domain.'/admin')
+    $this->withSession(['locale' => 'ar'])
+        ->get('http://'.$this->domain.'/admin')
         ->assertSuccessful()
-        ->assertSee('dir="rtl"', false)
+        ->assertSee('dir="rtl"', false);
+
+    // Dashboard body is a lazy widget — assert Arabic copy on the widget itself.
+    App::setLocale('ar');
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(TenantDashboardWidget::class)
+        ->assertSuccessful()
+        ->assertSee(__('Active loan portfolio', locale: 'ar'), false)
+        ->assertSee(__('More analytics', locale: 'ar'), false)
+        ->call('unfoldSection', 'analytics')
         ->assertSee(__('Fund pool health', locale: 'ar'), false)
         ->assertSee(__('Loan pipeline', locale: 'ar'), false);
 });
@@ -88,7 +99,7 @@ test('consolidated admin portal pages render in arabic locale', function (string
     ReconciliationOverviewPage::class,
     AuditSystemPage::class,
     Settings::class,
-            CollectionCalendarPage::class,
+    CollectionCalendarPage::class,
     MessagesInboxPage::class,
 ]);
 

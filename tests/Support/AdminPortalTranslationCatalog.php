@@ -221,6 +221,19 @@ final class AdminPortalTranslationCatalog
             'available',
             'top requests',
             'vs loan exposure',
+            // Dashboard, delinquency, collections, communications (locale completeness)
+            'Active loan portfolio',
+            'More analytics',
+            'Lifetime fund activity',
+            'Delinquency insights',
+            'Announcements',
+            'Member conversations and direct messages.',
+            'Projected approval',
+            'Members who still owe for :period. Apply from cash balance or post manually on the ledger.',
+            'Review member fund-to-cash transfer requests. Accepting moves money from fund to cash with master mirrors.',
+            'Queue projection',
+            'Maintenance message updated',
+            'Expand',
         ];
     }
 

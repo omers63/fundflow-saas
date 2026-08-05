@@ -46,6 +46,10 @@ class ContributionResource extends Resource
 
     protected static ?string $navigationLabel = 'Contributions';
 
+    protected static ?string $modelLabel = 'Contribution';
+
+    protected static ?string $pluralModelLabel = 'Contributions';
+
     protected static ?int $navigationSort = TenantNavigation::SORT_CONTRIBUTIONS;
 
     public static function getNavigationBadge(): ?string

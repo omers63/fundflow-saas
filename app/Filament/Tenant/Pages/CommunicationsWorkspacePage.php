@@ -69,9 +69,32 @@ class CommunicationsWorkspacePage extends Page implements HasTable
     /** @var 'email'|'in_app'|'sms_push' */
     public string $selectedChannelFamily = NotificationTemplate::FAMILY_EMAIL;
 
+    /** When true on viewports under lg, show the editor pane only. */
+    public bool $templatesEditorFocus = false;
+
+    public string $templateSearch = '';
+
+    /** @var 'all'|'member'|'admin' */
+    public string $templateAudienceFilter = 'all';
+
+    /** @var 'en'|'ar' */
+    public string $editLocale = 'en';
+
+    public bool $compareLocales = false;
+
+    public bool $previewExpanded = false;
+
+    public bool $brandPanelOpen = false;
+
+    public bool $templateDirty = false;
+
     public string $previewLocale = 'en';
 
     public string $previewText = '';
+
+    public string $previewSubject = '';
+
+    public string $previewBody = '';
 
     public string $en_subject = '';
 
@@ -90,6 +113,11 @@ class CommunicationsWorkspacePage extends Page implements HasTable
     public string $brand_footer_ar = '';
 
     public ?string $brand_logo_path = null;
+
+    /**
+     * @var array<string, true>|null
+     */
+    protected ?array $customizedTemplateKeyLookup = null;
 
     public static function canAccess(): bool
     {
@@ -148,7 +176,11 @@ class CommunicationsWorkspacePage extends Page implements HasTable
         ) {
             NotificationTemplateCatalog::seedMissingDefaults();
             $this->selectedTemplateKey ??= array_key_first(NotificationTemplateCatalog::definitions());
+            $this->templatesEditorFocus = false;
+            $this->editLocale = 'en';
+            $this->previewLocale = 'en';
             $this->loadTemplateFormState();
+            $this->markTemplateClean();
             $this->refreshPreview();
         }
     }
@@ -334,9 +366,20 @@ class CommunicationsWorkspacePage extends Page implements HasTable
             return;
         }
 
+        if ($key !== $this->selectedTemplateKey && ! $this->allowTemplateNavigation()) {
+            return;
+        }
+
         $this->selectedTemplateKey = $key;
+        $this->templatesEditorFocus = true;
         $this->loadTemplateFormState();
+        $this->markTemplateClean();
         $this->refreshPreview();
+    }
+
+    public function showTemplatesList(): void
+    {
+        $this->templatesEditorFocus = false;
     }
 
     public function selectChannelFamily(string $family): void
@@ -345,9 +388,44 @@ class CommunicationsWorkspacePage extends Page implements HasTable
             return;
         }
 
+        if ($family !== $this->selectedChannelFamily && ! $this->allowTemplateNavigation()) {
+            return;
+        }
+
         $this->selectedChannelFamily = $family;
         $this->loadTemplateFormState();
+        $this->markTemplateClean();
         $this->refreshPreview();
+    }
+
+    public function setEditLocale(string $locale): void
+    {
+        $this->editLocale = $locale === 'ar' ? 'ar' : 'en';
+        $this->previewLocale = $this->editLocale;
+        $this->refreshPreview();
+    }
+
+    public function setTemplateAudienceFilter(string $filter): void
+    {
+        $this->templateAudienceFilter = match ($filter) {
+            'member', 'admin' => $filter,
+            default => 'all',
+        };
+    }
+
+    public function toggleCompareLocales(): void
+    {
+        $this->compareLocales = ! $this->compareLocales;
+    }
+
+    public function togglePreviewExpanded(): void
+    {
+        $this->previewExpanded = ! $this->previewExpanded;
+    }
+
+    public function toggleBrandPanel(): void
+    {
+        $this->brandPanelOpen = ! $this->brandPanelOpen;
     }
 
     public function saveTemplate(): void
@@ -376,15 +454,8 @@ class CommunicationsWorkspacePage extends Page implements HasTable
             );
         }
 
-        if ($family === NotificationTemplate::FAMILY_EMAIL) {
-            CommunicationBrandSettings::saveFromForm([
-                'brand_from_name' => $this->brand_from_name,
-                'brand_primary_color' => $this->brand_primary_color,
-                'brand_footer_en' => $this->brand_footer_en,
-                'brand_footer_ar' => $this->brand_footer_ar,
-                'brand_logo_path' => $this->brand_logo_path,
-            ]);
-        }
+        $this->customizedTemplateKeyLookup = null;
+        $this->markTemplateClean();
 
         Notification::make()
             ->title(__('Template saved'))
@@ -394,6 +465,34 @@ class CommunicationsWorkspacePage extends Page implements HasTable
         $this->refreshPreview();
     }
 
+    public function saveBrandSettings(): void
+    {
+        CommunicationBrandSettings::saveFromForm([
+            'brand_from_name' => $this->brand_from_name,
+            'brand_primary_color' => $this->brand_primary_color,
+            'brand_footer_en' => $this->brand_footer_en,
+            'brand_footer_ar' => $this->brand_footer_ar,
+            'brand_logo_path' => $this->brand_logo_path,
+        ]);
+
+        Notification::make()
+            ->title(__('Email brand saved'))
+            ->success()
+            ->send();
+    }
+
+    public function discardTemplateChanges(): void
+    {
+        $this->loadTemplateFormState();
+        $this->markTemplateClean();
+        $this->refreshPreview();
+
+        Notification::make()
+            ->title(__('Changes discarded'))
+            ->success()
+            ->send();
+    }
+
     public function restoreTemplateDefaults(): void
     {
         if ($this->selectedTemplateKey === null) {
@@ -401,7 +500,9 @@ class CommunicationsWorkspacePage extends Page implements HasTable
         }
 
         NotificationTemplateCatalog::restoreDefaults($this->selectedTemplateKey);
+        $this->customizedTemplateKeyLookup = null;
         $this->loadTemplateFormState();
+        $this->markTemplateClean();
         $this->refreshPreview();
 
         Notification::make()
@@ -410,10 +511,46 @@ class CommunicationsWorkspacePage extends Page implements HasTable
             ->send();
     }
 
+    public function insertVariable(string $variable): void
+    {
+        $token = '{{'.$variable.'}}';
+
+        if ($this->editLocale === 'ar') {
+            $this->ar_body = filled($this->ar_body) ? rtrim($this->ar_body).' '.$token : $token;
+        } else {
+            $this->en_body = filled($this->en_body) ? rtrim($this->en_body).' '.$token : $token;
+        }
+
+        $this->templateDirty = true;
+        $this->refreshPreview();
+    }
+
+    public function updatedEnSubject(): void
+    {
+        $this->onTemplateFieldUpdated();
+    }
+
+    public function updatedEnBody(): void
+    {
+        $this->onTemplateFieldUpdated();
+    }
+
+    public function updatedArSubject(): void
+    {
+        $this->onTemplateFieldUpdated();
+    }
+
+    public function updatedArBody(): void
+    {
+        $this->onTemplateFieldUpdated();
+    }
+
     public function refreshPreview(): void
     {
         if ($this->selectedTemplateKey === null) {
             $this->previewText = '';
+            $this->previewSubject = '';
+            $this->previewBody = '';
 
             return;
         }
@@ -444,12 +581,15 @@ class CommunicationsWorkspacePage extends Page implements HasTable
             $sample,
         );
 
-        $this->previewText = trim($rendered['subject']."\n\n".$rendered['body']);
+        $this->previewSubject = (string) ($rendered['subject'] ?? '');
+        $this->previewBody = (string) ($rendered['body'] ?? '');
+        $this->previewText = trim($this->previewSubject."\n\n".$this->previewBody);
     }
 
     public function setPreviewLocale(string $locale): void
     {
         $this->previewLocale = $locale === 'ar' ? 'ar' : 'en';
+        $this->editLocale = $this->previewLocale;
         $this->refreshPreview();
     }
 
@@ -517,6 +657,20 @@ class CommunicationsWorkspacePage extends Page implements HasTable
         ];
     }
 
+    /**
+     * Short labels for segmented channel control.
+     *
+     * @return array<string, string>
+     */
+    public function channelFamilyShortOptions(): array
+    {
+        return [
+            NotificationTemplate::FAMILY_EMAIL => __('Email'),
+            NotificationTemplate::FAMILY_IN_APP => __('Bell'),
+            NotificationTemplate::FAMILY_SMS_PUSH => __('SMS'),
+        ];
+    }
+
     public function channelFamilySubjectLabel(): string
     {
         return match ($this->selectedChannelFamily) {
@@ -552,7 +706,7 @@ class CommunicationsWorkspacePage extends Page implements HasTable
         return match ($this->selectedChannelFamily) {
             NotificationTemplate::FAMILY_IN_APP => __('Shown in the member bell and Alerts history.'),
             NotificationTemplate::FAMILY_SMS_PUSH => __('Used for web push, SMS, and WhatsApp. Keep it short; Markdown is stripped for delivery.'),
-            default => __('Wrapped in the branded email layout. Brand chrome below applies to email only.'),
+            default => __('Wrapped in the branded email layout. Adjust product-wide brand chrome under Email brand on the list.'),
         };
     }
 
@@ -589,15 +743,175 @@ class CommunicationsWorkspacePage extends Page implements HasTable
         ];
     }
 
-    public function selectedTemplateVariables(): string
+    /**
+     * Filtered template picker rows for the redesigned UI.
+     *
+     * @return array<string, array{audience: string, label: string, items: list<array{key: string, label: string, customized: bool}>}>
+     */
+    public function filteredTemplatePickerGroups(): array
+    {
+        $grouped = NotificationTemplateCatalog::optionsGroupedByAudience();
+        $query = mb_strtolower(trim($this->templateSearch));
+        $customized = $this->customizedTemplateKeys();
+
+        $audiences = match ($this->templateAudienceFilter) {
+            'member' => ['member' => __('Members')],
+            'admin' => ['admin' => __('Admin & automation')],
+            default => [
+                'member' => __('Members'),
+                'admin' => __('Admin & automation'),
+            ],
+        };
+
+        $result = [];
+
+        foreach ($audiences as $audience => $groupLabel) {
+            $items = [];
+
+            foreach ($grouped[$audience] ?? [] as $key => $rawLabel) {
+                $label = Lang::formatUiLabel($rawLabel);
+
+                if ($query !== '' && ! str_contains(mb_strtolower($label), $query) && ! str_contains(mb_strtolower($key), $query)) {
+                    continue;
+                }
+
+                $items[] = [
+                    'key' => $key,
+                    'label' => $label,
+                    'customized' => isset($customized[$key]),
+                ];
+            }
+
+            if ($items === []) {
+                continue;
+            }
+
+            $result[$audience] = [
+                'audience' => $audience,
+                'label' => $groupLabel,
+                'items' => $items,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function selectedTemplateVariableList(): array
     {
         $definition = $this->selectedTemplateKey
             ? NotificationTemplateCatalog::definition($this->selectedTemplateKey)
             : null;
 
+        return array_values($definition['variables'] ?? []);
+    }
+
+    public function selectedTemplateVariables(): string
+    {
         return implode(', ', array_map(
             fn (string $v): string => '{{'.$v.'}}',
-            $definition['variables'] ?? [],
+            $this->selectedTemplateVariableList(),
         ));
+    }
+
+    public function selectedTemplateLabel(): string
+    {
+        if ($this->selectedTemplateKey === null) {
+            return '';
+        }
+
+        $definition = NotificationTemplateCatalog::definition($this->selectedTemplateKey);
+
+        return Lang::formatUiLabel(__($definition['label'] ?? $this->selectedTemplateKey));
+    }
+
+    public function selectedTemplateAudienceLabel(): string
+    {
+        if ($this->selectedTemplateKey === null) {
+            return '';
+        }
+
+        return NotificationTemplateCatalog::audienceFor($this->selectedTemplateKey) === 'admin'
+            ? __('Admin & automation')
+            : __('Members');
+    }
+
+    public function communicationsSettingsUrl(): string
+    {
+        return SettingsTabRegistry::url('communication::tab');
+    }
+
+    public function previewCharacterCount(): int
+    {
+        return mb_strlen(trim($this->previewSubject.' '.$this->previewBody));
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    protected function customizedTemplateKeys(): array
+    {
+        if ($this->customizedTemplateKeyLookup !== null) {
+            return $this->customizedTemplateKeyLookup;
+        }
+
+        $lookup = [];
+
+        if (! DatabaseSchema::hasTable('notification_templates')) {
+            return $this->customizedTemplateKeyLookup = $lookup;
+        }
+
+        $rows = NotificationTemplate::query()
+            ->get(['key', 'locale', 'channel_family', 'subject', 'body_markdown']);
+
+        foreach ($rows as $row) {
+            $defaults = NotificationTemplateCatalog::defaultContent((string) $row->key, (string) $row->locale);
+
+            if ($defaults === null) {
+                continue;
+            }
+
+            $defaultSubject = (string) ($defaults['subject'] ?? '');
+            $defaultBody = (string) ($defaults['body'] ?? '');
+
+            if ((string) $row->subject !== $defaultSubject || (string) $row->body_markdown !== $defaultBody) {
+                $lookup[(string) $row->key] = true;
+            }
+        }
+
+        return $this->customizedTemplateKeyLookup = $lookup;
+    }
+
+    protected function markTemplateClean(): void
+    {
+        $this->templateDirty = false;
+    }
+
+    protected function onTemplateFieldUpdated(): void
+    {
+        $this->templateDirty = true;
+
+        if (! $this->compareLocales) {
+            $this->previewLocale = $this->editLocale;
+        }
+
+        $this->refreshPreview();
+    }
+
+    protected function allowTemplateNavigation(): bool
+    {
+        if (! $this->templateDirty) {
+            return true;
+        }
+
+        Notification::make()
+            ->title(__('Unsaved template changes'))
+            ->body(__('Save or discard your edits before switching template or channel.'))
+            ->warning()
+            ->send();
+
+        return false;
     }
 }
