@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Cache;
  * Short-lived, generation-bumped cache for contribution / loan collection insight snapshots.
  *
  * Browsing cycles reuses cached payloads; posting/apply bumps the generation so the next
- * read recomputes. Keys are tenant-scoped via the active cache store prefix.
+ * read recomputes. Keys are tenant-scoped via the active cache store prefix and locale-scoped
+ * so translated KPI labels never leak across en/ar.
  */
 final class CollectionInsightsCache
 {
@@ -30,11 +31,15 @@ final class CollectionInsightsCache
     public static function remember(string $domain, string $suffix, Closure $callback): mixed
     {
         $generation = self::generation($domain);
+        $locale = app()->getLocale();
+        if (! is_string($locale) || $locale === '' || ! AppLocale::isSupported($locale)) {
+            $locale = AppLocale::DEFAULT;
+        }
 
-        // Use Cache::remember directly (not TenantRuntimeCache::remember): the latter wraps
-        // once() at a single call site, so different keys would collide within one request.
+        // Use Cache::remember directly (not TenantRuntimeCache::remember request memo): caller sites
+        // may pass different domain suffixes in one request; locale isolates translated payloads.
         return Cache::remember(
-            "{$domain}:{$generation}:{$suffix}",
+            "{$domain}:{$generation}:{$suffix}:locale:{$locale}",
             self::TTL_SECONDS,
             $callback,
         );

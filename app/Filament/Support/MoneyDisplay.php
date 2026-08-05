@@ -29,12 +29,28 @@ final class MoneyDisplay
 
     /**
      * Localized currency symbol or code (e.g. SAR / official riyal sign in Arabic).
+     *
+     * Prefer {@see plainTextSymbol()} for escaped Blade / titles / notifications — the
+     * Arabic riyal sign (U+20C1) is missing from most UI fonts (“No Glyph”).
      */
     public static function symbol(?string $currency = null): string
     {
         $currencyCode = $currency ?? Setting::get('general', 'currency', 'USD');
 
         return __($currencyCode);
+    }
+
+    /**
+     * Symbol safe for plain text (no reliance on U+20C1 font coverage).
+     * When {@see usesSvgSymbol()} is true, HTML paths use SVG; plain text uses the SAR code.
+     */
+    public static function plainTextSymbol(?string $currency = null): string
+    {
+        if (self::usesSvgSymbol($currency)) {
+            return 'SAR';
+        }
+
+        return self::symbol($currency);
     }
 
     public static function symbolSpanClass(?string $currency = null): string
@@ -88,13 +104,13 @@ final class MoneyDisplay
     }
 
     /**
-     * Compact amount with localized currency symbol before digits (e.g. ⃁ 1.2M).
+     * Compact amount with plain-text currency symbol before digits (e.g. SAR 1.2M).
      */
     public static function compactWithSymbol(float $amount, ?string $currency = null): string
     {
         $parts = self::compactParts($amount);
 
-        return self::isolateLtrRun(self::symbol($currency).' '.$parts['digits']);
+        return self::isolateLtrRun(self::plainTextSymbol($currency).' '.$parts['digits']);
     }
 
     /**
@@ -171,7 +187,7 @@ final class MoneyDisplay
             return null;
         }
 
-        return self::isolateLtrRun(self::symbol($currency).' '.$digits);
+        return self::isolateLtrRun(self::plainTextSymbol($currency).' '.$digits);
     }
 
     /**

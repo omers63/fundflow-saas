@@ -146,7 +146,7 @@ class ApplyForLoan extends Page implements HasForms
                                 ->required()
                                 ->minValue(1)
                                 ->live(onBlur: true)
-                                ->suffix(MoneyDisplay::symbol($currency)),
+                                ->suffix(MoneyDisplay::plainTextSymbol($currency)),
                             TextInput::make('guarantor_name')
                                 ->label(__('Guarantor name'))
                                 ->helperText(__('Enter the full name of your guarantor. An administrator will match them to a member record.'))

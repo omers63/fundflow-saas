@@ -75,6 +75,8 @@ test('tenant admin money display uses western digits in arabic locale', function
 
     expect(MoneyDisplay::format(3240, 'SAR'))
         ->toContain('3,240.00')
+        ->toContain('SAR')
+        ->not->toContain("\u{20C1}")
         ->and(MoneyDisplay::amount(3240))->toBe('3,240.00');
 });
 

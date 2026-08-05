@@ -78,12 +78,12 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             @foreach ($d['kpi_stats'] as $stat)
                 @php
-                    $subColor = match ($stat['sub_tone'] ?? '') {
-                        'success', 'emerald' => 'text-emerald-600 dark:text-emerald-400',
-                        'amber', 'warning' => 'text-amber-600 dark:text-amber-400',
-                        'danger', 'rose' => 'text-red-600 dark:text-red-400',
-                        default => 'text-gray-400',
-                    };
+    $subColor = match ($stat['sub_tone'] ?? '') {
+        'success', 'emerald' => 'text-emerald-600 dark:text-emerald-400',
+        'amber', 'warning' => 'text-amber-600 dark:text-amber-400',
+        'danger', 'rose' => 'text-red-600 dark:text-red-400',
+        default => 'text-gray-400',
+    };
                 @endphp
                 <a href="{{ $stat['url'] }}"
                     class="ff-tenant-dashboard-kpi group flex min-w-0 flex-col gap-1 overflow-hidden rounded-xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900">
@@ -141,17 +141,17 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                 class="ff-tenant-loan-portfolio__stat group min-w-0 rounded-lg border border-transparent px-3 py-2.5 transition hover:border-violet-200 hover:bg-violet-50/60 dark:hover:border-violet-900/40 dark:hover:bg-violet-950/20">
                 <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Outstanding') }}</p>
                 <p @class([
-                    'mt-0.5 break-words text-xl font-bold tabular-nums leading-tight',
-                    'text-red-600 group-hover:text-red-700 dark:text-red-400 dark:group-hover:text-red-300' => ($loanPortfolio['overdue_installments'] ?? 0) > 0,
-                    'text-gray-900 group-hover:text-violet-700 dark:text-white dark:group-hover:text-violet-300' => ($loanPortfolio['overdue_installments'] ?? 0) === 0,
-                ])>
+    'mt-0.5 break-words text-xl font-bold tabular-nums leading-tight',
+    'text-red-600 group-hover:text-red-700 dark:text-red-400 dark:group-hover:text-red-300' => ($loanPortfolio['overdue_installments'] ?? 0) > 0,
+    'text-gray-900 group-hover:text-violet-700 dark:text-white dark:group-hover:text-violet-300' => ($loanPortfolio['overdue_installments'] ?? 0) === 0,
+])>
                     {!! \App\Support\Insights\InsightFormatter::moneyMarkup($loanPortfolio['outstanding_total']) !!}
                 </p>
                 <p @class([
-                    'mt-1 text-xs',
-                    'text-red-600 dark:text-red-400' => ($loanPortfolio['overdue_installments'] ?? 0) > 0,
-                    'text-gray-500 dark:text-gray-400' => ($loanPortfolio['overdue_installments'] ?? 0) === 0,
-                ])>
+    'mt-1 text-xs',
+    'text-red-600 dark:text-red-400' => ($loanPortfolio['overdue_installments'] ?? 0) > 0,
+    'text-gray-500 dark:text-gray-400' => ($loanPortfolio['overdue_installments'] ?? 0) === 0,
+])>
                     @if (($loanPortfolio['overdue_installments'] ?? 0) > 0)
                         {{ trans_choice(':count overdue installment|:count overdue installments', $loanPortfolio['overdue_installments'], ['count' => $loanPortfolio['overdue_installments']]) }}
                     @else
@@ -180,32 +180,35 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                         class="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Forecast summary') }}</span>
                 </div>
                 <span @class([
-                    'inline-flex items-center rounded-lg px-2.5 py-1 text-[10px] font-semibold ring-1 ring-inset',
-                    'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'danger',
-                    'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'warning',
-                    'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-800/40' => !in_array(($forecast['top_risk']['tone'] ?? ''), ['danger', 'warning'], true),
-                ])>
+        'inline-flex items-center rounded-lg px-2.5 py-1 text-[10px] font-semibold ring-1 ring-inset',
+        'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'danger',
+        'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-800/40' => ($forecast['top_risk']['tone'] ?? '') === 'warning',
+        'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-800/40' => !in_array(($forecast['top_risk']['tone'] ?? ''), ['danger', 'warning'], true),
+    ])>
                 {{ $forecast['top_risk']['label'] }} · {{ $forecast['top_risk']['secondary'] }}
                 </span>
             </div>
             <div class="grid grid-cols-1 gap-3 p-4 lg:grid-cols-3">
                 @foreach ($forecast['cards'] as $card)
-                    <a href="{{ $card['url'] }}"
-                        class="group rounded-xl border border-gray-200/80 bg-gray-50/70 px-3 py-3 transition hover:-translate-y-0.5 hover:border-sky-200 hover:bg-white hover:shadow-sm dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-sky-800/50 dark:hover:bg-gray-800">
-                        <div class="flex items-center justify-between gap-2">
-                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                {{ $card['label'] }}</p>
-                            <span @class([
-                                'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase',
-                                'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' => ($card['tone'] ?? '') === 'danger',
-                                'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' => ($card['tone'] ?? '') === 'warning',
-                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' => !in_array(($card['tone'] ?? ''), ['danger', 'warning'], true),
-                            ])>{{ $card['secondary'] }}</span>
-                        </div>
-                        <p class="mt-2 text-lg font-bold tabular-nums text-gray-900 dark:text-white">{{ $card['primary'] }}</p>
-                        <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ $card['detail'] }}</p>
-                        <p class="mt-1 text-[11px] text-gray-400">{{ $card['meta'] }}</p>
-                    </a>
+                                <a href="{{ $card['url'] }}"
+                                    class="group rounded-xl border border-gray-200/80 bg-gray-50/70 px-3 py-3 transition hover:-translate-y-0.5 hover:border-sky-200 hover:bg-white hover:shadow-sm dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-sky-800/50 dark:hover:bg-gray-800">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                            {{ $card['label'] }}</p>
+                                        <span @class([
+                        'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase',
+                        'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' => ($card['tone'] ?? '') === 'danger',
+                        'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' => ($card['tone'] ?? '') === 'warning',
+                        'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' => !in_array(($card['tone'] ?? ''), ['danger', 'warning'], true),
+                    ])>{{ $card['secondary'] }}</span>
+                                    </div>
+                                    <p class="mt-2 text-lg font-bold tabular-nums text-gray-900 dark:text-white">
+                                        {!! \App\Filament\Support\MoneyDisplay::markupForDisplay($card['primary']) !!}</p>
+                                    <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                                        {!! \App\Filament\Support\MoneyDisplay::markupForDisplay($card['detail']) !!}</p>
+                                    <p class="mt-1 text-[11px] text-gray-400">{!! \App\Filament\Support\MoneyDisplay::markupForDisplay($card['meta']) !!}
+                                    </p>
+                                </a>
                 @endforeach
             </div>
         </div>
@@ -305,10 +308,10 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
             <div class="min-w-0">
                 <p class="text-xs uppercase tracking-wide text-gray-400">{{ __('Pool drift') }}</p>
                 <p @class([
-                    'ff-tenant-pool-health__status mt-0.5 text-base font-bold leading-snug break-words sm:text-lg',
-                    'text-red-600 dark:text-red-400' => $pool['has_drift'],
-                    'text-emerald-600 dark:text-emerald-400' => !$pool['has_drift'],
-                ])>
+        'ff-tenant-pool-health__status mt-0.5 text-base font-bold leading-snug break-words sm:text-lg',
+        'text-red-600 dark:text-red-400' => $pool['has_drift'],
+        'text-emerald-600 dark:text-emerald-400' => !$pool['has_drift'],
+    ])>
                     {{ $pool['has_drift'] ? __('Variance detected') : __('Balanced') }}
                 </p>
                 <div class="mt-1 space-y-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">
@@ -336,24 +339,24 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                     </div>
                     <div class="relative flex h-full items-end gap-px px-0.5 py-1">
                         @php
-                            $sparkHeights = $pool['sparkline_heights'] ?? null;
-                            $chartPx = 56; // matches h-14; sm bumps via min height on bars still look fine
+        $sparkHeights = $pool['sparkline_heights'] ?? null;
+        $chartPx = 56; // matches h-14; sm bumps via min height on bars still look fine
                         @endphp
                         @foreach ($pool['sparkline'] as $index => $point)
                             @php
-                                $pct = is_array($sparkHeights) && isset($sparkHeights[$index])
-                                    ? (float) $sparkHeights[$index]
-                                    : 42.0;
-                                $pct = max(0.0, min(100.0, $pct));
-                                // Pixel heights avoid flex % collapse (empty div + height:% often paints 0px).
-                                $px = max(4, (int) round(($pct / 100) * $chartPx));
+            $pct = is_array($sparkHeights) && isset($sparkHeights[$index])
+                ? (float) $sparkHeights[$index]
+                : 42.0;
+            $pct = max(0.0, min(100.0, $pct));
+            // Pixel heights avoid flex % collapse (empty div + height:% often paints 0px).
+            $px = max(4, (int) round(($pct / 100) * $chartPx));
                             @endphp
                             <div
                                 @class([
-                                    'min-w-0 flex-1 rounded-sm',
-                                    'bg-red-500 dark:bg-red-400' => ($pool['has_drift'] ?? false),
-                                    'bg-sky-500 dark:bg-sky-400' => !($pool['has_drift'] ?? false),
-                                ])
+                'min-w-0 flex-1 rounded-sm',
+                'bg-red-500 dark:bg-red-400' => ($pool['has_drift'] ?? false),
+                'bg-sky-500 dark:bg-sky-400' => !($pool['has_drift'] ?? false),
+            ])
                                 style="height: {{ $px }}px"
                                 title="{{ \App\Support\Insights\InsightFormatter::money($point) }}"
                             ></div>
@@ -377,18 +380,18 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                 </div>
                 <div class="flex flex-wrap items-center gap-2 text-[10px]">
                     @foreach ([
-                            ['label' => __('Intake'), 'count' => $pipeline['intake'] ?? 0, 'url' => $pipeline['queue_intake_url'] ?? '#', 'tone' => 'amber'],
-                            ['label' => __('Queued'), 'count' => $pipeline['queued'] ?? 0, 'url' => $pipeline['queue_tiers_url'] ?? '#', 'tone' => 'sky'],
-                            ['label' => __('Process'), 'count' => $pipeline['process'] ?? 0, 'url' => $pipeline['queue_process_url'] ?? '#', 'tone' => 'emerald'],
-                            ['label' => __('Running'), 'count' => $pipeline['running'] ?? 0, 'url' => $pipeline['queue_tiers_url'] ?? '#', 'tone' => 'teal'],
-                        ] as $stage)
+        ['label' => __('Intake'), 'count' => $pipeline['intake'] ?? 0, 'url' => $pipeline['queue_intake_url'] ?? '#', 'tone' => 'amber'],
+        ['label' => __('Queued'), 'count' => $pipeline['queued'] ?? 0, 'url' => $pipeline['queue_tiers_url'] ?? '#', 'tone' => 'sky'],
+        ['label' => __('Process'), 'count' => $pipeline['process'] ?? 0, 'url' => $pipeline['queue_process_url'] ?? '#', 'tone' => 'emerald'],
+        ['label' => __('Running'), 'count' => $pipeline['running'] ?? 0, 'url' => $pipeline['queue_tiers_url'] ?? '#', 'tone' => 'teal'],
+    ] as $stage)
                                     <a href="{{ $stage['url'] }}" @class([
-                                        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold transition hover:opacity-80',
-                                        'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $stage['tone'] === 'amber',
-                                        'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' => $stage['tone'] === 'sky',
-                                        'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' => $stage['tone'] === 'emerald',
-                                        'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200' => $stage['tone'] === 'teal',
-                                    ])>
+            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold transition hover:opacity-80',
+            'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $stage['tone'] === 'amber',
+            'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' => $stage['tone'] === 'sky',
+            'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' => $stage['tone'] === 'emerald',
+            'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200' => $stage['tone'] === 'teal',
+        ])>
                                         {{ $stage['label'] }} <span class="tabular-nums">{{ $stage['count'] }}</span>
                                     </a>
                     @endforeach
@@ -502,12 +505,12 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
             <div class="space-y-2 p-3">
                 @foreach ($d['attention_cards'] as $card)
                     @php
-                        $noticeClass = match ($card['tone'] ?? '') {
-                            'rose' => 'border-red-200 bg-red-50 text-red-800 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-300',
-                            'amber', 'warning' => 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-300',
-                            'emerald', 'success' => 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300',
-                            default => 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-300',
-                        };
+        $noticeClass = match ($card['tone'] ?? '') {
+            'rose' => 'border-red-200 bg-red-50 text-red-800 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-300',
+            'amber', 'warning' => 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-300',
+            'emerald', 'success' => 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300',
+            default => 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-300',
+        };
                     @endphp
                     <a href="{{ $card['url'] }}"
                         class="flex items-start gap-2.5 rounded-lg border px-3 py-2 transition hover:opacity-80 {{ $noticeClass }}">
@@ -533,17 +536,17 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
             </div>
             <div class="space-y-2.5 p-4">
                 @php
-                    $bars = [
-                        ['label' => __('Collected'), 'pct' => $breakdown['posted_pct'], 'color' => '#1D9E75', 'count' => $breakdown['posted']],
-                        ['label' => __('Pending'), 'pct' => $breakdown['pending_pct'], 'color' => '#EF9F27', 'count' => $breakdown['pending']],
-                        ['label' => __('Failed'), 'pct' => $breakdown['failed_pct'], 'color' => '#E24B4A', 'count' => $breakdown['failed']],
-                        ['label' => __('Waived'), 'pct' => $breakdown['waived_pct'], 'color' => '#9ca3af', 'count' => $breakdown['waived']],
-                    ];
-                    $lateFeeTiers = [
-                        ['label' => __('Tier 1 (day 3+)'), 'count' => $breakdown['tier1'], 'class' => 'text-amber-600 dark:text-amber-400'],
-                        ['label' => __('Tier 2 (day 10+)'), 'count' => $breakdown['tier2'], 'class' => 'text-orange-600 dark:text-orange-400'],
-                        ['label' => __('Tier 3 (day 20+)'), 'count' => $breakdown['tier3'], 'class' => 'text-red-600 dark:text-red-400'],
-                    ];
+    $bars = [
+        ['label' => __('Collected'), 'pct' => $breakdown['posted_pct'], 'color' => '#1D9E75', 'count' => $breakdown['posted']],
+        ['label' => __('Pending'), 'pct' => $breakdown['pending_pct'], 'color' => '#EF9F27', 'count' => $breakdown['pending']],
+        ['label' => __('Failed'), 'pct' => $breakdown['failed_pct'], 'color' => '#E24B4A', 'count' => $breakdown['failed']],
+        ['label' => __('Waived'), 'pct' => $breakdown['waived_pct'], 'color' => '#9ca3af', 'count' => $breakdown['waived']],
+    ];
+    $lateFeeTiers = [
+        ['label' => __('Tier 1 (day 3+)'), 'count' => $breakdown['tier1'], 'class' => 'text-amber-600 dark:text-amber-400'],
+        ['label' => __('Tier 2 (day 10+)'), 'count' => $breakdown['tier2'], 'class' => 'text-orange-600 dark:text-orange-400'],
+        ['label' => __('Tier 3 (day 20+)'), 'count' => $breakdown['tier3'], 'class' => 'text-red-600 dark:text-red-400'],
+    ];
                 @endphp
                 @foreach ($bars as $bar)
                     <div class="flex items-center gap-2">
@@ -582,20 +585,20 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
             <div class="divide-y divide-gray-50 px-1 dark:divide-gray-800">
                 @forelse ($activity as $event)
                     @php
-                        $chipClass = match ($event['chip']['class']) {
-                            'ff-chip-green' => 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
-                            'ff-chip-amber' => 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
-                            'ff-chip-blue' => 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-400',
-                            'ff-chip-purple' => 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400',
-                            default => 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
-                        };
-                        $avatarClass = match ($event['chip']['class']) {
-                            'ff-chip-green' => 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-                            'ff-chip-blue' => 'bg-sky-50 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-                            'ff-chip-amber' => 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-                            'ff-chip-purple' => 'bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
-                            default => 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
-                        };
+        $chipClass = match ($event['chip']['class']) {
+            'ff-chip-green' => 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
+            'ff-chip-amber' => 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+            'ff-chip-blue' => 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-400',
+            'ff-chip-purple' => 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400',
+            default => 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+        };
+        $avatarClass = match ($event['chip']['class']) {
+            'ff-chip-green' => 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+            'ff-chip-blue' => 'bg-sky-50 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+            'ff-chip-amber' => 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+            'ff-chip-purple' => 'bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+            default => 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+        };
                     @endphp
                     <div class="flex items-center gap-2.5 px-3 py-2.5">
                         <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[9px] font-bold {{ $avatarClass }}">
@@ -626,11 +629,11 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
             <div class="space-y-3 p-4">
                 @forelse ($d['fund_tier_utilisation'] as $tier)
                     @php
-                        $tierColor = match ($tier['tone']) {
-                            'danger' => 'text-red-600 dark:text-red-400',
-                            'warning' => 'text-amber-600 dark:text-amber-400',
-                            default => 'text-emerald-600 dark:text-emerald-400',
-                        };
+        $tierColor = match ($tier['tone']) {
+            'danger' => 'text-red-600 dark:text-red-400',
+            'warning' => 'text-amber-600 dark:text-amber-400',
+            default => 'text-emerald-600 dark:text-emerald-400',
+        };
                     @endphp
                     <div>
                         <div class="mb-1 flex items-center justify-between">
@@ -661,15 +664,15 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
             <div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-4">
                 @foreach ($d['gauges'] as $gauge)
                     @php
-                        $gt = match ($gauge['tone']) {
-                            'emerald' => ['ring' => '#1d9e75', 'text' => 'text-emerald-600 dark:text-emerald-400'],
-                            'amber' => ['ring' => '#ef9f27', 'text' => 'text-amber-600 dark:text-amber-400'],
-                            'rose' => ['ring' => '#e24b4a', 'text' => 'text-red-600 dark:text-red-400'],
-                            'sky' => ['ring' => '#0284c7', 'text' => 'text-sky-600 dark:text-sky-400'],
-                            default => ['ring' => '#6b7280', 'text' => 'text-gray-500 dark:text-gray-400'],
-                        };
-                        $circumference = 2 * M_PI * 24;
-                        $dashOffset = $circumference - ($gauge['percent'] / 100) * $circumference;
+        $gt = match ($gauge['tone']) {
+            'emerald' => ['ring' => '#1d9e75', 'text' => 'text-emerald-600 dark:text-emerald-400'],
+            'amber' => ['ring' => '#ef9f27', 'text' => 'text-amber-600 dark:text-amber-400'],
+            'rose' => ['ring' => '#e24b4a', 'text' => 'text-red-600 dark:text-red-400'],
+            'sky' => ['ring' => '#0284c7', 'text' => 'text-sky-600 dark:text-sky-400'],
+            default => ['ring' => '#6b7280', 'text' => 'text-gray-500 dark:text-gray-400'],
+        };
+        $circumference = 2 * M_PI * 24;
+        $dashOffset = $circumference - ($gauge['percent'] / 100) * $circumference;
                     @endphp
                     <a href="{{ $gauge['url'] }}"
                         class="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-gray-50 dark:hover:bg-gray-800">

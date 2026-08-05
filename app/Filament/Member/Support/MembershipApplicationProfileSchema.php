@@ -100,9 +100,9 @@ final class MembershipApplicationProfileSchema
                     TextInput::make('employer')
                         ->maxLength(150),
                     TextInput::make('monthly_income')
-                        ->label(__('Monthly income (:currency)', ['currency' => MoneyDisplay::symbol()]))
+                        ->label(__('Monthly income (:currency)', ['currency' => MoneyDisplay::plainTextSymbol()]))
                         ->numeric()
-                        ->prefix(MoneyDisplay::symbol())
+                        ->prefix(MoneyDisplay::plainTextSymbol())
                         ->minValue(0),
                 ])
                 ->columns(3),
@@ -141,7 +141,7 @@ final class MembershipApplicationProfileSchema
                     TextInput::make('membership_fee_amount')
                         ->label(__('Declared transfer amount'))
                         ->numeric()
-                        ->prefix(MoneyDisplay::symbol())
+                        ->prefix(MoneyDisplay::plainTextSymbol())
                         ->minValue(0),
                     DatePicker::make('membership_fee_transfer_date')
                         ->label(__('Transfer date'))

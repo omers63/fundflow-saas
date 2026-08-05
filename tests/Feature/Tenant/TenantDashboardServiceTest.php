@@ -79,6 +79,40 @@ test('tenant dashboard kpi labels follow the active locale', function () {
         ->and($labels)->toContain('استثناءات المطابقة');
 });
 
+test('tenant dashboard cache does not leak labels across locales', function () {
+    $user = User::create([
+        'name' => 'Locale Cache Admin',
+        'email' => 'locale-cache-admin@fund.test',
+        'password' => bcrypt('password'),
+        'is_admin' => true,
+    ]);
+
+    Member::create([
+        'member_number' => 'MEM-LOC',
+        'name' => 'Locale Member',
+        'monthly_contribution_amount' => 100,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 1000, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 5000, 'is_master' => true]);
+    Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 2000, 'is_master' => true]);
+
+    $this->actingAs($user, 'tenant');
+
+    app()->setLocale('ar');
+    $arabicLabels = collect($this->service->coreSnapshot()['kpi_stats'])->pluck('label')->all();
+
+    app()->setLocale('en');
+    $englishLabels = collect($this->service->coreSnapshot()['kpi_stats'])->pluck('label')->all();
+
+    expect($arabicLabels)->toContain('تحصيل الدورة')
+        ->and($englishLabels)->toContain('Collected This Cycle')
+        ->and($englishLabels)->not->toContain('تحصيل الدورة')
+        ->and($arabicLabels)->not->toContain('Collected This Cycle');
+});
+
 test('tenant dashboard kpi includes collection arrears for open cycle', function () {
     Setting::set('contribution', 'cycle_start_day', '6');
     Carbon::setTestNow(Carbon::parse('2025-10-15'));

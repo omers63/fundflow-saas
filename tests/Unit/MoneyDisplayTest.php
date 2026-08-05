@@ -20,7 +20,7 @@ it('uses western digits and places currency symbol before amount in arabic local
     app()->setLocale('ar');
 
     expect(MoneyDisplay::format(3240, 'SAR'))
-        ->toBe("\u{2066}\u{20C1} 3,240.00\u{2069}")
+        ->toBe("\u{2066}SAR 3,240.00\u{2069}")
         ->and(MoneyDisplay::amount(3240))->toBe('3,240.00');
 });
 
@@ -38,7 +38,8 @@ it('wraps plain format strings in ltr isolate for rtl locale', function (): void
 it('uses translated currency symbol from lang files', function (): void {
     app()->setLocale('ar');
 
-    expect(MoneyDisplay::symbol('SAR'))->toBe("\u{20C1}");
+    expect(MoneyDisplay::symbol('SAR'))->toBe("\u{20C1}")
+        ->and(MoneyDisplay::plainTextSymbol('SAR'))->toBe('SAR');
 });
 
 it('renders html markup with inline svg symbol before digits in arabic', function (): void {
@@ -199,7 +200,7 @@ it('formats compact amounts with symbol before digits in arabic', function (): v
     app()->setLocale('ar');
 
     expect(MoneyDisplay::compactWithSymbol(1_500_000, 'SAR'))
-        ->toBe("\u{2066}\u{20C1} 1.5M\u{2069}");
+        ->toBe("\u{2066}SAR 1.5M\u{2069}");
 });
 
 it('formats compact amounts with sar code in english', function (): void {

@@ -156,7 +156,7 @@ final class DependentAllocationFilamentActions
                         ->numeric()
                         ->minValue(0.01)
                         ->required()
-                        ->suffix(MoneyDisplay::symbol($currency)),
+                        ->suffix(MoneyDisplay::plainTextSymbol($currency)),
                     TextInput::make('note')
                         ->label(__('Note (optional)'))
                         ->maxLength(200),

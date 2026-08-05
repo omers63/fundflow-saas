@@ -1,5 +1,5 @@
 @php
-    $d = $this->getData();
+$d = $this->getData();
 @endphp
 
 @if (empty($d))
@@ -14,31 +14,31 @@
                 @include('filament.member.widgets.partials.insights-hero', ['hero' => $d['hero']])
                 <div
                     @class([
-                        'ff-member-stat-card overflow-hidden rounded-xl border px-3 py-2 shadow-sm',
-                        'border-gray-200/80 dark:border-gray-700' => ! ($d['balance_negative'] ?? false),
-                        'border-rose-200/80 dark:border-rose-500/30' => $d['balance_negative'] ?? false,
-                    ])
+        'ff-member-stat-card overflow-hidden rounded-xl border px-3 py-2 shadow-sm',
+        'border-gray-200/80 dark:border-gray-700' => !($d['balance_negative'] ?? false),
+        'border-rose-200/80 dark:border-rose-500/30' => $d['balance_negative'] ?? false,
+    ])
                     data-accent="{{ ($d['balance_negative'] ?? false) ? 'rose' : ($d['account']['type'] === 'cash' ? 'sky' : 'emerald') }}">
                     <div class="flex items-end justify-between gap-2">
                         <div class="min-w-0">
                             <x-ff-stat-line :text="ui_label($d['account']['type_label'])"
                                 class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400" />
                             <x-ff-stat-line :amount="$d['balance']" :currency="$d['currency']" @class([
-                                'truncate text-2xl font-bold tabular-nums leading-tight',
-                                $d['balance_negative']
-                                    ? 'text-rose-600 dark:text-rose-400'
-                                    : 'text-emerald-600 dark:text-emerald-400',
-                            ]) />
-                            <x-ff-stat-line :text="\App\Filament\Support\MoneyDisplay::symbol($d['currency']).' · '.__('Current balance')"
+        'truncate text-2xl font-bold tabular-nums leading-tight',
+        $d['balance_negative']
+        ? 'text-rose-600 dark:text-rose-400'
+        : 'text-emerald-600 dark:text-emerald-400',
+    ]) />
+                            <x-ff-stat-line :text="\App\Filament\Support\MoneyDisplay::plainTextSymbol($d['currency']) . ' · ' . __('Current balance')"
                                 class="truncate text-[10px] text-gray-400" />
                         </div>
                         <span
                             class="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
                             {{ match ($d['account']['type']) {
-                                'cash' => __('Cash'),
-                                'fund' => __('Fund'),
-                                default => __('Acct'),
-                            } }}
+        'cash' => __('Cash'),
+        'fund' => __('Fund'),
+        default => __('Acct'),
+    } }}
                         </span>
                     </div>
                 </div>
@@ -46,10 +46,10 @@
 
             <div class="lg:col-span-2">
                 @include('filament.member.widgets.partials.insights-kpi-strip', [
-                    'kpis' => $d['kpis'],
-                    'sparkline' => $d['sparkline'],
-                    'sparklineMax' => $d['sparkline_max'],
-                ])
+        'kpis' => $d['kpis'],
+        'sparkline' => $d['sparkline'],
+        'sparklineMax' => $d['sparkline_max'],
+    ])
             </div>
         </div>
 

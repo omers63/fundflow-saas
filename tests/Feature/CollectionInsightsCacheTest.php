@@ -60,6 +60,35 @@ test('collection insights cache returns memoized payload until generation bump',
         ->and($calls)->toBe(2);
 });
 
+test('collection insights cache isolates payloads by locale', function () {
+    app()->setLocale('ar');
+
+    CollectionInsightsCache::remember(
+        CollectionInsightsCache::DOMAIN_CONTRIBUTIONS,
+        'locale:payload',
+        fn (): array => ['label' => 'عربي'],
+    );
+
+    app()->setLocale('en');
+
+    $english = CollectionInsightsCache::remember(
+        CollectionInsightsCache::DOMAIN_CONTRIBUTIONS,
+        'locale:payload',
+        fn (): array => ['label' => 'English'],
+    );
+
+    app()->setLocale('ar');
+
+    $arabicAgain = CollectionInsightsCache::remember(
+        CollectionInsightsCache::DOMAIN_CONTRIBUTIONS,
+        'locale:payload',
+        fn (): array => ['label' => 'should-not-run'],
+    );
+
+    expect($english)->toBe(['label' => 'English'])
+        ->and($arabicAgain)->toBe(['label' => 'عربي']);
+});
+
 test('contribution browse flush keeps insights cache generation', function () {
     $generationBefore = Cache::get('contribution_insights:generation', 1);
 
