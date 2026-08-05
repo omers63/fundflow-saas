@@ -47,3 +47,4 @@ Keep **member** and **master** ledger legs in sync wherever they represent the s
 | CSV import cut-off balances | `MemberOpeningBalanceService` | Signed pool mirrors on member + master cash/fund only (no bank statement lines or master bank ledger) |
 | CSV / application subscription fee | `MembershipSubscriptionFeeService` | Member + master cash mirror, fee to master fees, uncleared bank line for transfer amount (clear later; master bank on match) |
 | Bank import mirror | `FundFlowService::mirrorToCash()` | Master bank ↔ master cash |
+| Expense out | `MasterExpenseDisbursementService::disburse()` | DR master expense → CR master cash (from reserve) → DR master cash (check out) + uncleared bank (match-only clear; no extra ledger) |

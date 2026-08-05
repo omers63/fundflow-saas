@@ -224,7 +224,7 @@ class ReconciliationReportService
             'master_expense_from_fund_credits' => round($pool['master_expense_from_fund_credits'], 2),
             'master_invest_return_to_fund_credits' => round($pool['master_invest_return_to_fund_credits'], 2),
             'tolerance' => $tolerance,
-            'note' => __('Fund comparison uses pool-adjusted master fund: ledger fund balance minus invest returns credited to fund, plus invest/expense reserve funding from fund. Fees, bank, and suspense are control/reserve accounts (not member mirrors); suspense should be near zero after rounding.'),
+            'note' => __('Fund pool = ledger fund − invest returns to fund + invest/expense reserve-funding (parked invest/expense reserves remain in the fund mirror). Cash mirror is master cash vs sum of member cash only — master fees are cash-origin control income, not folded into cash Δ. Bank and suspense are also non-member controls; suspense should be near zero after rounding.'),
         ], $balanced ? [] : $this->buildPairedControlDiagnostics($pool, $tolerance));
 
         // --- 3b) Bank statement vs master_cash book (optional) ---
@@ -2390,7 +2390,8 @@ class ReconciliationReportService
             // Application approval: deposit cash credits + fee legs (+ excess cash). Fee credit
             // is not paired with a balancing debit under the same reference (bank clears later).
             (new MembershipApplication)->getMorphClass(),
-            // Master reserve outs: debit expense/fee/invest only; bank match posts bank later.
+            // Master expense out nets cash thru-check; residual group is expense debit.
+            // Fee/invest reserve outs: debit reserve only; bank match posts bank later.
             (new ExpenseDisbursement)->getMorphClass(),
             (new FeeDisbursement)->getMorphClass(),
             (new InvestDisbursement)->getMorphClass(),

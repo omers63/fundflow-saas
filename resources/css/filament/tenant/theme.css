@@ -208,9 +208,12 @@ html.fi.fi-panel-tenant #nprogress .peg {
 
 /* ── Buttons: flat, no shadow, no gradient ── */
 
-/* Strip shadows and soften radius on all buttons */
+/* Strip shadows and force a real border on all buttons (Filament often uses ring/box-shadow only) */
 .fi-body.fi-panel-tenant .fi-btn {
     box-shadow: none !important;
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--ff-border) !important;
     border-radius: 0.5rem;
     font-size: 0.75rem;
     font-weight: 500;
@@ -218,6 +221,14 @@ html.fi.fi-panel-tenant #nprogress .peg {
         background-color 0.15s ease,
         border-color 0.15s ease,
         color 0.15s ease;
+}
+
+.fi-body.fi-panel-tenant .fi-icon-btn {
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--ff-border) !important;
+    box-shadow: none !important;
+    background-color: var(--ff-surface);
 }
 
 /* Primary: flat neutral — no fill (matches member portal) */
@@ -732,13 +743,13 @@ html.fi.fi-panel-tenant #nprogress .peg {
     border-block-end-color: rgb(255 255 255 / 0.06);
 }
 
-/* Row hover — very subtle sky tint */
+/* Row hover — solid sky tint (must stay opaque so selection checkboxes don’t half-blend) */
 .fi-body.fi-panel-tenant .fi-ta-table > tbody > tr:hover > td {
-    background: rgb(240 249 255 / 0.5);
+    background: #f0f9ff;
 }
 
 .dark .fi-body.fi-panel-tenant .fi-ta-table > tbody > tr:hover > td {
-    background: rgb(7 89 133 / 0.08);
+    background: #172554;
 }
 
 /* Header cell label */

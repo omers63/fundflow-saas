@@ -397,7 +397,8 @@ test('snapshot presenter organizes paired control totals metrics and formats poo
         __('Absolute cash delta'),
     ])->and($flat[__('Tolerance')])->toContain('0.03')
         ->and($flat[__('Sum member cash')])->toContain('1,800')
-        ->and($flat[__('Adjusted master fund pool')])->toContain('1,800')
+        ->and($flat[__('Fund pool (fund + parked invest/expense reserves)')])->toContain('1,800')
         ->and($flat[__('Absolute fund pool delta')])->toContain('100')
+        ->and($flat[__('Master fees (cash-origin control, not member mirror)')])->toContain('0')
         ->and($labels)->toContain(__('Note'));
 });

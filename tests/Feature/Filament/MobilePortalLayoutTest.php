@@ -76,7 +76,13 @@ test('mobile portal layout stylesheet is bundled with filament themes', function
 
     $mobilePanels = file_get_contents($paths[0]);
 
-    expect($mobilePanels)->toContain("@import './mobile-portal-layout.css'");
+    expect($mobilePanels)->toContain("@import './mobile-portal-layout.css'")
+        ->and($mobilePanels)->toContain('tr.fi-ta-row.fi-striped > td')
+        ->and($mobilePanels)->toContain('background-color: #e8edf3')
+        ->and($mobilePanels)->toContain('fi-ta-summary-header-row > td')
+        ->and($mobilePanels)->toContain('.fi-btn {')
+        ->and($mobilePanels)->toContain('border-width: 1px')
+        ->and($mobilePanels)->toContain('.fi-ta-record-checkbox');
 
     foreach (array_slice($paths, 2) as $themePath) {
         expect(file_get_contents($themePath))->toContain("@import '../mobile-panels.css'");
@@ -84,6 +90,29 @@ test('mobile portal layout stylesheet is bundled with filament themes', function
 
     $mobileLayout = file_get_contents($paths[1]);
 
-    expect($mobileLayout)->toContain('grid-template-columns: minmax(5.25rem, 36%) minmax(0, 1fr)')
-        ->and($mobileLayout)->toContain('.fi-ta-cell-label');
+    expect($mobileLayout)->toContain('grid-template-columns: minmax(0, 40%) minmax(0, 1fr)')
+        ->and($mobileLayout)->toContain('.fi-ta-cell-label')
+        ->and($mobileLayout)->toContain('tr:has(> .fi-ta-selection-cell)')
+        ->and($mobileLayout)->toContain('.fi-ta-cell.fi-align-end:not(.fi-ta-selection-cell)')
+        ->and($mobileLayout)->toContain('tr.fi-ta-row.fi-striped')
+        ->and($mobileLayout)->toContain('fi-ta-selection-cell')
+        ->and($mobileLayout)->toContain('background-color: #e8edf3');
+});
+
+test('loans to-collect table stacks on mobile by default', function (): void {
+    $this->initializeTenancy();
+    Filament::setCurrentPanel('tenant');
+
+    $admin = User::create([
+        'name' => 'Mobile Loans Admin',
+        'email' => 'mobile-loans-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $component = Livewire::actingAs($admin, 'tenant')
+        ->test(\App\Filament\Tenant\Resources\Loans\Pages\ListLoans::class);
+
+    expect($component->instance()->getTable()->isStackedOnMobile())->toBeTrue();
 });

@@ -890,7 +890,8 @@ test('global trial omits diagnostics when credits and debits balance', function 
 test('paired control totals use pool-adjusted fund mirror with reserve accounts', function () {
     Account::masterFund()?->update(['balance' => 1800]);
     $masterInvest = Account::create(['type' => 'invest', 'name' => 'Master Invest', 'balance' => 0, 'is_master' => true]);
-    Account::create(['type' => 'expense', 'name' => 'Master Expense', 'balance' => 0, 'is_master' => true]);
+    Account::query()->where('is_master', true)->where('type', 'expense')->delete();
+    $masterExpense = Account::create(['type' => 'expense', 'name' => 'Master Expense', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'suspense', 'name' => 'Master Suspense', 'balance' => 0, 'is_master' => true]);
 
     app(AccountingService::class)->fundReserveAccountFromMasterFund(
@@ -900,7 +901,7 @@ test('paired control totals use pool-adjusted fund mirror with reserve accounts'
     );
     app(AccountingService::class)->recordInvestmentReturn(300, 'Q1 return');
     app(AccountingService::class)->fundReserveAccountFromMasterFund(
-        Account::masterExpense(),
+        $masterExpense,
         300,
         'Operations float',
     );

@@ -167,6 +167,21 @@
 }
 
 /* Buttons */
+.fi-body.fi-panel-member .fi-btn {
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--ff-border, #e5e7eb) !important;
+    box-shadow: none !important;
+}
+
+.fi-body.fi-panel-member .fi-icon-btn {
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--ff-border, #e5e7eb) !important;
+    box-shadow: none !important;
+    background-color: var(--ff-surface, #fff);
+}
+
 .fi-body.fi-panel-member .fi-btn.fi-color-primary:not(.fi-outlined) {
     border-radius: 0.5625rem;
     font-size: 0.75rem;
@@ -227,7 +242,7 @@
 }
 
 .dark .fi-body.fi-panel-member .fi-ta-table > tbody > tr:hover > td {
-    background: rgb(83 74 183 / 0.08);
+    background: #1e1b4b;
 }
 
 .fi-body.fi-panel-member .fi-ta-header-cell .fi-ta-header-cell-label {

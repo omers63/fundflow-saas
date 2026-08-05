@@ -15,7 +15,11 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * Disburse master expense reserves: debit master expense only, then clear against a bank import (no cash/bank ledger).
+ * Disburse master expense reserves through master cash (check outflow), then clear against a bank import.
+ *
+ * Ledger (same net as AccountingService::disburseReserveAccountByCheck, with expense-out suffixes):
+ * DR master expense → CR master cash (from reserve) → DR master cash (check remittance).
+ * Bank match remains separate; clearance posts no extra ledger.
  */
 final class MasterExpenseDisbursementService
 {
@@ -44,6 +48,12 @@ final class MasterExpenseDisbursementService
             throw new InvalidArgumentException(__('Amount exceeds the available expense balance.'));
         }
 
+        $masterCash = Account::masterCash();
+
+        if ($masterCash === null) {
+            throw new InvalidArgumentException(__('Master cash account is not configured.'));
+        }
+
         $description = trim($description);
 
         if ($description === '') {
@@ -52,8 +62,8 @@ final class MasterExpenseDisbursementService
 
         $transactedAt = $transactedAt ?? BusinessDay::now();
 
-        return ReconciliationService::withoutRealtimeChecks(function () use ($masterExpense, $amount, $description, $transactedAt, $createdBy): ExpenseDisbursement {
-            return DB::transaction(function () use ($masterExpense, $amount, $description, $transactedAt, $createdBy): ExpenseDisbursement {
+        return ReconciliationService::withoutRealtimeChecks(function () use ($masterExpense, $masterCash, $amount, $description, $transactedAt, $createdBy): ExpenseDisbursement {
+            return DB::transaction(function () use ($masterExpense, $masterCash, $amount, $description, $transactedAt, $createdBy): ExpenseDisbursement {
                 $disbursement = ExpenseDisbursement::create([
                     'amount' => $amount,
                     'description' => $description,
@@ -65,10 +75,25 @@ final class MasterExpenseDisbursementService
                     'description' => $description,
                 ]);
 
+                // Release expense park into cash, then remittance intent (cash nets zero vs member mirrors).
                 $this->accounting->debit(
                     $masterExpense,
                     $amount,
                     $ledgerDescription.' '.__('(expense out)'),
+                    $disbursement,
+                    $transactedAt,
+                );
+                $this->accounting->credit(
+                    $masterCash,
+                    $amount,
+                    $ledgerDescription . ' ' . __('(from expense reserve)'),
+                    $disbursement,
+                    $transactedAt,
+                );
+                $this->accounting->debit(
+                    $masterCash,
+                    $amount,
+                    $ledgerDescription . ' ' . __('(check out)'),
                     $disbursement,
                     $transactedAt,
                 );

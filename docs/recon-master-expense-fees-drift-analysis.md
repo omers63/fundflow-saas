@@ -69,10 +69,14 @@ Matches:
 
 **Your rule:** DR expense (fund extension) → **CR master cash** → bank remittance + clearing.
 
-**Implemented** (`MasterExpenseDisbursementService::disburse`):
+**Implemented** (`MasterExpenseDisbursementService::disburse`) — section 5 product change:
 
-1. **DR master expense only** “(expense out)”  
-2. Uncleared synthetic bank line (match-only on clear; **no** master cash / master bank ledger on accept)  
+1. **DR master expense** “(expense out)”  
+2. **CR master cash** “(from expense reserve)”  
+3. **DR master cash** “(check out)” — remittance intent (cash nets zero vs member cash pool)  
+4. Uncleared synthetic bank line (match-only on clear; no master bank / cash ledger on match)
+
+Net cash through-check avoids `MASTER_CASH` drift. Global trial still treats the expense morph group as expected one-sided (expense debit residual after cash legs cancel).
 
 **Reserve funding into expense** (earlier step, `AccountingService` fund→reserve):
 
@@ -80,17 +84,11 @@ Matches:
 - CR master expense `(reserve funding)`  
 - Often **null reference** by design  
 
-So:
-
-| Step | Fund-flow / policy | Your description | Code today |
-|------|--------------------|------------------|------------|
-| Fund → expense reserve | Fund family parking | Expense extension of fund | Yes |
-| Expense out + bank | Not “no cash ledger” in docs for cash-out style | DR expense, **CR cash**, then clear | **No — no cash credit** |
-| Bank clear | Bank separate from intent | Clearing required | Yes (match/clear ops) |
-
-**Gap:** expense out is **not** cash-out shaped (expense→cash→bank). It is **expense-only debit + bank match/clear**. That also drives global-trial “one-sided expense group” + null-ref reserve pairs (which we classified as expected journal shape, not pool drift).
-
-If product intent is truly **DR expense + CR master cash + uncleared remittance**, that is a **ledger-product change**, not a recon formula tweak. Current path and tests (e.g. match-only expense integrity) encode the existing design.
+| Step | Fund-flow / policy | Code |
+|------|--------------------|------|
+| Fund → expense reserve | Fund family parking | Yes |
+| Expense out + bank | DR expense, thru cash, bank remittance | Yes |
+| Bank clear | Match only | Yes |
 
 #### C) Guarantor collection / top-up
 
@@ -136,26 +134,19 @@ A coherent “fees extension” formula would need a **different identity** (e.g
 
 ---
 
-### 5. Recommendations (for a later implement pass)
+### 5. Recommendations — implemented
 
-1. **Do not** add `master_fees` into `cash_delta` without a new paired identity—avoids false criticals.  
-2. **Keep** expense-in-fund-pool via reserve-funding (already correct for your fund extension idea).  
-3. **Subscription fee path:** no change needed for policy; keep fee integrity + bank clearance.  
-4. **Guarantor path:** no change needed.  
-5. **Expense out + CR cash:** only if you intentionally replace current match-only design—that is a **posting** change (`MasterExpenseDisbursementService` + outbound/bank clear + tests), then recon exemptions can follow.  
-6. Optional clarity only: recon UI label for “fund pool (fund + parked invest/expense reserves)” vs “fees (cash-origin control, not member mirror)”—docs/copy, not softer severity.
+1. **Do not** fold `master_fees` into `cash_delta` — unchanged formula; recon note states fees are control-only.  
+2. **Keep** expense-in-fund-pool via reserve-funding — still in `MasterAccountInvariantService`.  
+3. **Subscription fee path:** left as dual cash + fees + bank clearance.  
+4. **Guarantor path:** unchanged.  
+5. **Expense out through cash remittance** — `MasterExpenseDisbursementService` now posts **DR expense → CR master cash (from reserve) → DR master cash (check out)** + uncleared ops bank (match-only clear). Cash pool net zero vs members.  
+6. **Recon UI clarity** — fund pool vs fees control labels + paired-control note updated (severity severity unchanged).
 
 ---
 
-### Bottom line
+### Bottom line (post-implement)
 
-- Your **subscription fee** and **guarantor** descriptions match **fund-flow rules** and the code.  
-- **Expense as fund parking** matches recon **fund_pool**.  
-- **Expense as cash-credit + bank remittance** does **not** match today’s expense service.  
-- **Fees as cash-extension for pool drift** is **not** how `cash_delta` is defined, and folding fees into that comparison would **break** a currently healthy cash mirror on samman rather than reveal a hidden one.  
-
-I have **not implemented** anything per “report before implementation.” If you want a concrete next step, pick one:
-
-1. **Product change:** expense out → DR expense + CR cash + bank clear (real ledger redesign), or  
-2. **Recon only:** redefined cash/fund control identities/labels without changing postings, or  
-3. **Neither for drift**—keep pool mirrors as-is; only document the extension semantics.  
+- Pool mirrors stay pure cash / fund_pool.  
+- Expense out is cash-thru-check remittance with bank match.  
+- Fees remain a reported control balance, not part of cash Δ. 

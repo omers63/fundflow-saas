@@ -156,7 +156,7 @@ final class ReconciliationSnapshotPresenter
                 'debits' => MoneyDisplay::format((float) ($check['sum_debits'] ?? 0), $currency) ?? '—',
                 'delta' => MoneyDisplay::format((float) ($check['delta'] ?? 0), $currency) ?? '—',
             ]),
-            'paired_control_totals' => __('Cash Δ :cash · Fund pool Δ :fund', [
+            'paired_control_totals' => __('Cash Δ :cash · Fund pool Δ :fund (fund + parked reserves)', [
                 'cash' => MoneyDisplay::format((float) ($check['cash_delta_abs'] ?? abs((float) ($check['cash_delta'] ?? 0))), $currency) ?? '—',
                 'fund' => MoneyDisplay::format((float) ($check['fund_delta_abs'] ?? abs((float) ($check['fund_delta'] ?? 0))), $currency) ?? '—',
             ]),
@@ -528,7 +528,7 @@ final class ReconciliationSnapshotPresenter
             'cash_delta' => __('Cash delta'),
             'cash_delta_abs' => __('Absolute cash delta'),
             'master_fund_balance' => __('Master fund balance'),
-            'master_fund_pool' => __('Adjusted master fund pool'),
+            'master_fund_pool' => __('Fund pool (fund + parked invest/expense reserves)'),
             'sum_member_fund' => __('Sum member fund'),
             'fund_delta' => __('Fund pool delta'),
             'fund_delta_abs' => __('Absolute fund pool delta'),
@@ -537,7 +537,7 @@ final class ReconciliationSnapshotPresenter
             'master_invest_return_to_fund_credits' => __('Invest return credited to fund'),
             'master_invest_balance' => __('Master invest balance'),
             'master_expense_balance' => __('Master expense balance'),
-            'master_fees_balance' => __('Master fees balance'),
+            'master_fees_balance' => __('Master fees (cash-origin control, not member mirror)'),
             'master_suspense_balance' => __('Master suspense balance'),
             'master_bank_balance' => __('Master bank balance'),
             'reference' => __('Linked source'),

@@ -81,7 +81,7 @@ test('fund expense transfers from master fund to master expense', function () {
             ->count())->toBe(0);
 });
 
-test('disburse expense debits master expense only and creates uncleared bank line', function () {
+test('disburse expense routes through master cash then creates uncleared bank line', function () {
     Account::factory()->masterFund()->withBalance(0)->create();
     Account::factory()->masterCash()->withBalance(10_000)->create();
     $masterExpense = Account::factory()->masterExpense()->withBalance(1_000)->create();
@@ -92,14 +92,23 @@ test('disburse expense debits master expense only and creates uncleared bank lin
         'Check #1001',
     );
 
+    $masterCash = Account::masterCash();
+    $cashTx = $masterCash->transactions()->orderBy('id')->get();
+
     expect((float) $masterExpense->fresh()->balance)->toBe(600.0)
-        ->and((float) Account::masterCash()->fresh()->balance)->toBe(10_000.0)
+        ->and((float) $masterCash->fresh()->balance)->toBe(10_000.0)
         ->and($masterExpense->transactions()->count())->toBe(1)
-        ->and(Account::masterCash()->transactions()->count())->toBe(0)
+        ->and($cashTx)->toHaveCount(2)
+        ->and($cashTx[0]->type)->toBe('credit')
+        ->and((float) $cashTx[0]->amount)->toBe(400.0)
+        ->and($cashTx[0]->description)->toContain(__('(from expense reserve)'))
+        ->and($cashTx[1]->type)->toBe('debit')
+        ->and((float) $cashTx[1]->amount)->toBe(400.0)
+        ->and($cashTx[1]->description)->toContain(__('(check out)'))
         ->and($disbursement->bankTransaction)->not->toBeNull()
         ->and($disbursement->bankTransaction->is_cleared)->toBeFalse()
         ->and((float) $disbursement->bankTransaction->amount)->toBe(-400.0)
-        ->and(BankTransaction::query()->count())->toBe(1);
+        ->and(BankTransaction::query()->whereKey($disbursement->bank_transaction_id)->exists())->toBeTrue();
 });
 
 test('master expense ledger shows expense id column', function () {

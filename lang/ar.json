@@ -6985,5 +6985,12 @@
     "Creates and approves a cash-out on the selected date. Member and master cash are debited, and an uncleared bank line is added for remittance.": "ينشئ ويوافق على سحب نقدي بالتاريخ المحدد. يُخصم نقد العضو والصندوق الرئيسي، وتُضاف سطر بنكي غير مسوّى للحوالة.",
     "Creates and approves a fund-out on the selected date. Moves fund balance to cash with master mirrors. No bank remittance is created.": "ينشئ ويوافق على خروج من الصندوق بالتاريخ المحدد. ينقل رصيد الصندوق إلى النقد مع مرايا الرئيسية. لا تُنشأ حوالة بنكية.",
     "Could not create cash out": "تعذّر إنشاء السحب النقدي",
-    "Could not create fund out": "تعذّر إنشاء خروج الصندوق"
+    "Could not create fund out": "تعذّر إنشاء خروج الصندوق",
+    "(expense out)": "(صرف مصروف)",
+    "(from expense reserve)": "(من احتياطي المصروف)",
+    "(check out)": "(صرف)",
+    "Fund pool (fund + parked invest/expense reserves)": "مجمع الصندوق (الصندوق + احتياطيات الاستثمار/المصروف الموقوفة)",
+    "Master fees (cash-origin control, not member mirror)": "رسوم الإدارة (رقابة منشأها نقدي، ليست مرآة للأعضاء)",
+    "Cash Δ :cash · Fund pool Δ :fund (fund + parked reserves)": "Δ النقد :cash · Δ مجمع الصندوق :fund (صندوق + احتياطيات موقوفة)",
+    "Fund pool = ledger fund − invest returns to fund + invest/expense reserve-funding (parked invest/expense reserves remain in the fund mirror). Cash mirror is master cash vs sum of member cash only — master fees are cash-origin control income, not folded into cash Δ. Bank and suspense are also non-member controls; suspense should be near zero after rounding.": "مجمع الصندوق = رصيد الصندوق − عوائد الاستثمار المعتمدة للصندوق + تمويل احتياطي الاستثمار/المصروف (تبقى الاحتياطيات الموقوفة داخل مرآة الصندوق). مرآة النقد هي النقد الرئيسي مقابل مجموع نقد الأعضاء فقط — رسوم الإدارة دخل رقابي منشأهُ نقدي ولا تُدرج في Δ النقد. البنك والحساب المعلق أيضاً رقابان غير عضويين؛ المعلق يجب أن يقترب من الصفر بعد التقريب."
 }

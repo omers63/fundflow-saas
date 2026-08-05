@@ -134,6 +134,17 @@
     gap: 0.25rem;
 }
 
+/* Stacked mobile tables: hang money multi-line cells to the value column end */
+@media (max-width: 639px) {
+    .fi-body .fi-ta-table.fi-ta-table-stacked-on-mobile .ff-loan-outstanding-cell {
+        align-items: flex-end;
+    }
+
+    .fi-body .fi-ta-table.fi-ta-table-stacked-on-mobile .fi-ta-cell-content .ff-member-amount {
+        justify-content: flex-end;
+    }
+}
+
 .ff-loan-outstanding-cell__primary {
     font-size: inherit;
     font-weight: inherit;

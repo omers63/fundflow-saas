@@ -91,6 +91,154 @@
     max-width: 100%;
 }
 
+/*
+ * Striped rows — solid fills only (no alpha). Translucent stripe paint left
+ * selection checkboxes looking half-white / half-gray over the table surface.
+ */
+.fi-body .fi-ta-table > tbody > tr.fi-ta-row:not(.fi-striped):not(.fi-ta-summary-header-row):not(.fi-ta-summary-row) > td,
+.fi-body .fi-ta-table > tbody > tr.fi-ta-row:not(.fi-striped):not(.fi-ta-summary-header-row):not(.fi-ta-summary-row) > th {
+    background-color: #ffffff;
+}
+
+.dark .fi-body .fi-ta-table > tbody > tr.fi-ta-row:not(.fi-striped):not(.fi-ta-summary-header-row):not(.fi-ta-summary-row) > td,
+.dark .fi-body .fi-ta-table > tbody > tr.fi-ta-row:not(.fi-striped):not(.fi-ta-summary-header-row):not(.fi-ta-summary-row) > th {
+    background-color: rgb(15 23 42); /* slate-900 */
+}
+
+.fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-striped > td,
+.fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-striped > th {
+    background-color: #e8edf3; /* solid slate-ish */
+}
+
+.dark .fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-striped > td,
+.dark .fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-striped > th {
+    background-color: #1e293b; /* slate-800 solid */
+}
+
+.fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-striped:hover > td,
+.fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-striped:hover > th {
+    background-color: #dce3ec;
+}
+
+.dark .fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-striped:hover > td,
+.dark .fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-striped:hover > th {
+    background-color: #273549;
+}
+
+.fi-body .fi-ta-table > tbody > tr.fi-ta-row:not(.fi-striped):hover > td,
+.fi-body .fi-ta-table > tbody > tr.fi-ta-row:not(.fi-striped):hover > th {
+    background-color: #f0f9ff; /* match tenant sky hover, solid */
+}
+
+.dark .fi-body .fi-ta-table > tbody > tr.fi-ta-row:not(.fi-striped):hover > td,
+.dark .fi-body .fi-ta-table > tbody > tr.fi-ta-row:not(.fi-striped):hover > th {
+    background-color: #172554; /* solid navy/slate hover */
+}
+
+/* Selected rows keep selection tint under the whole row (incl. checkbox cell) */
+.fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-selected > td,
+.fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-selected > th {
+    background-color: #dbeafe; /* blue-100 solid */
+}
+
+.dark .fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-selected > td,
+.dark .fi-body .fi-ta-table > tbody > tr.fi-ta-row.fi-selected > th {
+    background-color: #1e3a5f;
+}
+
+/* Summary footer rows (and empty checkbox/actions placeholders at the corners) */
+.fi-body .fi-ta-table tr.fi-ta-summary-header-row > td,
+.fi-body .fi-ta-table tr.fi-ta-summary-row > td,
+.fi-body .fi-ta-table > tfoot > tr > td,
+.fi-body .fi-ta-table > tfoot > tr > th {
+    background-color: #e8edf3;
+}
+
+.dark .fi-body .fi-ta-table tr.fi-ta-summary-header-row > td,
+.dark .fi-body .fi-ta-table tr.fi-ta-summary-row > td,
+.dark .fi-body .fi-ta-table > tfoot > tr > td,
+.dark .fi-body .fi-ta-table > tfoot > tr > th {
+    background-color: #1e293b;
+}
+
+/* Checkboxes: solid control on solid cell — no transparent blend with the stripe */
+.fi-body .fi-ta-table input[type='checkbox'].fi-checkbox-input,
+.fi-body .fi-ta-table .fi-ta-record-checkbox,
+.fi-body .fi-ta-table .fi-ta-page-checkbox,
+.fi-body .fi-ta-table .fi-ta-group-checkbox {
+    background-color: #ffffff !important;
+    box-shadow: none !important;
+    outline: 1px solid #9ca3af;
+    outline-offset: 0;
+}
+
+.dark .fi-body .fi-ta-table input[type='checkbox'].fi-checkbox-input,
+.dark .fi-body .fi-ta-table .fi-ta-record-checkbox,
+.dark .fi-body .fi-ta-table .fi-ta-page-checkbox,
+.dark .fi-body .fi-ta-table .fi-ta-group-checkbox {
+    background-color: #0f172a !important;
+    outline-color: #64748b;
+}
+
+.fi-body .fi-ta-table input[type='checkbox'].fi-checkbox-input:checked,
+.fi-body .fi-ta-table .fi-ta-record-checkbox:checked,
+.fi-body .fi-ta-table .fi-ta-page-checkbox:checked,
+.fi-body .fi-ta-table .fi-ta-group-checkbox:checked {
+    background-color: var(--color-primary-600, #0284c7) !important;
+    outline-color: transparent;
+}
+
+.dark .fi-body .fi-ta-table input[type='checkbox'].fi-checkbox-input:checked,
+.dark .fi-body .fi-ta-table .fi-ta-record-checkbox:checked,
+.dark .fi-body .fi-ta-table .fi-ta-page-checkbox:checked,
+.dark .fi-body .fi-ta-table .fi-ta-group-checkbox:checked {
+    background-color: var(--color-primary-500, #0ea5e9) !important;
+}
+
+/*
+ * Buttons — Filament paints fill/color but many solid variants have no border/ring
+ * (or only a box-shadow ring, which panel themes strip). Always use a real 1px edge
+ * so Actions / gray buttons stay visible on white rows.
+ */
+.fi-body .fi-btn {
+    border-width: 1px;
+    border-style: solid;
+    border-color: rgb(209 213 219); /* gray-300 */
+    box-shadow: none !important;
+}
+
+.dark .fi-body .fi-btn {
+    border-color: rgb(75 85 99); /* gray-600 */
+}
+
+/* Icon buttons (compact triggers) need the same edge when used as actions */
+.fi-body .fi-icon-btn {
+    border-width: 1px;
+    border-style: solid;
+    border-color: rgb(209 213 219);
+    background-color: rgb(255 255 255);
+    box-shadow: none !important;
+}
+
+.dark .fi-body .fi-icon-btn {
+    border-color: rgb(75 85 99);
+    background-color: rgb(30 41 59);
+}
+
+/* Soften pagination “white pill” that floated on the table footer */
+.fi-body .fi-ta-ctn .fi-pagination .fi-pagination-items {
+    background-color: transparent;
+    box-shadow: none !important;
+    border: 1px solid rgb(209 213 219);
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.dark .fi-body .fi-ta-ctn .fi-pagination .fi-pagination-items {
+    border-color: rgb(75 85 99);
+    background-color: transparent;
+}
+
 /* Table summaries: one horizontal line per cell (column label + sum value), not stacked */
 .fi-body .fi-ta-text-summary {
     display: flex;
