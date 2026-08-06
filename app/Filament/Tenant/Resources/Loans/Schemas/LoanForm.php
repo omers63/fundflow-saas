@@ -492,7 +492,9 @@ class LoanForm
     {
         return '<div class="rounded-lg border border-gray-200/70 bg-white/80 px-3 py-2.5 dark:border-white/10 dark:bg-white/5">'
             .'<p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">'.e($label).'</p>'
-            .'<p class="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">'.e($value).'</p></div>';
+                        . '<p class="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">'
+                        . MoneyDisplay::markupForDisplay($value)
+                        . '</p></div>';
     }
 
     private static function applicationFormUpload(): FileUpload

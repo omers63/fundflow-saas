@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Widgets;
 
+use App\Filament\Concerns\InteractsWithUnfoldedSections;
 use App\Services\MemberInsightsService;
 use Filament\Widgets\Widget;
 use Livewire\Attributes\On;
 
 class MemberInsightsWidget extends Widget
 {
+    use InteractsWithUnfoldedSections;
+
     protected static bool $isDiscovered = false;
 
     protected static bool $isLazy = true;

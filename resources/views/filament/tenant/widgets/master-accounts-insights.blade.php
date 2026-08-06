@@ -1,16 +1,16 @@
 @php
-    $d = $this->getData();
-    $pollingInterval = method_exists($this, 'getPollingInterval') ? $this->getPollingInterval() : null;
-    $masterFundBalance = (float) ($d['master_fund'] ?? 0);
+$d = $this->getData();
+$pollingInterval = method_exists($this, 'getPollingInterval') ? $this->getPollingInterval() : null;
+$masterFundBalance = (float) ($d['master_fund'] ?? 0);
 @endphp
 
 <div class="ff-app-insights w-full max-w-none space-y-3 mb-1" @if (filled($pollingInterval)) wire:poll.{{ $pollingInterval }} @endif>
     @include('filament.tenant.widgets.partials.insights-head', [
-        'hero' => $d['hero'],
-        'kpis' => $d['kpis'],
-        'sparkline' => $d['sparkline'],
-        'sparklineMax' => $d['sparkline_max'],
-    ])
+    'hero' => $d['hero'],
+    'kpis' => $d['kpis'],
+    'sparkline' => $d['sparkline'],
+    'sparklineMax' => $d['sparkline_max'],
+])
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
@@ -23,11 +23,11 @@
                     </h3>
                 </div>
                 @php
-                    $healthBadge = match ($d['fund_health']) {
-                        'healthy' => [__('Healthy'), 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'],
-                        'monitor' => [__('Monitor'), 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'],
-                        default => [__('Action'), 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200'],
-                    };
+$healthBadge = match ($d['fund_health']) {
+    'healthy' => [__('Healthy'), 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'],
+    'monitor' => [__('Monitor'), 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'],
+    default => [__('Action'), 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200'],
+};
                 @endphp
                 <span @class(['rounded-full px-2 py-0.5 text-[9px] font-bold uppercase', $healthBadge[1]])>
                     {{ $healthBadge[0] }}
@@ -49,7 +49,7 @@
                 <div class="px-3 py-2.5 text-center">
                     <p class="text-[10px] text-gray-500">{{ __('Coverage') }}</p>
                     <p class="text-sm font-bold tabular-nums text-gray-900 dark:text-white">
-                        {{ $d['coverage'] !== null ? $d['coverage'].'×' : '—' }}
+                        {{ $d['coverage'] !== null ? $d['coverage'] . '×' : '—' }}
                     </p>
                 </div>
             </div>
@@ -90,7 +90,7 @@
                     </p>
                     <p class="mt-1 text-lg font-bold tabular-nums text-gray-900 dark:text-white">
                         @php
-                            $netSign = $d['activity_net'] >= 0 ? '+' : '−';
+$netSign = $d['activity_net'] >= 0 ? '+' : '−';
                         @endphp
                         {!! $netSign . (\App\Filament\Support\MoneyDisplay::html(abs($d['activity_net']), $d['currency'], precision: 0)?->toHtml() ?? '') !!}
                     </p>
@@ -104,5 +104,16 @@
             </div>
         </div>
     </div>
+
+    @if (method_exists($this, 'isSectionUnfolded'))
+        <x-ff-lazy-fold section="value_chart_liquidity" :unfolded="$this->isSectionUnfolded('value_chart_liquidity')"
+            :title="__('Value chart · Liquidity stack')" :hint="__('Expand to load master cash / fund / bank allocation (cached).')">
+            @if ($this->isSectionUnfolded('value_chart_liquidity'))
+                @include('filament.partials.insights.value-chart', [
+                    'chart' => app(\App\Services\ValueChartsService::class)->liquidityStack(),
+                ])
+            @endif
+        </x-ff-lazy-fold>
+    @endif
 
 </div>

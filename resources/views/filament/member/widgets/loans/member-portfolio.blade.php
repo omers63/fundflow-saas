@@ -1,4 +1,4 @@
-@php
+                @php
 $currency = $d['currency'];
 @endphp
 
@@ -9,7 +9,7 @@ $currency = $d['currency'];
         <div class="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-700 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
             @foreach ($d['kpis'] as $i => $card)
                             @php
-                $accent = $card['accent'] ?? ['sky', 'violet', 'emerald', 'amber'][$i % 4];
+    $accent = $card['accent'] ?? ['sky', 'violet', 'emerald', 'amber'][$i % 4];
                             @endphp
                             <div class="ff-app-insights-kpi ff-member-stat-card min-w-0 px-2.5 py-2" data-accent="{{ $accent }}">
                                 <x-ff-stat-line :text="ui_label($card['label'])"
@@ -45,7 +45,11 @@ $currency = $d['currency'];
             <p class="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">{{ __('Cash coverage') }}</p>
             <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ ($d['forecast']['cash_covers_next_emi'] ?? false) ? __('Covered') : __('Top-up needed') }}</p>
             <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                {{ ($d['forecast']['cash_covers_next_emi'] ?? false) ? __('Current cash covers your next EMI.') : __('Gap: :amount', ['amount' => \App\Support\Insights\InsightFormatter::money($d['forecast']['cash_gap'])]) }}
+                @if ($d['forecast']['cash_covers_next_emi'] ?? false)
+                    {{ __('Current cash covers your next EMI.') }}
+                @else
+                    {!! __('Gap: :amount', ['amount' => \App\Support\Insights\InsightFormatter::moneyMarkup($d['forecast']['cash_gap'])]) !!}
+                @endif
             </p>
         </div>
     </div>

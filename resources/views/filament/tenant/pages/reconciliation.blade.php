@@ -62,6 +62,21 @@
                 @include('filament.tenant.partials.reconciliation.settings-strip')
                 @include('filament.tenant.partials.reconciliation.next-steps')
 
+                <x-ff-lazy-fold
+                    section="value_chart_recon"
+                    :unfolded="$this->isSectionUnfolded('value_chart_recon')"
+                    :title="__('Value chart · Exception mix')"
+                    :hint="__('Expand to load severity and domain breakdown (cached).')"
+                >
+                    @if ($this->isSectionUnfolded('value_chart_recon'))
+                        @php($reconCharts = app(\App\Services\ValueChartsService::class)->reconExceptionMix())
+                        <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                            @include('filament.partials.insights.value-chart', ['chart' => $reconCharts['severity']])
+                            @include('filament.partials.insights.value-chart', ['chart' => $reconCharts['domain']])
+                        </div>
+                    @endif
+                </x-ff-lazy-fold>
+
                 <div
                     class="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
                     {{ __('Open an issue row for context and fix actions. Use Run check now for a realtime snapshot, or Exception queue re-check / Daily / Monthly for the other background runs.') }}

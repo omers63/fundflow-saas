@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Widgets;
 
+use App\Filament\Concerns\InteractsWithUnfoldedSections;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Services\ContributionInsightsService;
 use Filament\Widgets\Widget;
@@ -11,6 +12,8 @@ use Livewire\Attributes\On;
 
 class ContributionInsightsWidget extends Widget
 {
+    use InteractsWithUnfoldedSections;
+
     protected static bool $isDiscovered = false;
 
     protected static bool $isLazy = true;

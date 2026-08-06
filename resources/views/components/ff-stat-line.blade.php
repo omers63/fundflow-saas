@@ -6,11 +6,11 @@
     'compact' => false,
 ])
 @php
-    use App\Filament\Support\MoneyDisplay;
+use App\Filament\Support\MoneyDisplay;
 
-    $title = filled($amount)
-        ? (MoneyDisplay::format($amount, $currency, precision: (int) $precision) ?? '—')
-        : ($text ?? '');
+$title = filled($amount)
+    ? (MoneyDisplay::format($amount, $currency, precision: (int) $precision) ?? '—')
+    : ($text ?? '');
 @endphp
 <p {{ $attributes->class('ff-stat-line')->merge(['title' => e(strip_tags((string) $title))]) }}>
     @if (filled($amount))
@@ -22,6 +22,6 @@
     @elseif ($slot->isNotEmpty())
         {!! MoneyDisplay::markupForDisplay($slot->toHtml(), $currency, precision: (int) $precision) !!}
     @elseif (filled($text))
-        {!! MoneyDisplay::markupForDisplay($text, filled($amount) ? $currency : null, precision: (int) $precision) !!}
+        {!! MoneyDisplay::markupForDisplay($text, $currency, precision: (int) $precision) !!}
     @endif
 </p>

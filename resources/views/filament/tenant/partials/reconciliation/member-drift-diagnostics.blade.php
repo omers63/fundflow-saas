@@ -11,7 +11,7 @@
                 {{ __('Expected :pool', ['pool' => $poolLabel]) }}
             </p>
             <p class="mt-1 font-semibold tabular-nums text-gray-900 dark:text-white">
-                {{ MoneyDisplay::format((float) $diagnostics['expected']) ?? '—' }}
+                {!! MoneyDisplay::html((float) $diagnostics['expected'])?->toHtml() ?? e('—') !!}
             </p>
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50/80 px-3 py-2 dark:border-white/10 dark:bg-white/5">
@@ -19,7 +19,7 @@
                 {{ __('Actual balance') }}
             </p>
             <p class="mt-1 font-semibold tabular-nums text-gray-900 dark:text-white">
-                {{ MoneyDisplay::format((float) $diagnostics['actual']) ?? '—' }}
+                {!! MoneyDisplay::html((float) $diagnostics['actual'])?->toHtml() ?? e('—') !!}
             </p>
         </div>
         <div class="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 dark:border-amber-500/30 dark:bg-amber-950/20">
@@ -27,7 +27,7 @@
                 {{ __('Drift') }}
             </p>
             <p class="mt-1 font-semibold tabular-nums text-amber-900 dark:text-amber-100">
-                {{ MoneyDisplay::format((float) $diagnostics['drift']) ?? '—' }}
+                {!! MoneyDisplay::html((float) $diagnostics['drift'])?->toHtml() ?? e('—') !!}
             </p>
         </div>
     </div>
@@ -54,7 +54,7 @@
                                 <td class="px-3 py-2 text-gray-800 dark:text-gray-200">{{ $line['label'] }}</td>
                                 <td class="px-3 py-2 text-end font-mono text-gray-500">{{ $line['sign'] }}</td>
                                 <td class="px-3 py-2 text-end font-semibold tabular-nums text-gray-900 dark:text-white">
-                                    {{ MoneyDisplay::format((float) $line['amount']) ?? '—' }}
+                                    {!! MoneyDisplay::html((float) $line['amount'])?->toHtml() ?? e('—') !!}
                                 </td>
                             </tr>
                         @endforeach
@@ -62,7 +62,7 @@
                             <td class="px-3 py-2 text-gray-900 dark:text-white">{{ __('= Expected') }}</td>
                             <td class="px-3 py-2 text-end font-mono">=</td>
                             <td class="px-3 py-2 text-end tabular-nums text-gray-900 dark:text-white">
-                                {{ MoneyDisplay::format((float) $diagnostics['expected']) ?? '—' }}
+                                {!! MoneyDisplay::html((float) $diagnostics['expected'])?->toHtml() ?? e('—') !!}
                             </td>
                         </tr>
                     </tbody>
@@ -82,7 +82,7 @@
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <span class="font-medium text-violet-900 dark:text-violet-100">{{ $flow['label'] }}</span>
                             <span class="font-semibold tabular-nums text-violet-900 dark:text-violet-100">
-                                {{ $flow['sign'] }} {{ MoneyDisplay::format((float) $flow['amount']) ?? '—' }}
+                                {{ $flow['sign'] }} {!! MoneyDisplay::html((float) $flow['amount'])?->toHtml() ?? e('—') !!}
                             </span>
                         </div>
                         <p class="mt-1 text-xs text-violet-800/90 dark:text-violet-200/90">{{ $flow['detail'] }}</p>
@@ -90,12 +90,12 @@
                 @endforeach
             </div>
             <p class="mt-2 text-xs text-gray-600 dark:text-gray-300">
-                {{ __('Adjusted expected (formula + uncounted legs): :amount', [
-                    'amount' => MoneyDisplay::format((float) $diagnostics['adjusted_expected']) ?? '—',
-                ]) }}
-                · {{ __('Adjusted drift: :amount', [
-                    'amount' => MoneyDisplay::format((float) $diagnostics['adjusted_drift']) ?? '—',
-                ]) }}
+                {!! __('Adjusted expected (formula + uncounted legs): :amount', [
+                    'amount' => MoneyDisplay::html((float) $diagnostics['adjusted_expected'])?->toHtml() ?? e('—'),
+                ]) !!}
+                · {!! __('Adjusted drift: :amount', [
+                    'amount' => MoneyDisplay::html((float) $diagnostics['adjusted_drift'])?->toHtml() ?? e('—'),
+                ]) !!}
             </p>
         </div>
     @endif
@@ -124,7 +124,7 @@
                                 <td class="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">{{ $txn['date'] }}</td>
                                 <td class="px-3 py-2 capitalize text-gray-700 dark:text-gray-300">{{ $txn['type'] }}</td>
                                 <td class="px-3 py-2 text-end font-semibold tabular-nums text-gray-900 dark:text-white">
-                                    {{ MoneyDisplay::format((float) $txn['amount']) ?? '—' }}
+                                    {!! MoneyDisplay::html((float) $txn['amount'])?->toHtml() ?? e('—') !!}
                                 </td>
                                 <td class="px-3 py-2 text-gray-600 dark:text-gray-400">{{ $txn['category'] }}</td>
                                 <td class="max-w-xs truncate px-3 py-2 text-gray-600 dark:text-gray-400" title="{{ $txn['description'] }}">
@@ -151,10 +151,10 @@
         <p class="mt-1 text-sm text-gray-900 dark:text-white">{{ $correction['summary'] ?? '—' }}</p>
         @if (($correction['action'] ?? '') === 'post_correction')
             <p class="mt-2 text-xs font-semibold text-sky-800 dark:text-sky-200">
-                {{ __('Use “Post cash correction” with direction :direction and amount :amount.', [
-                    'direction' => $correction['direction'] === 'credit' ? __('Credit member cash') : __('Debit member cash'),
-                    'amount' => MoneyDisplay::format((float) ($correction['amount'] ?? 0)) ?? '—',
-                ]) }}
+                {!! __('Use “Post cash correction” with direction :direction and amount :amount.', [
+                    'direction' => e($correction['direction'] === 'credit' ? __('Credit member cash') : __('Debit member cash')),
+                    'amount' => MoneyDisplay::html((float) ($correction['amount'] ?? 0))?->toHtml() ?? e('—'),
+                ]) !!}
             </p>
         @endif
         @if (filled($correction['caution'] ?? null))

@@ -7,6 +7,7 @@ namespace App\Filament\Tenant\Resources\InboundPayments\Tables;
 use App\Filament\Support\ActionModalFailure;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberTableColumns;
+use App\Filament\Support\MoneyDisplay;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -223,7 +224,7 @@ class InboundPaymentsTable
                 'columns' => 2,
                 'items' => [
                     ['label' => __('Payer'), 'value' => $record->payer_name],
-                    ['label' => __('Amount'), 'value' => number_format((float) $record->amount, 2).' '.$currency],
+                    ['label' => __('Amount'), 'value' => MoneyDisplay::format((float) $record->amount, $currency) ?? '—'],
                     ['label' => __('Reason'), 'value' => $record->reason],
                     ['label' => __('Member #'), 'value' => $record->member?->member_number ?? __('—')],
                     ['label' => __('IBAN'), 'value' => $record->payer_iban ?? __('—')],

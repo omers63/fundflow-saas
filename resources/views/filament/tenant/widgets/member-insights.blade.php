@@ -1,29 +1,29 @@
 @php
-    use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Resources\Members\MemberResource;
 
-    $d = $this->getData();
-    $pipeline = $d['pipeline'];
-    $currency = $d['fund']['currency'];
-    $hasArrears = ($d['delinquent'] ?? 0) > 0;
-    $hasInactive = ($d['inactive'] ?? 0) > 0;
-    $hero = $d['needs_attention'] > 0
-        ? [
-            'title' => __('Members need your attention'),
-            'subtitle' => collect([
-                $hasArrears ? trans_choice(':count with arrears|:count with arrears', $d['delinquent'], ['count' => $d['delinquent']]) : null,
-                $hasInactive ? trans_choice(':count inactive|:count inactive', $d['inactive'], ['count' => $d['inactive']]) : null,
-            ])->filter()->implode(' · '),
-            'tone' => 'amber',
-            'cta_url' => $hasArrears
-                ? ($pipeline['members_arrears_url'] ?? MemberResource::listTabUrl('delinquent'))
-                : ($pipeline['members_inactive_url'] ?? MemberResource::listTabUrl('inactive')),
-            'cta_label' => $hasArrears ? __('Review arrears') : __('Review inactive'),
-        ]
-        : [
-            'title' => __('Roster healthy'),
-            'subtitle' => __('No inactive members or arrears right now.'),
-            'tone' => 'success',
-        ];
+$d = $this->getData();
+$pipeline = $d['pipeline'];
+$currency = $d['fund']['currency'];
+$hasArrears = ($d['delinquent'] ?? 0) > 0;
+$hasInactive = ($d['inactive'] ?? 0) > 0;
+$hero = $d['needs_attention'] > 0
+    ? [
+        'title' => __('Members need your attention'),
+        'subtitle' => collect([
+            $hasArrears ? trans_choice(':count with arrears|:count with arrears', $d['delinquent'], ['count' => $d['delinquent']]) : null,
+            $hasInactive ? trans_choice(':count inactive|:count inactive', $d['inactive'], ['count' => $d['inactive']]) : null,
+        ])->filter()->implode(' · '),
+        'tone' => 'amber',
+        'cta_url' => $hasArrears
+            ? ($pipeline['members_arrears_url'] ?? MemberResource::listTabUrl('delinquent'))
+            : ($pipeline['members_inactive_url'] ?? MemberResource::listTabUrl('inactive')),
+        'cta_label' => $hasArrears ? __('Review arrears') : __('Review inactive'),
+    ]
+    : [
+        'title' => __('Roster healthy'),
+        'subtitle' => __('No inactive members or arrears right now.'),
+        'tone' => 'success',
+    ];
 @endphp
 
             <div class="ff-app-insights ff-members-list-insights w-full max-w-none space-y-2 mb-1">
@@ -120,12 +120,12 @@
                                         </p>
                                     </div>
                                     <span @class([
-                                        'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                                        'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' => $member['status_key'] === 'active' && !($member['has_arrears'] ?? false),
-                                        'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $member['status_key'] === 'active' && ($member['has_arrears'] ?? false),
-                                        'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200' => $member['status_key'] === 'inactive',
-                                        'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200' => $member['status_key'] === 'withdrawn',
-                                    ])>{{ $member['status'] }}</span>
+        'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+        'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' => $member['status_key'] === 'active' && !($member['has_arrears'] ?? false),
+        'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $member['status_key'] === 'active' && ($member['has_arrears'] ?? false),
+        'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200' => $member['status_key'] === 'inactive',
+        'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200' => $member['status_key'] === 'withdrawn',
+    ])>{{ $member['status'] }}</span>
                                 </a>
                             @empty
                                 <div class="px-3 py-6 text-center">
@@ -136,4 +136,14 @@
                         </div>
                     </div>
                 </div>
-            </div>
+@if (method_exists($this, 'isSectionUnfolded'))
+    <x-ff-lazy-fold section="value_chart_concentration" :unfolded="$this->isSectionUnfolded('value_chart_concentration')"
+        :title="__('Value chart · Exposure concentration')" :hint="__('Expand to load top borrower balances and guarantor risk (cached).')">
+        @if ($this->isSectionUnfolded('value_chart_concentration'))
+            @include('filament.partials.insights.value-chart', [
+                'chart' => app(\App\Services\ValueChartsService::class)->concentrationExposure(),
+            ])
+        @endif
+    </x-ff-lazy-fold>
+@endif
+</div>

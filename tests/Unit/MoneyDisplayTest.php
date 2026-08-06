@@ -272,3 +272,30 @@ it('renders pdf amounts with sar code in english', function (): void {
         ->toContain('1,500.00')
         ->not->toContain('currency-symbol');
 });
+
+it('upgrades plain SAR format strings to svg markup in arabic html', function (): void {
+    app()->setLocale('ar');
+
+    $plain = MoneyDisplay::format(1500, 'SAR');
+    $html = MoneyDisplay::markupForDisplay($plain, 'SAR');
+
+    expect($plain)->toContain('SAR')
+        ->and($plain)->not->toContain("\u{20C1}")
+        ->and($html)->toContain('ff-sar-symbol--svg')
+        ->and($html)->toContain('ff-sar-symbol__img')
+        ->and($html)->toContain('1,500.00');
+});
+
+it('upgrades middle segments of hero-style subtitles with money in arabic', function (): void {
+    app()->setLocale('ar');
+
+    $subtitle = '3 pending · ' . MoneyDisplay::format(2500, 'SAR', precision: 0) . ' · 1 late';
+    $html = MoneyDisplay::markupForDisplay($subtitle);
+
+    expect($html)
+        ->toContain('3 pending')
+        ->toContain('ff-sar-symbol__img')
+        ->toContain('2,500')
+        ->toContain('1 late')
+        ->not->toContain("\u{20C1}");
+});

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Widgets;
 
+use App\Filament\Concerns\InteractsWithUnfoldedSections;
 use App\Services\MasterAccountsInsightsService;
 use Filament\Widgets\Widget;
 
 class MasterAccountsInsightsWidget extends Widget
 {
+    use InteractsWithUnfoldedSections;
+
     protected static bool $isDiscovered = false;
 
     protected static bool $isLazy = false;

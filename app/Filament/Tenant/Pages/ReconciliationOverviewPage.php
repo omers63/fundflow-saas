@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Pages;
 
+use App\Filament\Concerns\InteractsWithUnfoldedSections;
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Pages\Page;
 use App\Filament\Support\MoneyDisplay;
@@ -42,6 +43,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
 {
     use EmbedsAsAuditWorkspacePanel;
     use InteractsWithTable;
+    use InteractsWithUnfoldedSections;
     use TranslatesPageNavigationLabel;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedScale;

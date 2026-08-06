@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\MemberCashTransferRequests\Schemas;
 
 use App\Filament\Support\MemberSelect;
+use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\MemberCashTransferService;
@@ -51,7 +52,9 @@ class MemberCashTransferRequestForm
                                 $member = Member::query()->find($memberId);
                                 $available = $member !== null ? $service->availableCashForTransfer($member) : 0.0;
 
-                                return new HtmlString(e(number_format($available, 2).' '.$currency));
+                                return new HtmlString(
+                                    MoneyDisplay::html($available, $currency)?->toHtml() ?? e('—')
+                                );
                             })
                             ->columnSpanFull(),
                         TextInput::make('amount')

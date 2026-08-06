@@ -339,24 +339,24 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                         </div>
                         <div class="relative flex h-full items-end gap-px px-0.5 py-1">
                             @php
-            $sparkHeights = $pool['sparkline_heights'] ?? null;
-            $chartPx = 56; // matches h-14; sm bumps via min height on bars still look fine
+        $sparkHeights = $pool['sparkline_heights'] ?? null;
+        $chartPx = 56; // matches h-14; sm bumps via min height on bars still look fine
                             @endphp
                             @foreach ($pool['sparkline'] as $index => $point)
                                 @php
-                $pct = is_array($sparkHeights) && isset($sparkHeights[$index])
-                    ? (float) $sparkHeights[$index]
-                    : 42.0;
-                $pct = max(0.0, min(100.0, $pct));
-                // Pixel heights avoid flex % collapse (empty div + height:% often paints 0px).
-                $px = max(4, (int) round(($pct / 100) * $chartPx));
+            $pct = is_array($sparkHeights) && isset($sparkHeights[$index])
+                ? (float) $sparkHeights[$index]
+                : 42.0;
+            $pct = max(0.0, min(100.0, $pct));
+            // Pixel heights avoid flex % collapse (empty div + height:% often paints 0px).
+            $px = max(4, (int) round(($pct / 100) * $chartPx));
                                 @endphp
                                 <div
                                     @class([
-                    'min-w-0 flex-1 rounded-sm',
-                    'bg-red-500 dark:bg-red-400' => ($pool['has_drift'] ?? false),
-                    'bg-sky-500 dark:bg-sky-400' => !($pool['has_drift'] ?? false),
-                ])
+                'min-w-0 flex-1 rounded-sm',
+                'bg-red-500 dark:bg-red-400' => ($pool['has_drift'] ?? false),
+                'bg-sky-500 dark:bg-sky-400' => !($pool['has_drift'] ?? false),
+            ])
                                     style="height: {{ $px }}px"
                                     title="{{ \App\Support\Insights\InsightFormatter::money($point) }}"
                                 ></div>
@@ -730,6 +730,17 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
 
 
 @endif
+    </x-ff-lazy-fold>
+
+    <x-ff-lazy-fold section="value_charts" :unfolded="$this->isSectionUnfolded('value_charts')" :title="__('Value charts · Pool & treasury')" :hint="__('Expand to load liquidity stack and treasury runway (cached separately).')"
+        class="mt-3">
+        @if ($this->isSectionUnfolded('value_charts'))
+        @php($valueCharts = app(\App\Services\ValueChartsService::class)->dashboardBundle())
+        <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            @include('filament.partials.insights.value-chart', ['chart' => $valueCharts['liquidity']])
+            @include('filament.partials.insights.value-chart', ['chart' => $valueCharts['treasury']])
+        </div>
+        @endif
     </x-ff-lazy-fold>
 
     {{-- ── Row 5: Workspace quick-access links ── --}}

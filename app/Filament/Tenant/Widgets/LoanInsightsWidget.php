@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Widgets;
 
+use App\Filament\Concerns\InteractsWithUnfoldedSections;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Models\Tenant\Loan;
 use App\Services\LoanInsightsService;
@@ -13,6 +14,8 @@ use Livewire\Attributes\On;
 
 class LoanInsightsWidget extends Widget
 {
+    use InteractsWithUnfoldedSections;
+
     protected static bool $isDiscovered = false;
 
     protected static bool $isLazy = true;
