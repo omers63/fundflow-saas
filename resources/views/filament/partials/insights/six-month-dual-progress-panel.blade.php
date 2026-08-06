@@ -12,21 +12,21 @@
 <div
     class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
     <div @class([
-        'flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-700',
-        'px-3 py-2' => ! $compact,
-        'px-3 py-1.5' => $compact,
-    ])>
+    'flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-700',
+    'px-3 py-2' => !$compact,
+    'px-3 py-1.5' => $compact,
+])>
         <div class="flex items-center gap-1.5">
             <x-dynamic-component :component="$icon" @class([
-                'text-indigo-500',
-                'h-4 w-4' => ! $compact,
-                'h-3.5 w-3.5' => $compact,
-            ]) />
+    'text-indigo-500',
+    'h-4 w-4' => !$compact,
+    'h-3.5 w-3.5' => $compact,
+]) />
             <h4 @class([
-                'font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400',
-                'text-[11px]' => ! $compact,
-                'text-[10px]' => $compact,
-            ])>{{ $title }}</h4>
+    'font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400',
+    'text-[11px]' => !$compact,
+    'text-[10px]' => $compact,
+])>{{ $title }}</h4>
         </div>
         <div class="flex flex-wrap items-center gap-2">
             @if ($headerStat)
@@ -46,16 +46,16 @@
         </div>
     </div>
     <div @class([
-        'px-3 py-2.5' => ! $compact,
-        'px-2.5 py-2' => $compact,
-    ])>
-        <ul class="grid grid-cols-2 gap-x-3 gap-y-2.5">
+    'px-3 py-2.5' => !$compact,
+    'px-2.5 py-2' => $compact,
+])>
+        <ul class="grid grid-cols-2 gap-x-3 gap-y-2.5" dir="ltr">
             @foreach ($trend as $month)
                 @include('filament.partials.insights.dual-progress-trend-row', [
-                    'month' => $month,
-                    'primaryLabel' => $primaryLabel,
-                    'secondaryLabel' => $secondaryLabel,
-                ])
+        'month' => $month,
+        'primaryLabel' => $primaryLabel,
+        'secondaryLabel' => $secondaryLabel,
+    ])
             @endforeach
         </ul>
     </div>

@@ -67,16 +67,16 @@ $kpis = [
                     class="grid min-w-0 grid-cols-1 gap-2 divide-x divide-gray-100 dark:divide-gray-700 sm:grid-cols-2 lg:grid-cols-3">
                     @foreach ($kpis as $i => $card)
                         @php
-                            $barClass = $accentBar[$card['accent']] ?? 'bg-gray-400';
-                            $iconClass = $accentIcon[$card['accent']] ?? 'text-gray-400';
-                            $barOpacity = $card['active'] ? 'opacity-100' : 'opacity-25';
+        $barClass = $accentBar[$card['accent']] ?? 'bg-gray-400';
+        $iconClass = $accentIcon[$card['accent']] ?? 'text-gray-400';
+        $barOpacity = $card['active'] ? 'opacity-100' : 'opacity-25';
                         @endphp
                         @php
-                            $labelText = ui_label($card['label']);
-                            $subText = ui_label($card['sub']);
-                            $valueText = isset($card['amount'])
-                                ? (MoneyDisplay::format($card['amount'], $currency, precision: $card['precision'] ?? 2) ?? '—')
-                                : (string) ($card['value'] ?? '—');
+        $labelText = ui_label($card['label']);
+        $subText = ui_label($card['sub']);
+        $valueText = isset($card['amount'])
+            ? (MoneyDisplay::format($card['amount'], $currency, precision: $card['precision'] ?? 2) ?? '—')
+            : (string) ($card['value'] ?? '—');
                         @endphp
                         <div class="ff-app-insights-kpi ff-member-stat-card relative min-w-0 px-2.5 py-2 transition"
                             data-accent="{{ $card['accent'] }}"
@@ -99,66 +99,66 @@ $kpis = [
                     @endforeach
                 </div>
                 @if (collect($d['sparkline'])->sum() > 0)
-                    <div class="flex h-5 items-end gap-px border-t border-gray-100 px-2 py-1 dark:border-gray-700">
+                    <div class="flex h-5 items-end gap-px border-t border-gray-100 px-2 py-1 dark:border-gray-700" dir="ltr">
                         @foreach ($d['sparkline'] as $point)
                             @php $h = max(20, (int) round(($point / $sparkMax) * 100)); @endphp
                             <div class="flex-1 rounded-sm bg-violet-400/70 dark:bg-violet-500/60" style="height: {{ $h }}%"></div>
                         @endforeach
                     </div>
                 @endif
-            </div>
-        </div>
+                    </div>
+                    </div>
 
-        @if (count($d['trend']) > 0)
-            <div
-                class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                <div
-                    class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-700">
-                    <div class="flex items-center gap-1.5">
-                        <x-heroicon-o-chart-bar class="h-4 w-4 text-indigo-500" />
-                        <h4 class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                            {{ __('Statement history') }}
-                        </h4>
-                    </div>
-                    <div class="flex flex-wrap gap-3 text-[10px] text-gray-500">
-                        <span class="flex items-center gap-1"><span
-                                class="h-2 w-2 rounded-sm bg-emerald-500"></span>{{ __('Contributions') }}</span>
-                        <span class="flex items-center gap-1"><span
-                                class="h-2 w-2 rounded-sm bg-rose-500"></span>{{ __('Repayments') }}</span>
-                    </div>
-                </div>
-                <div class="px-3 py-3">
-                    <div class="flex h-20 items-end gap-1.5 sm:gap-2">
-                        @foreach ($d['trend'] as $month)
-                            @php
-            $stackTotal = max(1, $month['contributions'] + $month['repayments']);
-            $contribH = round(($month['contributions'] / $stackTotal) * 100);
-            $repayH = round(($month['repayments'] / $stackTotal) * 100);
-            $barH = max(12, (int) round(($month['closing'] / $maxTrend) * 100));
-                            @endphp
-                            <div class="flex flex-1 flex-col items-center gap-0.5">
-                                <span class="text-[10px] font-semibold tabular-nums text-gray-500">
-                                    <x-member::amount :value="$month['closing']" :currency="$currency" :precision="0"
-                                        class="inline text-[10px]" />
-                                </span>
-                                <div class="flex w-full max-w-[2.25rem] flex-col justify-end overflow-hidden rounded-t-md ring-1 ring-gray-200/60 dark:ring-gray-600"
-                                    style="height: {{ $barH }}%">
-                                    @if ($month['contributions'] > 0)
-                                        <div class="w-full bg-emerald-500" style="height: {{ max(3, $contribH) }}%"></div>
-                                    @endif
-                                    @if ($month['repayments'] > 0)
-                                        <div class="w-full bg-rose-500" style="height: {{ max(3, $repayH) }}%"></div>
-                                    @endif
-                                    @if ($month['contributions'] + $month['repayments'] <= 0)
-                                        <div class="h-0.5 w-full bg-gray-200 dark:bg-gray-600"></div>
-                                    @endif
+                    @if (count($d['trend']) > 0)
+                                <div
+                                    class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                                    <div
+                                        class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-700">
+                                        <div class="flex items-center gap-1.5">
+                                            <x-heroicon-o-chart-bar class="h-4 w-4 text-indigo-500" />
+                                            <h4 class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                                                {{ __('Statement history') }}
+                                            </h4>
+                                        </div>
+                                        <div class="flex flex-wrap gap-3 text-[10px] text-gray-500">
+                                            <span class="flex items-center gap-1"><span
+                                                    class="h-2 w-2 rounded-sm bg-emerald-500"></span>{{ __('Contributions') }}</span>
+                                            <span class="flex items-center gap-1"><span
+                                                    class="h-2 w-2 rounded-sm bg-rose-500"></span>{{ __('Repayments') }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="px-3 py-3">
+                                        <div class="flex h-20 items-end gap-1.5 sm:gap-2" dir="ltr">
+                                    @foreach ($d['trend'] as $month)
+                                        @php
+                        $stackTotal = max(1, $month['contributions'] + $month['repayments']);
+                        $contribH = round(($month['contributions'] / $stackTotal) * 100);
+                        $repayH = round(($month['repayments'] / $stackTotal) * 100);
+                        $barH = max(12, (int) round(($month['closing'] / $maxTrend) * 100));
+                                        @endphp
+                                        <div class="flex flex-1 flex-col items-center gap-0.5">
+                                            <span class="text-[10px] font-semibold tabular-nums text-gray-500">
+                                                <x-member::amount :value="$month['closing']" :currency="$currency" :precision="0"
+                                                    class="inline text-[10px]" />
+                                            </span>
+                                            <div class="flex w-full max-w-[2.25rem] flex-col justify-end overflow-hidden rounded-t-md ring-1 ring-gray-200/60 dark:ring-gray-600"
+                                                style="height: {{ $barH }}%">
+                                                @if ($month['contributions'] > 0)
+                                                    <div class="w-full bg-emerald-500" style="height: {{ max(3, $contribH) }}%"></div>
+                                                @endif
+                                                @if ($month['repayments'] > 0)
+                                                    <div class="w-full bg-rose-500" style="height: {{ max(3, $repayH) }}%"></div>
+                                                @endif
+                                                @if ($month['contributions'] + $month['repayments'] <= 0)
+                                                    <div class="h-0.5 w-full bg-gray-200 dark:bg-gray-600"></div>
+                                                @endif
+                                            </div>
+                                            <span class="text-[10px] text-gray-400">{{ $month['label'] }}</span>
+                                        </div>
+                                    @endforeach
                                 </div>
-                                <span class="text-[10px] text-gray-400">{{ $month['label'] }}</span>
                             </div>
-                        @endforeach
-                    </div>
-                </div>
-            </div>
-        @endif
+                        </div>
+                    @endif
     </div>
 @endif

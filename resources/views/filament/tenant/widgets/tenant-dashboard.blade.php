@@ -196,11 +196,11 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                                         <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                                             {{ $card['label'] }}</p>
                                         <span @class([
-                        'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase',
-                        'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' => ($card['tone'] ?? '') === 'danger',
-                        'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' => ($card['tone'] ?? '') === 'warning',
-                        'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' => !in_array(($card['tone'] ?? ''), ['danger', 'warning'], true),
-                    ])>{{ $card['secondary'] }}</span>
+            'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase',
+            'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' => ($card['tone'] ?? '') === 'danger',
+            'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' => ($card['tone'] ?? '') === 'warning',
+            'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' => !in_array(($card['tone'] ?? ''), ['danger', 'warning'], true),
+        ])>{{ $card['secondary'] }}</span>
                                     </div>
                                     <p class="mt-2 text-lg font-bold tabular-nums text-gray-900 dark:text-white">
                                         {!! \App\Filament\Support\MoneyDisplay::markupForDisplay($card['primary']) !!}</p>
@@ -321,49 +321,49 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
             </div>
         </div>
         @if (!empty($pool['sparkline']))
-            <div class="border-t border-gray-100 px-4 py-3 dark:border-gray-700">
-                <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                        {{ __('30-day pool trend') }}
-                    </p>
-                    <p class="text-[10px] tabular-nums text-gray-500 dark:text-gray-400">
-                        {{ \App\Support\Insights\InsightFormatter::compactAmount($pool['sparkline_start'] ?? 0) }}
-                        →
-                        {{ \App\Support\Insights\InsightFormatter::compactAmount($pool['sparkline_end'] ?? ($pool['pool_total'] ?? 0)) }}
-                    </p>
-                </div>
-                <div class="relative h-14 sm:h-16">
-                    {{-- Track so empty-ish series still read as a chart --}}
-                    <div
-                        class="pointer-events-none absolute inset-0 rounded-md bg-gray-50/90 ring-1 ring-inset ring-gray-100 dark:bg-gray-800/40 dark:ring-gray-700/80">
-                    </div>
-                    <div class="relative flex h-full items-end gap-px px-0.5 py-1">
-                        @php
-        $sparkHeights = $pool['sparkline_heights'] ?? null;
-        $chartPx = 56; // matches h-14; sm bumps via min height on bars still look fine
-                        @endphp
-                        @foreach ($pool['sparkline'] as $index => $point)
+                <div class="border-t border-gray-100 px-4 py-3 dark:border-gray-700">
+                    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                            {{ __('30-day pool trend') }}
+                        </p>
+                        <p class="text-[10px] tabular-nums text-gray-500 dark:text-gray-400" dir="ltr">
+                            {{ \App\Support\Insights\InsightFormatter::compactAmount($pool['sparkline_start'] ?? 0) }}
+                            →
+                            {{ \App\Support\Insights\InsightFormatter::compactAmount($pool['sparkline_end'] ?? ($pool['pool_total'] ?? 0)) }}
+                        </p>
+                        </div>
+                        <div class="relative h-14 sm:h-16" dir="ltr">
+                        {{-- Track so empty-ish series still read as a chart --}}
+                        <div
+                            class="pointer-events-none absolute inset-0 rounded-md bg-gray-50/90 ring-1 ring-inset ring-gray-100 dark:bg-gray-800/40 dark:ring-gray-700/80">
+                        </div>
+                        <div class="relative flex h-full items-end gap-px px-0.5 py-1">
                             @php
-            $pct = is_array($sparkHeights) && isset($sparkHeights[$index])
-                ? (float) $sparkHeights[$index]
-                : 42.0;
-            $pct = max(0.0, min(100.0, $pct));
-            // Pixel heights avoid flex % collapse (empty div + height:% often paints 0px).
-            $px = max(4, (int) round(($pct / 100) * $chartPx));
+            $sparkHeights = $pool['sparkline_heights'] ?? null;
+            $chartPx = 56; // matches h-14; sm bumps via min height on bars still look fine
                             @endphp
-                            <div
-                                @class([
-                'min-w-0 flex-1 rounded-sm',
-                'bg-red-500 dark:bg-red-400' => ($pool['has_drift'] ?? false),
-                'bg-sky-500 dark:bg-sky-400' => !($pool['has_drift'] ?? false),
-            ])
-                                style="height: {{ $px }}px"
-                                title="{{ \App\Support\Insights\InsightFormatter::money($point) }}"
-                            ></div>
-                        @endforeach
+                            @foreach ($pool['sparkline'] as $index => $point)
+                                @php
+                $pct = is_array($sparkHeights) && isset($sparkHeights[$index])
+                    ? (float) $sparkHeights[$index]
+                    : 42.0;
+                $pct = max(0.0, min(100.0, $pct));
+                // Pixel heights avoid flex % collapse (empty div + height:% often paints 0px).
+                $px = max(4, (int) round(($pct / 100) * $chartPx));
+                                @endphp
+                                <div
+                                    @class([
+                    'min-w-0 flex-1 rounded-sm',
+                    'bg-red-500 dark:bg-red-400' => ($pool['has_drift'] ?? false),
+                    'bg-sky-500 dark:bg-sky-400' => !($pool['has_drift'] ?? false),
+                ])
+                                    style="height: {{ $px }}px"
+                                    title="{{ \App\Support\Insights\InsightFormatter::money($point) }}"
+                                ></div>
+                            @endforeach
+                        </div>
                     </div>
                 </div>
-            </div>
         @endif
         @include('filament.tenant.widgets.partials.pool-flow-trend', ['pool' => $pool])
     </div>

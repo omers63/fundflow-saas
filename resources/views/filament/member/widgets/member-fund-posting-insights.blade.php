@@ -34,11 +34,11 @@ $sparkMax = max(1, max($d['sparkline'] ?? [1]));
                 class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 lg:col-span-2">
                 <div class="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-700 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
                     @foreach ([
-                            ['label' => __('Total'), 'value' => $d['total'], 'accent' => 'sky'],
-                            ['label' => __('Pending'), 'value' => $d['pending'], 'accent' => 'amber'],
-                            ['label' => __('Accepted'), 'value' => $d['accepted'], 'accent' => 'emerald'],
-                            ['label' => __('Rejected'), 'value' => $d['rejected'], 'accent' => 'rose'],
-                        ] as $card)
+        ['label' => __('Total'), 'value' => $d['total'], 'accent' => 'sky'],
+        ['label' => __('Pending'), 'value' => $d['pending'], 'accent' => 'amber'],
+        ['label' => __('Accepted'), 'value' => $d['accepted'], 'accent' => 'emerald'],
+        ['label' => __('Rejected'), 'value' => $d['rejected'], 'accent' => 'rose'],
+    ] as $card)
                         <div class="ff-app-insights-kpi ff-member-stat-card min-w-0 px-3 py-2.5 text-center"
                             data-accent="{{ $card['accent'] }}">
                             <x-ff-stat-line :text="(string) $card['value']"
@@ -50,7 +50,7 @@ $sparkMax = max(1, max($d['sparkline'] ?? [1]));
                 </div>
                 <div class="border-t border-gray-100 px-3 py-2 dark:border-gray-700">
                     <p class="mb-1 text-[10px] font-medium uppercase tracking-wide text-gray-400">{{ __('Last 6 months') }}</p>
-                    <div class="flex h-8 items-end gap-1">
+                    <div class="flex h-8 items-end gap-1" dir="ltr">
                         @foreach ($d['sparkline'] as $point)
                             <div class="flex-1 rounded-t bg-emerald-500/80 dark:bg-emerald-400/70"
                                 style="height: {{ max(8, (int) round(($point / $sparkMax) * 100)) }}%"></div>

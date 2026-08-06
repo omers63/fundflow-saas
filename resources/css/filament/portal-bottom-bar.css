@@ -44,8 +44,10 @@
     position: fixed;
     inset-inline: 0;
     bottom: 0;
-    z-index: 50;
+    /* Above page chrome and fixed status banners (those sit higher via `bottom`). */
+    z-index: 60;
     height: var(--ff-portal-bottom-bar-height, 2rem);
+    min-height: 1.75rem;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -54,6 +56,8 @@
     border-block-start: 1px solid var(--ff-border, #e5e7eb);
     box-shadow: none;
     pointer-events: auto;
+    /* Keep above OS home indicators when present. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Opaque mask so scrolled page shadows cannot show through the bar */
@@ -189,10 +193,13 @@
     background: var(--ff-surface, #ffffff);
 }
 
-/* Status banners sit above the persistent bottom bar */
+/* Status banners sit above the persistent bottom bar (never cover fund/date). */
 .ff-status-footer-banners {
-    bottom: var(--ff-portal-bottom-bar-height, 2rem);
-    z-index: 51;
+    bottom: calc(
+        var(--ff-portal-bottom-bar-height, 2rem)
+        + env(safe-area-inset-bottom, 0px)
+    );
+    z-index: 55;
 }
 
 .fi-body:has(.ff-status-footer-banners) {

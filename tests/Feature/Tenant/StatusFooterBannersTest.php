@@ -7,6 +7,8 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\Tenant\ImpersonationService;
+use App\Support\BusinessDay;
+use App\Support\PublicPageSettings;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -23,8 +25,36 @@ beforeEach(function () {
     }
 });
 
+test('admin portal sticky bottom bar shows fund name and date without business day override', function () {
+    PublicPageSettings::save([
+        'fund_name_en' => 'Samman Family Fund',
+        'fund_name_ar' => 'صندوق السمان',
+    ]);
+
+    $admin = User::create([
+        'name' => 'Bottom Bar Admin',
+        'email' => 'bottom-bar-admin@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $this->actingAs($admin, 'tenant');
+
+    $this->get('http://'.$this->domain.'/admin')
+        ->assertSuccessful()
+        ->assertSee('ff-portal-bottom-bar', false)
+        ->assertSee('ff-portal-bottom-bar__fund', false)
+        ->assertSee('ff-portal-bottom-bar__date', false)
+        ->assertSee('Samman Family Fund', false)
+        ->assertSee(__('Admin portal'), false)
+        ->assertSee(BusinessDay::today()->toFormattedDateString(), false)
+        ->assertDontSee('ff-status-footer-banner--business-day', false);
+});
+
 test('business day override renders flashing footer banner on tenant panel', function () {
     Setting::set('general', 'business_day', '2026-03-15');
+    Setting::set('general', 'business_day_banner_admin', '1');
 
     $admin = User::create([
         'name' => 'Banner Admin',
@@ -43,7 +73,12 @@ test('business day override renders flashing footer banner on tenant panel', fun
         ->assertSee(__('Admin portal'), false);
 });
 
-test('member portal renders themed bottom bar chrome', function () {
+test('member portal renders themed bottom bar chrome without business day override', function () {
+    PublicPageSettings::save([
+        'fund_name_en' => 'Samman Family Fund',
+        'fund_name_ar' => 'صندوق السمان',
+    ]);
+
     $member = Member::create([
         'member_number' => 'MEM-BOT'.uniqid(),
         'name' => 'Bottom Bar Member',
@@ -68,7 +103,12 @@ test('member portal renders themed bottom bar chrome', function () {
     $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
         ->assertSee('ff-portal-bottom-bar', false)
-        ->assertSee(__('Member portal'), false);
+        ->assertSee('ff-portal-bottom-bar__fund', false)
+        ->assertSee('ff-portal-bottom-bar__date', false)
+        ->assertSee(PublicPageSettings::fundName(), false)
+        ->assertSee(__('Member portal'), false)
+        ->assertSee(BusinessDay::today()->toFormattedDateString(), false)
+        ->assertDontSee('ff-status-footer-banner--business-day', false);
 });
 
 test('business day banner can be disabled on admin portal while override stays active', function () {
@@ -88,6 +128,7 @@ test('business day banner can be disabled on admin portal while override stays a
 
     $this->get('http://'.$this->domain.'/admin')
         ->assertSuccessful()
+        ->assertSee('ff-portal-bottom-bar', false)
         ->assertDontSee('ff-status-footer-banner--business-day', false);
 });
 
@@ -119,6 +160,7 @@ test('business day banner can be disabled on member portal while override stays 
 
     $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
+        ->assertSee('ff-portal-bottom-bar', false)
         ->assertDontSee('ff-status-footer-banner--business-day', false);
 });
 
@@ -166,6 +208,7 @@ test('impersonation renders footer banner with return action', function () {
 
     $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
+        ->assertSee('ff-portal-bottom-bar', false)
         ->assertSee('ff-status-footer-banner--impersonation', false)
         ->assertSee(__('Return to parent portal'), false);
 });
