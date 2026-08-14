@@ -268,4 +268,9 @@ return [
     '> :count months' => '> :count أشهر',
     ':min+ months' => ':min+ أشهر',
     ':min–:max months' => ':min–:max أشهر',
+
+    // Onboarding greeting once-only
+    'When on, catch-up at the time above sends the welcome only to members who have not received it yet. A member is never greeted twice.' => 'عند التفعيل، يُرسل اللحاق في الوقت أعلاه الترحيب فقط للأعضاء الذين لم يستلموه بعد. لا يُرحَّب بالعضو مرتين.',
+    'Controls scheduled catch-up sends. Catch-up never re-sends to a member who already received the greeting.' => 'يتحكم في إرسال اللحاق المجدول. اللحاق لا يعيد الإرسال لعضو استلم الترحيب مسبقاً.',
+    'Email the welcome / PWA onboarding guide once to members who have not received it (join-time, post-migration, or catch-up)' => 'أرسل دليل الترحيب/PWA مرة واحدة للأعضاء الذين لم يستلموه (عند الانضمام أو بعد الترحيل أو كلحاق)',
 ];

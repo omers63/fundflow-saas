@@ -10,11 +10,13 @@ use App\Notifications\Tenant\MemberOnboardingGreetingNotification;
 use App\Services\AccountingService;
 use App\Services\Tenant\HouseholdMemberService;
 use App\Services\Tenant\MemberOnboardingGreetingService;
+use App\Support\AutomationScheduleSettings;
 use App\Support\NotificationTemplateCatalog;
 use App\Support\ScheduledJobRegistry;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -37,7 +39,8 @@ test('onboarding greeting is registered in the template catalog and job registry
     $keys = array_column(ScheduledJobRegistry::all(), 'key');
 
     expect($keys)->toContain('members:send-onboarding-greeting')
-        ->and(ScheduledJobRegistry::find('members:send-onboarding-greeting')['schedule'])->toBe(__('Manual'));
+        ->and(ScheduledJobRegistry::find('members:send-onboarding-greeting')['schedule'])
+        ->toBe(AutomationScheduleSettings::onboardingGreetingScheduleLabel());
 });
 
 test('onboarding greeting email uses fund name and member name variables', function (): void {
@@ -162,10 +165,79 @@ test('onboarding greeting command notifies active members', function (): void {
     ]);
     app(AccountingService::class)->createMemberAccounts($member);
 
-    $this->artisan(MembersSendOnboardingGreetingCommand::class)
+    $this->artisan(MembersSendOnboardingGreetingCommand::class, ['--force' => true])
         ->assertSuccessful();
 
     Notification::assertSentTo($user, MemberOnboardingGreetingNotification::class);
+        expect($member->fresh()->onboarding_greeting_sent_at)->not->toBeNull();
+    });
+
+    test('onboarding greeting is sent only once even when the catch-up job runs again', function (): void {
+        Notification::fake();
+
+        $user = User::create([
+            'name' => 'Once Welcome',
+            'email' => 'once-welcome@fund.test',
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+            'is_admin' => false,
+        ]);
+
+        $member = Member::create([
+            'user_id' => $user->id,
+            'member_number' => 'ONB-ONCE',
+            'name' => 'Once Welcome',
+            'email' => 'once-welcome@fund.test',
+            'monthly_contribution_amount' => 500,
+            'joined_at' => now()->subMonth(),
+            'status' => 'active',
+        ]);
+        app(AccountingService::class)->createMemberAccounts($member);
+
+        $service = app(MemberOnboardingGreetingService::class);
+
+        expect($service->sendToMember($member))->toBeTrue()
+            ->and($service->sendToMember($member))->toBeFalse();
+
+        $this->artisan(MembersSendOnboardingGreetingCommand::class, ['--force' => true])
+            ->assertSuccessful();
+
+        Notification::assertSentToTimes($user, MemberOnboardingGreetingNotification::class, 1);
+    });
+
+    test('onboarding greeting catch-up skips members who already have a database greeting', function (): void {
+        Notification::fake();
+
+        $user = User::create([
+            'name' => 'Legacy Greeting',
+            'email' => 'legacy-greeting@fund.test',
+            'password' => bcrypt('password'),
+            'email_verified_at' => now(),
+            'is_admin' => false,
+        ]);
+
+        $member = Member::create([
+            'user_id' => $user->id,
+            'member_number' => 'ONB-LEGACY',
+            'name' => 'Legacy Greeting',
+            'email' => 'legacy-greeting@fund.test',
+            'monthly_contribution_amount' => 500,
+            'joined_at' => now()->subMonth(),
+            'status' => 'active',
+            'onboarding_greeting_sent_at' => null,
+        ]);
+        app(AccountingService::class)->createMemberAccounts($member);
+
+        $user->notifications()->create([
+            'id' => (string) Str::uuid(),
+            'type' => MemberOnboardingGreetingNotification::class,
+            'data' => ['title' => 'Welcome'],
+        ]);
+
+        expect(app(MemberOnboardingGreetingService::class)->sendToMember($member))->toBeFalse();
+
+        Notification::assertNothingSentTo($user);
+        expect($member->fresh()->onboarding_greeting_sent_at)->not->toBeNull();
 });
 
 test('admin-created members receive the onboarding greeting by default', function (): void {

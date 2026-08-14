@@ -47,7 +47,7 @@ final class ScheduledJobRegistry
             self::job('delinquency:send-digest', __('Delinquency digest'), __('Email/database digest to admins (review links open Operations → Delinquency)'), AutomationScheduleSettings::delinquencyDigestScheduleLabel(), 'loans', false),
             self::job('fund:send-status-digest', __('Fund status digest'), __('Daily balances + operational queue counts + open issues digest for admin review'), AutomationScheduleSettings::fundStatusDigestScheduleLabel(), 'fund', false),
             self::job('announcements:dispatch-scheduled', __('Dispatch scheduled announcements'), __('Send bulk member announcements when their scheduled time arrives'), AutomationScheduleSettings::announcementsScheduleLabel(), 'messaging', false),
-            self::job('members:send-onboarding-greeting', __('Send onboarding greeting'), __('Email active members the welcome / PWA onboarding guide (use after legacy migration or as a catch-up)'), AutomationScheduleSettings::onboardingGreetingScheduleLabel(), 'messaging', false),
+            self::job('members:send-onboarding-greeting', __('Send onboarding greeting'), __('Email the welcome / PWA onboarding guide once to members who have not received it (join-time, post-migration, or catch-up)'), AutomationScheduleSettings::onboardingGreetingScheduleLabel(), 'messaging', false),
             self::job('queue:ensure-worker', __('Ensure queue worker'), __('Start queue:work when no worker process is detected (disabled when Supervisor manages the queue)'), __('Every minute when watchdog enabled'), 'system', false),
         ];
     }

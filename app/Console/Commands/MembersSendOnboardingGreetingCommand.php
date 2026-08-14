@@ -17,7 +17,7 @@ class MembersSendOnboardingGreetingCommand extends Command
         {--member= : Limit to a single member id}
         {--force : Run even when not in the configured onboarding greeting slot}';
 
-    protected $description = 'Send the member onboarding greeting email to active members (post-migration or catch-up)';
+    protected $description = 'Send the member onboarding greeting once to active members who have not received it (join-time, post-migration, or catch-up)';
 
     public function handle(MemberOnboardingGreetingService $greetings): int
     {

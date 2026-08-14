@@ -170,7 +170,7 @@ final class AutomationScheduleFormSchema
                         ->helperText(__('How often the dispatcher checks for due announcements. The scheduler still wakes every minute; this controls how often the job actually runs.')),
                     Toggle::make('automation_onboarding_greeting_enabled')
                         ->label(__('Enable scheduled onboarding greeting catch-up'))
-                        ->helperText(__('When on, sends the welcome/PWA greeting daily at the time above. Manual runs from Jobs still work.'))
+                        ->helperText(__('When on, catch-up at the time above sends the welcome only to members who have not received it yet. A member is never greeted twice.'))
                         ->default(false),
                 ]),
             Section::make(__('Fixed & manual jobs'))
@@ -214,7 +214,7 @@ final class AutomationScheduleFormSchema
                         ->default(true),
                     Toggle::make('automation_notify_onboarding_greeting')
                         ->label(__('Onboarding greeting notifications'))
-                        ->helperText(__('Controls scheduled catch-up sends. Manual Jobs runs with force still send.'))
+                        ->helperText(__('Controls scheduled catch-up sends. Catch-up never re-sends to a member who already received the greeting.'))
                         ->default(true),
                 ]),
         ];

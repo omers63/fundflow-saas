@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Services\Tenant;
 
 use App\Models\Tenant\Member;
+use App\Models\Tenant\User;
 use App\Notifications\Tenant\MemberOnboardingGreetingNotification;
+use App\Support\BusinessDay;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 final class MemberOnboardingGreetingService
@@ -53,8 +56,13 @@ final class MemberOnboardingGreetingService
             return false;
         }
 
+        if ($this->alreadySent($member, $user)) {
+            return false;
+        }
+
         try {
             $user->notify(new MemberOnboardingGreetingNotification($member, $plainPassword));
+                        $this->markSent($member);
 
             return true;
         } catch (Throwable $exception) {
@@ -65,5 +73,33 @@ final class MemberOnboardingGreetingService
 
             return false;
         }
+    }
+
+    private function alreadySent(Member $member, User $user): bool
+    {
+        if ($member->onboarding_greeting_sent_at !== null) {
+            return true;
+        }
+
+        if (!Schema::hasTable('notifications')) {
+            return false;
+        }
+
+        $exists = $user->notifications()
+            ->where('type', MemberOnboardingGreetingNotification::class)
+            ->exists();
+
+        if ($exists) {
+            $this->markSent($member);
+        }
+
+        return $exists;
+    }
+
+    private function markSent(Member $member): void
+    {
+        $member->forceFill([
+            'onboarding_greeting_sent_at' => BusinessDay::now(),
+        ])->save();
     }
 }
