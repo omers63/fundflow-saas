@@ -17,6 +17,7 @@ use App\Filament\Tenant\Resources\FundOutRequests\Schemas\FundOutRequestForm;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\MemberFundOutService;
+use App\Support\OperationalRequestStatus;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -98,11 +99,7 @@ class FundOutRequestsTable
                         ->placeholder(__('—')),
                     TextColumn::make('status')
                         ->badge()
-                        ->color(fn (string $state): string => match ($state) {
-                            'pending' => 'warning',
-                            'accepted' => 'success',
-                            'rejected' => 'danger',
-                        }),
+                        ->color(fn (string $state): string => OperationalRequestStatus::color($state)),
                     TextColumn::make('created_at')
                         ->label(__('Submitted'))
                         ->dateTime()
@@ -110,11 +107,7 @@ class FundOutRequestsTable
                 ])
                 ->filters([
                     SelectFilter::make('status')
-                        ->options([
-                            'pending' => __('Pending'),
-                            'accepted' => __('Accepted'),
-                            'rejected' => __('Rejected'),
-                        ]),
+                        ->options(OperationalRequestStatus::options()),
                     SelectFilter::make('member_id')
                         ->label(__('Member'))
                         ->relationship('member', 'name')

@@ -16,6 +16,7 @@ use App\Filament\Tenant\Resources\MemberCashTransferRequests\MemberCashTransferR
 use App\Models\Tenant\MemberCashTransferRequest;
 use App\Models\Tenant\Setting;
 use App\Services\MemberCashTransferService;
+use App\Support\OperationalRequestStatus;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
@@ -69,12 +70,7 @@ class MemberCashTransferRequestsTable
                         ->sortable(),
                     TextColumn::make('status')
                         ->badge()
-                        ->color(fn (string $state): string => match ($state) {
-                            'pending' => 'warning',
-                            'accepted' => 'success',
-                            'rejected' => 'danger',
-                            default => 'gray',
-                        }),
+                        ->color(fn (string $state): string => OperationalRequestStatus::color($state)),
                     TextColumn::make('created_at')
                         ->label(__('Submitted'))
                         ->dateTime()
@@ -82,11 +78,7 @@ class MemberCashTransferRequestsTable
                 ])
                 ->filters([
                     SelectFilter::make('status')
-                        ->options([
-                            'pending' => __('Pending'),
-                            'accepted' => __('Accepted'),
-                            'rejected' => __('Rejected'),
-                        ]),
+                        ->options(OperationalRequestStatus::options()),
                     SelectFilter::make('from_member_id')
                         ->label(__('From member'))
                         ->relationship('fromMember', 'name')

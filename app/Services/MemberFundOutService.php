@@ -146,6 +146,23 @@ final class MemberFundOutService
         });
     }
 
+    public function cancel(FundOutRequest $request, ?int $cancelledBy = null, ?string $remarks = null): void
+    {
+        if ($request->status !== 'pending') {
+            throw new InvalidArgumentException(__('Only pending fund-out requests can be cancelled.'));
+        }
+
+        DB::transaction(function () use ($request, $cancelledBy, $remarks): void {
+            $this->reviewWorkflow->markReviewed(
+                $request,
+                'cancelled',
+                $cancelledBy,
+                $remarks ?? __('Cancelled by member'),
+                BusinessDay::now(),
+            );
+        });
+    }
+
     private function pendingFundOutAmount(Member $member, ?FundOutRequest $excludeRequest = null): float
     {
         $pendingQuery = FundOutRequest::query()

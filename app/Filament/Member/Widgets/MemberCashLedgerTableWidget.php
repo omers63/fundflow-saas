@@ -38,7 +38,9 @@ class MemberCashLedgerTableWidget extends TableWidget
             return Transaction::query()->whereRaw('1 = 0');
         }
 
-        return Transaction::query()->where('account_id', $this->accountId);
+        return Transaction::query()
+            ->visibleToMember()
+            ->where('account_id', $this->accountId);
     }
 
     public function table(Table $table): Table

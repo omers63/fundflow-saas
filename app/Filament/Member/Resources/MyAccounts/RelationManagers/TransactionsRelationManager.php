@@ -16,6 +16,7 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class TransactionsRelationManager extends RelationManager
 {
@@ -28,6 +29,7 @@ class TransactionsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return ViewAccountTransactionAction::configure($table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->visibleToMember())
             ->recordTitleAttribute('description')
             ->columns([
                 TextColumn::make('transacted_at')

@@ -10,8 +10,12 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\MemberCashTransferRequest;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\FundPostingService;
+use App\Services\MemberCashTransferService;
+use App\Support\AutomationScheduleSettings;
 use App\Support\BusinessDay;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
@@ -128,4 +132,43 @@ test('member can submit a cash transfer from the list modal', function () {
     expect(MemberCashTransferRequest::query()->where('from_member_id', $this->member->id)->count())->toBe(1)
         ->and((float) MemberCashTransferRequest::query()->first()->amount)->toBe(200.0)
         ->and(MemberCashTransferRequest::query()->first()->status)->toBe('pending');
+});
+
+test('member can cancel a pending deposit from the list', function () {
+    Setting::set(AutomationScheduleSettings::GROUP, 'auto_accept_deposits', '0');
+
+    $posting = app(FundPostingService::class)->submit(
+        member: $this->member,
+        amount: 175,
+        postingDate: BusinessDay::today()->toDateString(),
+        reference: 'CANCEL-DEP',
+    );
+
+    Livewire::actingAs($this->memberUser, 'tenant')
+        ->test(ListMyFundPostings::class)
+        ->assertTableActionVisible('cancel', $posting)
+        ->callTableAction('cancel', $posting)
+        ->assertHasNoTableActionErrors();
+
+    expect($posting->fresh()->status)->toBe('cancelled');
+});
+
+test('member can cancel a pending cash transfer from the list', function () {
+    $request = app(MemberCashTransferService::class)->submit(
+        from: $this->member,
+        amount: 80,
+        recipientName: 'Modal Recipient',
+    );
+
+    Livewire::actingAs($this->recipientUser, 'tenant')
+        ->test(ListMyCashTransfers::class)
+        ->assertTableActionHidden('cancel', $request);
+
+    Livewire::actingAs($this->memberUser, 'tenant')
+        ->test(ListMyCashTransfers::class)
+        ->assertTableActionVisible('cancel', $request)
+        ->callTableAction('cancel', $request)
+        ->assertHasNoTableActionErrors();
+
+    expect($request->fresh()->status)->toBe('cancelled');
 });

@@ -322,17 +322,11 @@ class ReconciliationReportService
             $masterMatch = $masterDelta <= self::AMOUNT_TOLERANCE;
 
             // Diagnostics only: partial cycle posts keep status pending (not a ledger error).
-            $inFlightLedgerCredits = (float) Transaction::query()
-                ->where('account_id', $masterFund->id)
-                ->where('reference_type', $contribMorph)
-                ->where('type', 'credit')
+            $inFlightLedgerCredits = (float) $this->unreversedMasterFundContributionCredits($masterFund->id)
                 ->whereNotIn('reference_id', $postedContributionIdSubquery())
                 ->sum('amount');
 
-            $orphanCreditCount = (int) Transaction::query()
-                ->where('account_id', $masterFund->id)
-                ->where('reference_type', $contribMorph)
-                ->where('type', 'credit')
+            $orphanCreditCount = (int) $this->unreversedMasterFundContributionCredits($masterFund->id)
                 ->whereNotIn(
                     'reference_id',
                     Contribution::query()->whereNull('deleted_at')->select('id'),
@@ -1479,7 +1473,7 @@ class ReconciliationReportService
         if ($tx->membership_application_id !== null) {
             $issues = [];
 
-            if (!BankTransactionWorkflow::isSyntheticOperationalStatement($tx)) {
+            if (! BankTransactionWorkflow::isSyntheticOperationalStatement($tx)) {
                 $issues = [
                     ...$this->assertMatchedImportMasterBankLedger($tx, $expectedType, $expectedAmount),
                 ];
@@ -2013,7 +2007,7 @@ class ReconciliationReportService
             ->havingRaw("{$groupPostingDeltaSql} > ?", [$tolerance])
             ->orderByRaw("{$groupPostingDeltaSql} DESC");
 
-        $unbalancedGroups = collect($unbalancedGroupsQuery->get())
+        $unbalancedGroups = $this->foldReversalPostingGroups(collect($unbalancedGroupsQuery->get()))
             ->reject(fn (object $row): bool => $this->isExpectedOneSidedGlobalTrialGroup(
                 (string) $row->reference_type,
                 (int) $row->reference_id,
@@ -2134,9 +2128,9 @@ class ReconciliationReportService
             ...$nullReferenceDiagnostics,
             'net_by_account_type' => array_slice($netByAccountType, 0, 20),
             'resolution_hints' => [
-                __('Each posting group (same reference type and ID) should have equal total credits and debits. Groups listed below are filtered to the most likely unexpected sources of trial drift.'),
+                __('Each posting group (same reference type and ID) should have equal total credits and debits. Reversal chains (window rollback / reversing a ledger line) are folded into the original group, so a fully reversed posting is not listed as separate one-sided groups. Groups listed below are filtered to the most likely unexpected sources of trial drift.'),
                 __('Use Suspected posting lines to see the individual ledger rows for the top unbalanced groups. The Linked source shown there is the posting-group key (same reference type and ID).'),
-                __('Unexpected lines without a reference often come from manual adjustments — open a transaction row below, then review the Linked source field in the modal or enable the Linked source column from Columns on the account ledger if it is hidden. Bank-file cash legs, accepted deposit master-cash pool mirrors, and master reserve funding transfers (null linked source by design) are excluded here.'),
+                __('Unexpected lines without a reference often come from manual adjustments — open a transaction row below, then review the Linked source field in the modal or enable the Linked source column from Columns on the account ledger if it is hidden. Bank-file cash legs, accepted deposit master-cash pool mirrors, fully reversed null-reference lines (for example after a business-day window rollback), and master reserve funding transfers (null linked source by design) are excluded here.'),
                 __('Account-type nets show where credits and debits fail to cancel; member cash and fund accounts commonly carry net drift when only one pool leg was posted.'),
                 __('Cross-check related checks: stored balance vs ledger, paired control totals, and the flow-specific integrity checks for contributions, loans, and bank imports.'),
             ],
@@ -2145,7 +2139,8 @@ class ReconciliationReportService
 
     /**
      * Null-reference diagnostics excluding intentional bank-file cash legs, accepted
-     * deposit master-cash pool mirrors, and master fund→reserve funding transfers.
+     * deposit master-cash pool mirrors, fully reversed null-reference lines, and
+     * master fund→reserve funding transfers.
      *
      * @return array{
      *     null_reference_line_count: int,
@@ -2165,6 +2160,7 @@ class ReconciliationReportService
             ->all();
         $linkedMasterCashIdSet = array_fill_keys($linkedMasterCashIds, true);
         $expectedFundPostingMasterMirrorIdSet = $this->expectedAcceptedFundPostingMasterCashMirrorIdSet();
+        $fullyReversedNullReferenceIdSet = $this->fullyReversedNullReferenceTransactionIdSet();
 
         /** @var array<int, array<string, array<string, true>>> $expectedPostedMemberCash */
         $expectedPostedMemberCash = [];
@@ -2204,6 +2200,7 @@ class ReconciliationReportService
                 $linkedMasterCashIdSet,
                 $expectedPostedMemberCash,
                 $expectedFundPostingMasterMirrorIdSet,
+                $fullyReversedNullReferenceIdSet,
             ))
             ->values();
 
@@ -2295,13 +2292,19 @@ class ReconciliationReportService
      * @param  array<int, true>  $linkedMasterCashIdSet
      * @param  array<int, array<string, array<string, true>>>  $expectedPostedMemberCash
      * @param  array<int, true>  $expectedFundPostingMasterMirrorIdSet
+     * @param  array<int, true>  $fullyReversedNullReferenceIdSet
      */
     private function isExpectedNullReferenceLine(
         Transaction $transaction,
         array $linkedMasterCashIdSet,
         array $expectedPostedMemberCash,
         array $expectedFundPostingMasterMirrorIdSet,
+        array $fullyReversedNullReferenceIdSet,
     ): bool {
+        if (isset($fullyReversedNullReferenceIdSet[(int) $transaction->id])) {
+            return true;
+        }
+
         if (isset($expectedFundPostingMasterMirrorIdSet[(int) $transaction->id])) {
             return true;
         }
@@ -2318,6 +2321,58 @@ class ReconciliationReportService
     }
 
     /**
+     * Originals with a matching opposite-type reversal (createReversalEntry) net to
+     * zero and should not appear as unexplained null-reference drift.
+     *
+     * @return array<int, true>
+     */
+    private function fullyReversedNullReferenceTransactionIdSet(): array
+    {
+        $originals = Transaction::query()
+            ->where(function ($query): void {
+                $query->whereNull('reference_id')->orWhereNull('reference_type');
+            })
+            ->get(['id', 'account_id', 'type', 'amount']);
+
+        if ($originals->isEmpty()) {
+            return [];
+        }
+
+        $ids = $originals->pluck('id')->all();
+        $transactionMorph = (new Transaction)->getMorphClass();
+
+        $reversals = Transaction::query()
+            ->where('reference_type', $transactionMorph)
+            ->whereIn('reference_id', $ids)
+            ->selectRaw('reference_id, account_id, type, SUM(amount) as total')
+            ->groupBy('reference_id', 'account_id', 'type')
+            ->get();
+
+        $totals = [];
+        foreach ($reversals as $row) {
+            $key = ((int) $row->reference_id).'|'.((int) $row->account_id).'|'.((string) $row->type);
+            $totals[$key] = (float) $row->total;
+        }
+
+        $fullyReversed = [];
+        foreach ($originals as $original) {
+            if (! $original instanceof Transaction) {
+                continue;
+            }
+
+            $opposite = $original->type === 'credit' ? 'debit' : 'credit';
+            $key = ((int) $original->id).'|'.((int) $original->account_id).'|'.$opposite;
+            $reversalTotal = $totals[$key] ?? 0.0;
+
+            if (abs($reversalTotal - (float) $original->amount) <= self::AMOUNT_TOLERANCE) {
+                $fullyReversed[(int) $original->id] = true;
+            }
+        }
+
+        return $fullyReversed;
+    }
+
+    /**
      * Master fund → reserve account transfers intentionally omit a domain reference;
      * they pair as fund debit + expense/invest credit with the reserve-funding suffix.
      */
@@ -2325,15 +2380,15 @@ class ReconciliationReportService
     {
         $account = $transaction->account;
 
-        if ($account === null || !$account->is_master) {
+        if ($account === null || ! $account->is_master) {
             return false;
         }
 
         $description = (string) $transaction->description;
 
         if (
-            !str_contains($description, '(reserve funding)')
-            && !str_contains($description, '(master fund transfer)')
+            ! str_contains($description, '(reserve funding)')
+            && ! str_contains($description, '(master fund transfer)')
         ) {
             return false;
         }
@@ -2380,6 +2435,181 @@ class ReconciliationReportService
     }
 
     /**
+     * createReversalEntry lines reference the original ledger row, so they form their
+     * own one-sided posting groups. Fold them (and repairs of those reversals) back
+     * onto the original domain reference before judging trial drift.
+     *
+     * @param  Collection<int, object>  $groups
+     * @return Collection<int, object>
+     */
+    private function foldReversalPostingGroups(Collection $groups): Collection
+    {
+        $transactionMorph = (new Transaction)->getMorphClass();
+        $byKey = [];
+        $reversalGroups = [];
+
+        foreach ($groups as $row) {
+            $type = (string) $row->reference_type;
+            $id = (int) $row->reference_id;
+
+            if ($type === $transactionMorph) {
+                $reversalGroups[] = $row;
+
+                continue;
+            }
+
+            $byKey[$this->postingGroupRowKey($type, $id)] = $this->copyPostingGroupRow($row);
+        }
+
+        if ($reversalGroups === []) {
+            return collect(array_values($byKey));
+        }
+
+        $originals = $this->loadTransactionReferenceChain(
+            collect($reversalGroups)->map(fn (object $row): int => (int) $row->reference_id)->unique()->values()->all(),
+        );
+        $expectedRootTypes = $this->expectedOneSidedGlobalTrialReferenceTypes();
+
+        foreach ($reversalGroups as $row) {
+            $root = $this->resolvePostingGroupRoot((int) $row->reference_id, $originals);
+
+            if ($root === null) {
+                continue;
+            }
+
+            if (in_array($root['type'], $expectedRootTypes, true)) {
+                continue;
+            }
+
+            $key = $this->postingGroupRowKey($root['type'], $root['id']);
+
+            if (! isset($byKey[$key])) {
+                $byKey[$key] = (object) [
+                    'reference_type' => $root['type'],
+                    'reference_id' => $root['id'],
+                    'sum_credits' => 0.0,
+                    'sum_debits' => 0.0,
+                    'line_count' => 0,
+                    'sample_description' => $row->sample_description,
+                    'first_transacted_at' => $row->first_transacted_at,
+                ];
+            }
+
+            $byKey[$key]->sum_credits = round((float) $byKey[$key]->sum_credits + (float) $row->sum_credits, 2);
+            $byKey[$key]->sum_debits = round((float) $byKey[$key]->sum_debits + (float) $row->sum_debits, 2);
+            $byKey[$key]->line_count = (int) $byKey[$key]->line_count + (int) $row->line_count;
+        }
+
+        $tolerance = self::AMOUNT_TOLERANCE;
+
+        return collect(array_values($byKey))
+            ->reject(fn (object $row): bool => abs((float) $row->sum_credits - (float) $row->sum_debits) <= $tolerance)
+            ->sortByDesc(fn (object $row): float => abs((float) $row->sum_credits - (float) $row->sum_debits))
+            ->values();
+    }
+
+    private function postingGroupRowKey(string $referenceType, int $referenceId): string
+    {
+        return $referenceType.'#'.$referenceId;
+    }
+
+    private function copyPostingGroupRow(object $row): object
+    {
+        return (object) [
+            'reference_type' => (string) $row->reference_type,
+            'reference_id' => (int) $row->reference_id,
+            'sum_credits' => round((float) $row->sum_credits, 2),
+            'sum_debits' => round((float) $row->sum_debits, 2),
+            'line_count' => (int) $row->line_count,
+            'sample_description' => $row->sample_description,
+            'first_transacted_at' => $row->first_transacted_at,
+        ];
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @return array<int, object>
+     */
+    private function loadTransactionReferenceChain(array $ids): array
+    {
+        $transactionMorph = (new Transaction)->getMorphClass();
+        $map = [];
+        $pending = array_values(array_unique(array_filter($ids, fn (int $id): bool => $id > 0)));
+
+        while ($pending !== []) {
+            $rows = Transaction::query()
+                ->whereIn('id', $pending)
+                ->get(['id', 'reference_type', 'reference_id']);
+
+            $pending = [];
+
+            foreach ($rows as $row) {
+                $id = (int) $row->id;
+                $map[$id] = $row;
+
+                if ($row->reference_type !== $transactionMorph || $row->reference_id === null) {
+                    continue;
+                }
+
+                $parentId = (int) $row->reference_id;
+
+                if ($parentId > 0 && ! isset($map[$parentId])) {
+                    $pending[] = $parentId;
+                }
+            }
+
+            $pending = array_values(array_unique($pending));
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  array<int, object>  $originals
+     * @return array{type: string, id: int}|null
+     */
+    private function resolvePostingGroupRoot(int $originalId, array $originals): ?array
+    {
+        $transactionMorph = (new Transaction)->getMorphClass();
+        $seen = [];
+        $id = $originalId;
+
+        for ($depth = 0; $depth < 12; $depth++) {
+            if ($id <= 0 || isset($seen[$id])) {
+                return null;
+            }
+
+            $seen[$id] = true;
+            $row = $originals[$id] ?? null;
+
+            if ($row === null) {
+                return [
+                    'type' => $transactionMorph,
+                    'id' => $id,
+                ];
+            }
+
+            $type = $row->reference_type !== null ? (string) $row->reference_type : '';
+            $referenceId = $row->reference_id !== null ? (int) $row->reference_id : 0;
+
+            if ($type === '' || $referenceId <= 0) {
+                return null;
+            }
+
+            if ($type !== $transactionMorph) {
+                return [
+                    'type' => $type,
+                    'id' => $referenceId,
+                ];
+            }
+
+            $id = $referenceId;
+        }
+
+        return null;
+    }
+
+    /**
      * @return list<string>
      */
     private function expectedOneSidedGlobalTrialReferenceTypes(): array
@@ -2415,6 +2645,7 @@ class ReconciliationReportService
                 (new LoanInstallment)->getMorphClass() => $this->hasExpectedLoanRepaymentCashFlowShape($referenceType, $referenceId),
                 (new Contribution)->getMorphClass() => $this->hasExpectedContributionCashFlowShape($referenceType, $referenceId),
                 (new BankTransaction)->getMorphClass() => $this->hasExpectedBankTransactionOneSidedShape($referenceType, $referenceId),
+                (new Transaction)->getMorphClass() => $this->isReversalOfNullReferenceLine($referenceId),
                 default => false,
             };
         }
@@ -2429,6 +2660,16 @@ class ReconciliationReportService
 
         return LoanFundingStrategy::normalize($loan->funding_strategy) === LoanFundingStrategy::SPLIT_PERCENTAGE
             && ((float) $loan->member_portion > 0.00001 || (float) $loan->master_portion > 0.00001);
+    }
+
+    private function isReversalOfNullReferenceLine(int $originalId): bool
+    {
+        return Transaction::query()
+            ->whereKey($originalId)
+            ->where(function ($query): void {
+                $query->whereNull('reference_id')->orWhereNull('reference_type');
+            })
+            ->exists();
     }
 
     private function hasExpectedLoanRepaymentCashFlowShape(string $referenceType, int $referenceId): bool
@@ -2670,6 +2911,27 @@ class ReconciliationReportService
             str_contains($description, '(invest return to fund)') => __('Invest return to fund'),
             default => null,
         };
+    }
+
+    /**
+     * Master-fund contribution credits that have not themselves been reversed.
+     *
+     * @return Builder<Transaction>
+     */
+    private function unreversedMasterFundContributionCredits(int $masterFundId): Builder
+    {
+        $table = (new Transaction)->getTable();
+
+        return Transaction::query()
+            ->where('account_id', $masterFundId)
+            ->where('reference_type', Contribution::class)
+            ->where('type', 'credit')
+            ->whereNotExists(function ($query) use ($table): void {
+                $query->select(DB::raw('1'))
+                    ->from($table.' as reversal_legs')
+                    ->whereColumn('reversal_legs.reference_id', $table.'.id')
+                    ->where('reversal_legs.reference_type', Transaction::class);
+            });
     }
 
     /**

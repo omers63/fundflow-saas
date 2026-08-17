@@ -118,6 +118,21 @@ test('fund out reject requires remarks and does not move balances', function () 
     Notification::assertSentTo($this->memberUser, FundOutRequestRejectedNotification::class);
 });
 
+test('member can cancel a pending fund-out and restore available fund', function () {
+    $request = $this->service->submit($this->member, 1500);
+
+    expect($this->service->availableFundForTransfer($this->member->fresh()))->toBe(3500.0);
+
+    $this->service->cancel($request, $this->memberUser->id);
+
+    expect($request->fresh()->status)->toBe('cancelled')
+        ->and($this->service->availableFundForTransfer($this->member->fresh()))->toBe(5000.0)
+        ->and((float) $this->member->fresh()->fundAccount->balance)->toBe(5000.0);
+
+    $reasons = app(MemberFreezeService::class)->blockingReasons($this->member->fresh());
+    expect(collect($reasons)->implode(' '))->not->toContain('fund-out');
+});
+
 test('frozen members cannot submit fund outs', function () {
     app(MemberFreezeService::class)->applyFreeze($this->member, [
         'cycles' => 1,
@@ -134,7 +149,7 @@ test('pending fund out blocks freeze', function () {
     $reasons = app(MemberFreezeService::class)->blockingReasons($this->member);
 
     expect($reasons)->not->toBeEmpty()
-        ->and(collect($reasons)->implode(' '))->toContain('fund-out');
+        ->and(collect($reasons)->implode(' '))->toContain(__('fund-out requests'));
 
     expect(fn () => app(MemberFreezeService::class)->applyFreeze($this->member, [
         'cycles' => 1,

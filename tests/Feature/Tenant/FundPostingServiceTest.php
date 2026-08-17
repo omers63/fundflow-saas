@@ -385,6 +385,41 @@ test('reject updates posting status and ignores bank transaction', function () {
     expect(Account::masterCash()->balance)->toBe('0.00');
 });
 
+test('member can cancel a pending deposit without crediting cash', function () {
+    Notification::fake();
+
+    $memberUser = User::create([
+        'name' => 'Cancel Member',
+        'email' => 'cancel-deposit@test.com',
+        'password' => bcrypt('password'),
+        'is_admin' => false,
+    ]);
+
+    $member = Member::create([
+        'user_id' => $memberUser->id,
+        'member_number' => 'MEM-CANCEL-D',
+        'name' => 'Cancel Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->service->submit($member, 2500, '2026-05-10');
+
+    $this->service->cancel($posting, cancelledBy: $memberUser->id);
+
+    $posting->refresh();
+    expect($posting->status)->toBe('cancelled')
+        ->and($posting->admin_remarks)->toBe(__('Cancelled by member'))
+        ->and($posting->bankTransaction->fresh()->status)->toBe('ignored')
+        ->and((float) $member->fresh()->getCashBalance())->toBe(0.0)
+        ->and((float) Account::masterCash()->balance)->toBe(0.0);
+
+    expect(fn () => $this->service->cancel($posting->fresh()))
+        ->toThrow(InvalidArgumentException::class);
+});
+
 test('accept and reject notify member user', function () {
     Notification::fake();
     Filament::setCurrentPanel('member');

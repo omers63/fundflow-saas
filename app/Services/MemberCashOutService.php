@@ -334,6 +334,21 @@ final class MemberCashOutService
         });
     }
 
+    public function cancel(CashOutRequest $request, ?int $cancelledBy = null, ?string $remarks = null): void
+    {
+        $this->assertPendingRequest($request, __('Only pending cash-out requests can be cancelled.'));
+
+        DB::transaction(function () use ($request, $cancelledBy, $remarks): void {
+            $this->reviewWorkflow->markReviewed(
+                $request,
+                'cancelled',
+                $cancelledBy,
+                $remarks ?? __('Cancelled by member'),
+                BusinessDay::now(),
+            );
+        });
+    }
+
     private function assertPendingRequest(CashOutRequest $request, string $message): void
     {
         if ($request->status !== 'pending') {

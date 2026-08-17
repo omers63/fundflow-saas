@@ -62,6 +62,7 @@ class FundFlowService
                 $bankTxn->update([
                     'status' => 'mirrored',
                     'master_cash_transaction_id' => $masterCashTransaction->id,
+                    'cleared_at' => BusinessDay::now(),
                 ]);
                 $mirrored++;
             }
@@ -129,7 +130,7 @@ class FundFlowService
                     'status' => 'posted',
                     'member_id' => $member->id,
                     'is_cleared' => true,
-                    'cleared_at' => $transactedAt,
+                    'cleared_at' => BusinessDay::now(),
                 ]);
 
                 // Same BankTransaction reference as bank/cash mirror legs; §5.12 allows this shape.

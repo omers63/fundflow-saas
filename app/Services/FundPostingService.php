@@ -15,6 +15,7 @@ use App\Notifications\Tenant\FundPostingRejectedNotification;
 use App\Notifications\Tenant\NewFundPostingNotification;
 use App\Support\AutomationScheduleSettings;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class FundPostingService
 {
@@ -155,6 +156,36 @@ class FundPostingService
             );
 
             $this->notifyMemberOfReview($posting, 'rejected');
+        });
+    }
+
+    /**
+     * Withdraw a pending deposit before admin review.
+     * Cleans the synthetic bank line and inbound remittance the same way reject does.
+     */
+    public function cancel(FundPosting $posting, ?int $cancelledBy = null, ?string $remarks = null): void
+    {
+        $posting = $posting->fresh() ?? $posting;
+
+        if ($posting->status !== 'pending') {
+            throw new InvalidArgumentException(__('Only pending deposits can be cancelled.'));
+        }
+
+        DB::transaction(function () use ($posting, $cancelledBy, $remarks): void {
+            $this->reviewWorkflow->markReviewed(
+                $posting,
+                'cancelled',
+                $cancelledBy,
+                $remarks ?? __('Cancelled by member'),
+            );
+
+            $this->updateLinkedBankTransactionStatus($posting, 'ignored');
+
+            $this->inboundPayments->cancelForSource(
+                $posting,
+                $cancelledBy,
+                $remarks ?? __('Cancelled by member'),
+            );
         });
     }
 

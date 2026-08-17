@@ -13,7 +13,6 @@ use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\FundAuditLog;
-use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\FundTier;
 use App\Models\Tenant\InboundPayment;
 use App\Models\Tenant\Loan;
@@ -30,6 +29,7 @@ use App\Models\Tenant\SmsImportTemplate;
 use App\Models\Tenant\SmsTransaction;
 use App\Models\Tenant\SystemJobRun;
 use App\Models\Tenant\Transaction;
+use App\Support\OperationalRequestStatus;
 use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
 
@@ -285,12 +285,7 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn (FundPosting $record): string => match ($record->status) {
-                    'pending' => __('Pending'),
-                    'accepted' => __('Accepted'),
-                    'rejected' => __('Rejected'),
-                    default => ucfirst((string) $record->status),
-                }),
+                ->getTitleFromRecordUsing(fn ($record): string => OperationalRequestStatus::label((string) $record->status)),
             Group::make('posting_date')
                 ->label(__('Posting date'))
                 ->date(),
@@ -880,11 +875,11 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(OutboundPayment $record): string => $record->statusLabel()),
+                ->getTitleFromRecordUsing(fn (OutboundPayment $record): string => $record->statusLabel()),
             Group::make('type')
                 ->label(__('Type'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(OutboundPayment $record): string => $record->typeLabel()),
+                ->getTitleFromRecordUsing(fn (OutboundPayment $record): string => $record->typeLabel()),
             Group::make('instruction_date')
                 ->label(__('Date'))
                 ->date(),
@@ -903,11 +898,11 @@ final class TableGrouping
             Group::make('status')
                 ->label(__('Status'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(InboundPayment $record): string => $record->statusLabel()),
+                ->getTitleFromRecordUsing(fn (InboundPayment $record): string => $record->statusLabel()),
             Group::make('type')
                 ->label(__('Type'))
                 ->titlePrefixedWithLabel(false)
-                ->getTitleFromRecordUsing(fn(InboundPayment $record): string => $record->typeLabel()),
+                ->getTitleFromRecordUsing(fn (InboundPayment $record): string => $record->typeLabel()),
             Group::make('instruction_date')
                 ->label(__('Date'))
                 ->date(),

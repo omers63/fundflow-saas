@@ -13,6 +13,8 @@ use App\Models\Tenant\FundOutRequest;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\MemberCashOutService;
+use App\Services\MemberFundOutService;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
@@ -127,4 +129,24 @@ test('member can submit cash out and fund out from their respective list modals'
 
     expect(FundOutRequest::query()->where('member_id', $this->member->id)->count())->toBe(1)
         ->and((float) FundOutRequest::query()->first()->amount)->toBe(250.0);
+});
+
+test('member can cancel pending cash-out and fund-out from their lists', function () {
+    $cashOut = app(MemberCashOutService::class)->submit($this->member, 100, 'Cancel me');
+    $fundOut = app(MemberFundOutService::class)->submit($this->member, 250, 'Cancel fund');
+
+    Livewire::actingAs($this->memberUser, 'tenant')
+        ->test(ListMyCashOutRequests::class)
+        ->assertTableActionVisible('cancel', $cashOut)
+        ->callTableAction('cancel', $cashOut)
+        ->assertHasNoTableActionErrors();
+
+    Livewire::actingAs($this->memberUser, 'tenant')
+        ->test(ListMyFundOutRequests::class)
+        ->assertTableActionVisible('cancel', $fundOut)
+        ->callTableAction('cancel', $fundOut)
+        ->assertHasNoTableActionErrors();
+
+    expect($cashOut->fresh()->status)->toBe('cancelled')
+        ->and($fundOut->fresh()->status)->toBe('cancelled');
 });

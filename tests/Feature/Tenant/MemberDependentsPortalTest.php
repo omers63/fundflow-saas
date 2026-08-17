@@ -123,6 +123,7 @@ test('parent can list dependents page', function () {
         ->assertSee('Child Member')
         ->assertSee('MEM-C001')
         ->assertSee(__('Set contributions'))
+        ->assertSee(__('Set EMI repayments'))
         ->assertSee(__('Cash to transfer'))
         ->assertTableActionDoesNotExist('view')
         ->assertTableActionExists('openDependentPortal');
@@ -379,7 +380,7 @@ test('dependents insights snapshot summarizes household', function () {
 
     expect($snapshot)->toHaveKeys(['hero', 'kpis', 'open_period', 'dependents_count'])
         ->and($snapshot['dependents_count'])->toBe(1)
-        ->and($snapshot['kpis'])->toHaveCount(4);
+        ->and($snapshot['kpis'])->toHaveCount(6);
 });
 
 test('manage funding refreshes dependents insights on the list page', function () {

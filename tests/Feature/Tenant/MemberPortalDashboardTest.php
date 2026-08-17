@@ -633,7 +633,86 @@ test('member greeting card stays green when open-cycle EMI is paid and next EMI 
     expect($snapshot['greeting']['card_tone'])->toBe('emerald')
         ->and($snapshot['greeting']['card_urgency'])->toBe(0.0)
         ->and($snapshot['greeting']['subtitle'])->toContain('EMI for')
-        ->and($snapshot['greeting']['spotlights'][0]['value'])->toBe(__('EMI paid'));
+        ->and($snapshot['greeting']['subtitle'])->toContain('October')
+        ->and($snapshot['greeting']['subtitle'])->toContain('December 2025')
+        ->and($snapshot['greeting']['subtitle'])->not->toContain('in advance')
+        ->and($snapshot['loan_panel']['next_emi']['due_date'])->toContain('December 2025')
+        ->and(collect($snapshot['greeting']['spotlights'])->pluck('label')->all())
+        ->not->toContain(__('Current cycle'))
+        ->not->toContain(__('Next EMI'));
+
+    Carbon::setTestNow();
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('member greeting card names the latest paid EMI cycle when paid in advance', function () {
+    app()->setLocale('en');
+    Filament::setCurrentPanel('member');
+
+    $cycles = app(ContributionCycleService::class);
+    Carbon::setTestNow(Carbon::parse('2025-11-05 10:00:00'));
+    BusinessDaySettings::saveFromForm('2025-11-05');
+
+    [$month, $year] = $cycles->currentOpenPeriod();
+    expect([$month, $year])->toBe([10, 2025]);
+
+    $cycleStart = $cycles->cycleStartAt($month, $year);
+
+    Contribution::query()->where('member_id', $this->member->id)->delete();
+    $this->member->update([
+        'joined_at' => $cycleStart->copy()->subYear(),
+        'contribution_arrears_cutoff_date' => $cycleStart->copy()->subYear()->toDateString(),
+    ]);
+
+    $loan = Loan::query()->create([
+        'member_id' => $this->member->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 3000,
+        'status' => 'active',
+        'applied_at' => $cycleStart->copy()->subMonths(3),
+        'approved_at' => $cycleStart->copy()->subMonths(3),
+        'disbursed_at' => $cycleStart->copy()->subMonths(3),
+    ]);
+
+    $loan->installments()->create([
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => '2025-11-05',
+        'status' => 'paid',
+        'paid_at' => '2025-10-10',
+    ]);
+    $loan->installments()->create([
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => '2025-12-05',
+        'status' => 'paid',
+        'paid_at' => '2025-10-30',
+    ]);
+    $loan->installments()->create([
+        'installment_number' => 3,
+        'amount' => 1000,
+        'due_date' => '2026-01-05',
+        'status' => 'pending',
+    ]);
+
+    $snapshot = app(MemberPortalInsightsService::class)->snapshot($this->member->fresh());
+
+    expect($snapshot['greeting']['card_tone'])->toBe('emerald')
+        ->and($snapshot['greeting']['subtitle'])->toContain('November 2025')
+        ->and($snapshot['greeting']['subtitle'])->toContain('in advance')
+        ->and($snapshot['greeting']['subtitle'])->not->toContain('EMI for October')
+        ->and($snapshot['greeting']['subtitle'])->toContain('5 Jan 2026')
+        ->and($snapshot['greeting']['subtitle'])->toContain('December 2025')
+        ->and($snapshot['loan_panel']['next_emi']['due_date'])->toBe('5 Jan 2026 (December 2025 cycle)')
+        ->and(collect($snapshot['greeting']['spotlights'])->pluck('label')->all())
+        ->not->toContain(__('Current cycle'))
+        ->not->toContain(__('Next EMI'));
 
     Carbon::setTestNow();
     BusinessDaySettings::saveFromForm(null);

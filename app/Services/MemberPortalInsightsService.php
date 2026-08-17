@@ -155,6 +155,7 @@ final class MemberPortalInsightsService
         );
 
         $nextInstallment = $this->nextPendingInstallment($activeLoan);
+        $latestPaidInstallment = $this->latestPaidInstallment($activeLoan);
         $nextEmiAmount = $nextInstallment !== null
             ? round((float) $nextInstallment->amount + (float) ($nextInstallment->late_fee_amount ?? 0), 2)
             : 0.0;
@@ -206,7 +207,7 @@ final class MemberPortalInsightsService
             'cash_card' => $this->buildCashCard($member, $cashBalance, $nextInstallment),
             'fund_card' => $this->buildFundCard($member, $fundBalance, $monthly),
             'loan_panel' => $activeLoan !== null
-                ? $this->buildLoanPanel($activeLoan, $loanOutstanding, $installmentsPaid, $installmentsTotal, $repayPercent, $nextInstallment)
+                ? $this->buildLoanPanel($activeLoan, $loanOutstanding, $installmentsPaid, $installmentsTotal, $repayPercent, $nextInstallment, $cycles)
                 : null,
             'eligibility_panel' => $activeLoan === null
                 ? $this->buildEligibilityPanel($member, $eligibility, $pendingLoan, $canRequestOverride, $hasPendingOverrideRequest, $fundBalance)
@@ -255,6 +256,7 @@ final class MemberPortalInsightsService
                 $nextInstallment,
                 $nextEmiAmount,
                 $latestStatement,
+                $latestPaidInstallment,
             ),
             'hero' => $hero,
             'kpis' => $this->buildKpis(
@@ -439,6 +441,7 @@ final class MemberPortalInsightsService
         ?LoanInstallment $nextInstallment,
         float $nextEmiAmount,
         ?MonthlyStatement $latestStatement,
+        ?LoanInstallment $latestPaidInstallment = null,
     ): array {
         $now = BusinessDay::now();
         $hour = (int) $now->format('G');
@@ -459,6 +462,15 @@ final class MemberPortalInsightsService
         $hasArrears = ($arrears['has_arrears'] ?? false) || ($arrears['is_delinquent'] ?? false);
         $cycleProgress = $this->openCycleProgress($cycles, $curMonth, $curYear);
         $daysRemaining = (int) max(0, BusinessDay::now()->diffInDays($cycles->deadline($curMonth, $curYear), false));
+        $underLoanRepayment = $member->hasActiveLoanRepaymentObligation();
+
+        $latestPaidPeriodLabel = null;
+        $latestPaidIsAdvance = false;
+        if ($latestPaidInstallment?->due_date !== null) {
+            [$paidMonth, $paidYear] = $cycles->cyclePeriodForDueDate($latestPaidInstallment->due_date);
+            $latestPaidPeriodLabel = $cycles->periodLabel($paidMonth, $paidYear);
+            $latestPaidIsAdvance = ($paidYear * 12 + $paidMonth) > ($curYear * 12 + $curMonth);
+        }
 
         $cycleAttentionUrgent = $hasOpenCycleDue && $cycleProgress >= 0.4;
 
@@ -481,8 +493,11 @@ final class MemberPortalInsightsService
             $loanRepaymentDueThisCycle,
             $nextInstallment,
             $cycles->periodLabel($curMonth, $curYear),
-            $member->hasActiveLoanRepaymentObligation(),
+            $underLoanRepayment,
             app(LoanEmiCollectionCatalogService::class)->hasPaidInstallmentDueInPeriod($member, $curMonth, $curYear),
+            $cycles,
+            $latestPaidPeriodLabel,
+            $latestPaidIsAdvance,
         );
 
         $defaultSubtitle = $cycleAwareSubtitle
@@ -577,29 +592,15 @@ final class MemberPortalInsightsService
         /** @var list<array{label: string, value: string, sub: ?string, url: string, icon: string}> $spotlights */
         $spotlights = [];
 
-        $spotlights[] = [
-            'label' => __('Current cycle'),
-            'value' => $hasOpenCycleDue
-                ? trans_choice(':count day left|:count days left', $daysRemaining, ['count' => $daysRemaining])
-                : ($member->hasActiveLoanRepaymentObligation()
-                    ? (app(LoanEmiCollectionCatalogService::class)->hasPaidInstallmentDueInPeriod($member, $curMonth, $curYear)
-                        ? __('EMI paid')
-                        : __('No EMI due'))
-                    : __('Posted')),
-            'sub' => $periodLabelShort,
-            'url' => $member->hasActiveLoanRepaymentObligation()
-                ? MyLoanResource::getUrl('index')
-                : MyContributionResource::getUrl('index'),
-            'icon' => 'heroicon-o-calendar-days',
-        ];
-
-        if ($nextInstallment !== null && $nextEmiAmount > 0) {
+        if (!$underLoanRepayment) {
             $spotlights[] = [
-                'label' => __('Next EMI'),
-                'value' => InsightFormatter::money($nextEmiAmount),
-                'sub' => $nextInstallment->due_date?->locale(app()->getLocale())->translatedFormat('j M Y'),
-                'url' => MyLoanResource::getUrl('index'),
-                'icon' => 'heroicon-o-banknotes',
+                'label' => __('Current cycle'),
+                'value' => $hasOpenCycleDue
+                    ? trans_choice(':count day left|:count days left', $daysRemaining, ['count' => $daysRemaining])
+                    : __('Posted'),
+                'sub' => $periodLabelShort,
+                'url' => MyContributionResource::getUrl('index'),
+                'icon' => 'heroicon-o-calendar-days',
             ];
         }
 
@@ -1111,6 +1112,35 @@ final class MemberPortalInsightsService
             ->first();
     }
 
+    private function latestPaidInstallment(?Loan $activeLoan): ?LoanInstallment
+    {
+        if ($activeLoan === null) {
+            return null;
+        }
+
+        return $activeLoan->installments
+            ->where('status', 'paid')
+            ->sortByDesc('installment_number')
+            ->sortByDesc(fn(LoanInstallment $installment): string => $installment->due_date?->toDateString() ?? '')
+            ->first();
+    }
+
+    private function installmentDueWithCycleLabel(LoanInstallment $installment, ContributionCycleService $cycles): string
+    {
+        $date = MemberDateDisplay::format($installment->due_date, 'j M Y') ?? '—';
+
+        if ($installment->due_date === null) {
+            return $date;
+        }
+
+        [$month, $year] = $cycles->cyclePeriodForDueDate($installment->due_date);
+
+        return __(':date (:period cycle)', [
+            'date' => $date,
+            'period' => $cycles->periodLabel($month, $year),
+        ]);
+    }
+
     private function contributionNotPostedApplies(Member $member, bool $postedThisCycle): bool
     {
         return ! $postedThisCycle
@@ -1221,6 +1251,9 @@ final class MemberPortalInsightsService
         ?string $periodLabel = null,
         bool $underLoanRepayment = false,
         bool $openCycleEmiPaid = false,
+        ?ContributionCycleService $cycles = null,
+        ?string $latestPaidPeriodLabel = null,
+        bool $latestPaidIsAdvance = false,
     ): ?string {
         if ($hasArrears) {
             return null;
@@ -1228,18 +1261,27 @@ final class MemberPortalInsightsService
 
         if (! $hasOpenCycleDue) {
             if ($underLoanRepayment && $nextInstallment?->due_date !== null) {
-                $dueLabel = MemberDateDisplay::format($nextInstallment->due_date, 'j M Y') ?? '—';
-                $period = $periodLabel ?? __('this cycle');
+                $dueLabel = $cycles !== null
+                    ? $this->installmentDueWithCycleLabel($nextInstallment, $cycles)
+                    : (MemberDateDisplay::format($nextInstallment->due_date, 'j M Y') ?? '—');
+                $openPeriod = $periodLabel ?? __('this cycle');
+
+                if ($latestPaidIsAdvance && filled($latestPaidPeriodLabel)) {
+                    return __('EMI for :period is paid in advance — next installment due :date. Contribution history stays on My contributions (paused while you repay).', [
+                        'period' => $latestPaidPeriodLabel,
+                        'date' => $dueLabel,
+                    ]);
+                }
 
                 if ($openCycleEmiPaid) {
                     return __('EMI for :period is paid — next installment due :date. Contribution history stays on My contributions (paused while you repay).', [
-                        'period' => $period,
+                        'period' => $latestPaidPeriodLabel ?? $openPeriod,
                         'date' => $dueLabel,
                     ]);
                 }
 
                 return __('No EMI due in :period — next installment due :date. Contribution history stays on My contributions (paused while you repay).', [
-                    'period' => $period,
+                    'period' => $openPeriod,
                     'date' => $dueLabel,
                 ]);
             }
@@ -1566,6 +1608,7 @@ final class MemberPortalInsightsService
         int $installmentsTotal,
         int $repayPercent,
         ?LoanInstallment $nextInstallment,
+        ContributionCycleService $cycles,
     ): array {
         $totalRepaid = max(0, (float) $loan->amount - $loanOutstanding);
 
@@ -1588,7 +1631,7 @@ final class MemberPortalInsightsService
             'guarantor_name' => $loan->guarantor?->name,
             'next_emi' => $nextInstallment !== null ? [
                 'amount' => (float) $nextInstallment->amount,
-                'due_date' => MemberDateDisplay::format($nextInstallment->due_date, 'j M Y'),
+                'due_date' => $this->installmentDueWithCycleLabel($nextInstallment, $cycles),
             ] : null,
             'view_url' => MyLoanResource::getUrl('view', ['record' => $loan]),
             'settle_url' => MyLoanResource::getUrl('index', [
@@ -1727,6 +1770,7 @@ final class MemberPortalInsightsService
         }
 
         return Transaction::query()
+            ->visibleToMember()
             ->whereIn('account_id', $accountIds)
             ->orderByDesc('transacted_at')
             ->limit(6)

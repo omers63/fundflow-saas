@@ -9,6 +9,7 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\Setting;
 use App\Support\BusinessDayDisplay;
 use App\Support\MemberDateDisplay;
+use App\Support\OperationalRequestStatus;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -39,12 +40,7 @@ final class ViewFundPostingAction
             'member_name' => $record->member->name,
             'posting_date_display' => $record->posting_date->format('M j, Y'),
             'amount_display' => MoneyDisplay::format((float) $record->amount, $currency),
-            'status_display' => match ($record->status) {
-                'pending' => __('Pending'),
-                'accepted' => __('Accepted'),
-                'rejected' => __('Rejected'),
-                default => ucfirst($record->status),
-            },
+            'status_display' => OperationalRequestStatus::label($record->status),
             'reference_display' => $record->reference ?: __('—'),
             'comments_display' => $record->comments ?: __('—'),
             'admin_remarks_display' => $record->admin_remarks ?: __('—'),
@@ -121,6 +117,7 @@ final class ViewFundPostingAction
             'pending' => ['chip' => $data['status_display'], 'variant' => 'amber'],
             'accepted' => ['chip' => $data['status_display'], 'variant' => 'green'],
             'rejected' => ['chip' => $data['status_display'], 'variant' => 'red'],
+            'cancelled' => ['chip' => $data['status_display'], 'variant' => 'gray'],
             default => ['chip' => $data['status_display'], 'variant' => 'gray'],
         };
 

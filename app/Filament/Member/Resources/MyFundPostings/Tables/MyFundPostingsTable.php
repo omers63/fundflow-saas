@@ -2,12 +2,14 @@
 
 namespace App\Filament\Member\Resources\MyFundPostings\Tables;
 
+use App\Filament\Member\Support\MemberPendingRequestFilamentActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
 use App\Filament\Support\ViewActions\ViewFundPostingAction;
 use App\Models\Tenant\Setting;
+use App\Support\OperationalRequestStatus;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -29,18 +31,9 @@ class MyFundPostingsTable
                         TextColumn::make('reference')
                             ->placeholder(__('—')),
                         TextColumn::make('status')
-                            ->formatStateUsing(fn (string $state): string => match ($state) {
-                                'pending' => __('Pending'),
-                                'accepted' => __('Accepted'),
-                                'rejected' => __('Rejected'),
-                                default => ucfirst($state),
-                            })
+                            ->formatStateUsing(fn (string $state): string => OperationalRequestStatus::label($state))
                             ->badge()
-                            ->color(fn (string $state): string => match ($state) {
-                                'pending' => 'warning',
-                                'accepted' => 'success',
-                                'rejected' => 'danger',
-                            }),
+                            ->color(fn (string $state): string => OperationalRequestStatus::color($state)),
                         TextColumn::make('admin_remarks')
                             ->label(__('Admin remarks'))
                             ->placeholder(__('—'))
@@ -52,19 +45,16 @@ class MyFundPostingsTable
                     ])
                     ->filters([
                         SelectFilter::make('status')
-                            ->options([
-                                'pending' => __('Pending'),
-                                'accepted' => __('Accepted'),
-                                'rejected' => __('Rejected'),
-                            ]),
+                            ->options(OperationalRequestStatus::options()),
                         DateColumnRangeFilter::make('posting_date', __('Posting date')),
                         DateColumnRangeFilter::make('created_at', __('Submitted')),
                     ])
                     ->defaultSort('created_at', 'desc')
                     ->toolbarActions(TableToolbar::bulkGroup([
+                        MemberPendingRequestFilamentActions::cancelSelectedDeposits(),
                         TableToolbar::refreshBulkAction(),
                     ])),
-                [ViewFundPostingAction::makeForMemberPortal()],
+                [ViewFundPostingAction::makeForMemberPortal(), MemberPendingRequestFilamentActions::cancelDeposit()],
             ),
             TableGrouping::fundPostings(includeMember: false),
         );

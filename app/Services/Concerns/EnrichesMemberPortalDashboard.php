@@ -196,6 +196,7 @@ trait EnrichesMemberPortalDashboard
         }
 
         return Transaction::query()
+            ->visibleToMember()
             ->whereIn('account_id', $accountIds)
             ->orderByDesc('transacted_at')
             ->limit(5)

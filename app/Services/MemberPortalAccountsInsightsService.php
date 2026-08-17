@@ -51,6 +51,7 @@ final class MemberPortalAccountsInsightsService
 
         $since = BusinessDay::now()->subDays(30);
         $activity = Transaction::query()
+            ->visibleToMember()
             ->whereIn('account_id', $accountIds)
             ->where('transacted_at', '>=', $since)
             ->selectRaw("
@@ -99,6 +100,7 @@ final class MemberPortalAccountsInsightsService
         $sparklineWindowEnd = BusinessDay::now()->endOfDay();
 
         Transaction::query()
+            ->visibleToMember()
             ->whereIn('account_id', $accountIds)
             ->whereBetween('transacted_at', [$sparklineWindowStart, $sparklineWindowEnd])
             ->get(['transacted_at'])
@@ -120,6 +122,7 @@ final class MemberPortalAccountsInsightsService
         }
 
         $recent = Transaction::query()
+            ->visibleToMember()
             ->whereIn('account_id', $accountIds)
             ->with('account')
             ->orderByDesc('transacted_at')
@@ -389,6 +392,7 @@ final class MemberPortalAccountsInsightsService
         $monthTotals = [];
 
         Transaction::query()
+            ->visibleToMember()
             ->whereIn('account_id', $accountIds)
             ->whereBetween('transacted_at', [$oldestMonth, $now->copy()->endOfMonth()])
             ->get(['type', 'amount', 'transacted_at'])

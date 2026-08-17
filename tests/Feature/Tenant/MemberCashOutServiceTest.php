@@ -146,6 +146,35 @@ test('pending cash-out requests reduce available withdrawal balance', function (
     expect($this->service->availableCashForWithdrawal($this->member))->toBe(12000.0);
 });
 
+test('member can cancel a pending cash-out and restore available cash', function () {
+    AccountingService::withoutMemberCashCollection(function (): void {
+        $this->accounting->creditMemberCashWithMasterMirror(
+            $this->member->cashAccount,
+            5000,
+            'Seed cash for withdrawal',
+            '(mirror)',
+            null,
+            null,
+            $this->member->id,
+        );
+    });
+    $this->member->refresh();
+
+    $availableBefore = $this->service->availableCashForWithdrawal($this->member);
+    $request = $this->service->submit($this->member, 2000);
+
+    expect($this->service->availableCashForWithdrawal($this->member))->toBe($availableBefore - 2000.0);
+
+    $this->service->cancel($request, $this->memberUser->id);
+
+    expect($request->fresh()->status)->toBe('cancelled')
+        ->and($this->service->availableCashForWithdrawal($this->member->fresh()))->toBe($availableBefore)
+        ->and((float) $this->member->fresh()->cashAccount->balance)->toBe(5000.0);
+
+    expect(fn () => $this->service->cancel($request->fresh()))
+        ->toThrow(InvalidArgumentException::class);
+});
+
 test('inactive member fund balance cash-out transfers fund to cash and accepts on the chosen date', function () {
     $this->member->update([
         'status' => 'inactive',
@@ -242,7 +271,7 @@ test('clearing an accepted cash-out notifies the member', function () {
         'description' => 'Bank import cash-out match',
         'amount' => -2000,
         'status' => 'imported',
-        'hash' => md5('cashout-imported-match-' . microtime()),
+        'hash' => md5('cashout-imported-match-'.microtime()),
         'is_cleared' => true,
         'cleared_at' => now(),
     ]);

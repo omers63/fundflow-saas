@@ -134,6 +134,57 @@ test('activity page filter narrows transactions', function () {
         ->assertDontSee(__('Contribution —'));
 });
 
+test('member activity feed hides fully reversed ledger pairs', function () {
+    Filament::setCurrentPanel('member');
+    $this->actingAs($this->memberUser, 'tenant');
+
+    $kept = Transaction::create([
+        'account_id' => $this->member->cashAccount->id,
+        'member_id' => $this->member->id,
+        'type' => 'credit',
+        'amount' => 200,
+        'balance_after' => 200,
+        'description' => 'Kept deposit',
+        'transacted_at' => now()->subDay(),
+    ]);
+
+    $original = Transaction::create([
+        'account_id' => $this->member->cashAccount->id,
+        'member_id' => $this->member->id,
+        'type' => 'credit',
+        'amount' => 2500,
+        'balance_after' => 2700,
+        'reference_type' => FundPosting::class,
+        'reference_id' => 3,
+        'description' => 'Posted: Deposit #3',
+        'transacted_at' => now(),
+    ]);
+
+    $reversal = Transaction::create([
+        'account_id' => $this->member->cashAccount->id,
+        'member_id' => $this->member->id,
+        'type' => 'debit',
+        'amount' => 2500,
+        'balance_after' => 200,
+        'reference_type' => Transaction::class,
+        'reference_id' => $original->id,
+        'description' => 'Reversal of #' . $original->id . ': Posted: Deposit #3 — Business day window rollback',
+        'transacted_at' => now(),
+    ]);
+
+    $ids = app(MemberActivityFeedService::class)->baseQuery($this->member)->pluck('id');
+
+    expect($ids)->toContain($kept->id)
+        ->and($ids)->not->toContain($original->id)
+        ->and($ids)->not->toContain($reversal->id);
+
+    $this->get('http://' . $this->domain . '/member/activity')
+        ->assertSuccessful()
+        ->assertSee('Kept deposit')
+        ->assertDontSee('Deposit #3', false)
+        ->assertDontSee('Reversal of #' . $original->id, false);
+});
+
 test('contributions list shows stat cards only', function () {
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');

@@ -16,6 +16,7 @@ use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\Transaction;
 use App\Support\ContributionPolicySettings;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Member-level ledger drift checks per fund_management_system_requirements.md §5.13.
@@ -215,26 +216,54 @@ class MemberInvariantService
         string $referenceClass,
         string $type,
     ): float {
-        return (float) Transaction::query()
-            ->where('account_id', $accountId)
-            ->where('member_id', $memberId)
-            ->where('type', $type)
-            ->where('reference_type', (new $referenceClass)->getMorphClass())
-            ->sum('amount');
+        return $this->sumNetOfReversals(
+            Transaction::query()
+                ->where('account_id', $accountId)
+                ->where('member_id', $memberId)
+                ->where('type', $type)
+                ->where('reference_type', (new $referenceClass)->getMorphClass()),
+            $accountId,
+            $memberId,
+        );
     }
 
     protected function sumContributionPrincipalDebited(int $accountId, int $memberId): float
     {
-        return (float) Transaction::query()
+        return $this->sumNetOfReversals(
+            Transaction::query()
+                ->where('account_id', $accountId)
+                ->where('member_id', $memberId)
+                ->where('type', 'debit')
+                ->where('reference_type', (new Contribution)->getMorphClass())
+                ->where(function ($query): void {
+                    $query->where('description', 'not like', '%late fee%')
+                        ->where('description', 'not like', '%Late fee%');
+                }),
+            $accountId,
+            $memberId,
+        );
+    }
+
+    /**
+     * @param  Builder<Transaction>  $originals
+     */
+    protected function sumNetOfReversals(Builder $originals, int $accountId, int $memberId): float
+    {
+        $ids = (clone $originals)->pluck('id');
+        $sum = (float) (clone $originals)->sum('amount');
+
+        if ($ids->isEmpty()) {
+            return 0.0;
+        }
+
+        $reversalSum = (float) Transaction::query()
             ->where('account_id', $accountId)
             ->where('member_id', $memberId)
-            ->where('type', 'debit')
-            ->where('reference_type', (new Contribution)->getMorphClass())
-            ->where(function ($query): void {
-                $query->where('description', 'not like', '%late fee%')
-                    ->where('description', 'not like', '%Late fee%');
-            })
+            ->where('reference_type', Transaction::class)
+            ->whereIn('reference_id', $ids)
             ->sum('amount');
+
+        return round($sum - $reversalSum, 2);
     }
 
     protected function sumDescriptionPattern(
@@ -255,16 +284,19 @@ class MemberInvariantService
         string $type,
         array $descriptionPatterns,
     ): float {
-        return (float) Transaction::query()
-            ->where('account_id', $accountId)
-            ->where('member_id', $memberId)
-            ->where('type', $type)
-            ->where(function ($query) use ($descriptionPatterns): void {
-                foreach ($descriptionPatterns as $pattern) {
-                    $query->orWhere('description', 'like', $pattern);
-                }
-            })
-            ->sum('amount');
+        return $this->sumNetOfReversals(
+            Transaction::query()
+                ->where('account_id', $accountId)
+                ->where('member_id', $memberId)
+                ->where('type', $type)
+                ->where(function ($query) use ($descriptionPatterns): void {
+                    foreach ($descriptionPatterns as $pattern) {
+                        $query->orWhere('description', 'like', $pattern);
+                    }
+                }),
+            $accountId,
+            $memberId,
+        );
     }
 
     protected function sumMemberCashTransfersIn(int $accountId, int $memberId): float
@@ -304,16 +336,19 @@ class MemberInvariantService
 
     protected function sumRefundsAndReconCredits(int $accountId, int $memberId): float
     {
-        $refunds = (float) Transaction::query()
-            ->where('account_id', $accountId)
-            ->where('member_id', $memberId)
-            ->where('type', 'credit')
-            ->where(function ($query): void {
-                $query->where('description', 'like', 'Refund —%')
-                    ->orWhere('description', 'like', '%RECON_%REFUND%')
-                    ->orWhere('description', 'like', '%RECON_EMI_OVERPAYMENT_REFUND%');
-            })
-            ->sum('amount');
+        $refunds = $this->sumNetOfReversals(
+            Transaction::query()
+                ->where('account_id', $accountId)
+                ->where('member_id', $memberId)
+                ->where('type', 'credit')
+                ->where(function ($query): void {
+                    $query->where('description', 'like', 'Refund —%')
+                        ->orWhere('description', 'like', '%RECON_%REFUND%')
+                        ->orWhere('description', 'like', '%RECON_EMI_OVERPAYMENT_REFUND%');
+                }),
+            $accountId,
+            $memberId,
+        );
 
         $reconCredits = $this->sumByReference($accountId, $memberId, ReconciliationException::class, 'credit');
 
@@ -326,21 +361,24 @@ class MemberInvariantService
 
         $cashOutRequestMorph = (new CashOutRequest)->getMorphClass();
 
-        $legacy = (float) Transaction::query()
-            ->where('account_id', $accountId)
-            ->where('member_id', $memberId)
-            ->where('type', 'debit')
-            ->where(function ($query) use ($cashOutRequestMorph): void {
-                $query->whereNull('reference_type')
-                    ->orWhere('reference_type', '!=', $cashOutRequestMorph);
-            })
-            ->where(function ($query): void {
-                $query->where('description', 'like', '%refund%')
-                    ->orWhere('description', 'like', '%Refund%')
-                    ->orWhere('description', 'like', '%(cash out)%')
-                    ->orWhere('description', 'like', '%(cash clearing to master cash)%');
-            })
-            ->sum('amount');
+        $legacy = $this->sumNetOfReversals(
+            Transaction::query()
+                ->where('account_id', $accountId)
+                ->where('member_id', $memberId)
+                ->where('type', 'debit')
+                ->where(function ($query) use ($cashOutRequestMorph): void {
+                    $query->whereNull('reference_type')
+                        ->orWhere('reference_type', '!=', $cashOutRequestMorph);
+                })
+                ->where(function ($query): void {
+                    $query->where('description', 'like', '%refund%')
+                        ->orWhere('description', 'like', '%Refund%')
+                        ->orWhere('description', 'like', '%(cash out)%')
+                        ->orWhere('description', 'like', '%(cash clearing to master cash)%');
+                }),
+            $accountId,
+            $memberId,
+        );
 
         return $fromRequests + $legacy;
     }

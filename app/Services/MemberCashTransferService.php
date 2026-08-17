@@ -292,6 +292,23 @@ final class MemberCashTransferService
         $this->notifyMembersAboutOutcome($request->fresh(), accepted: false);
     }
 
+    public function cancel(
+        MemberCashTransferRequest $request,
+        ?int $cancelledBy = null,
+        ?string $remarks = null,
+    ): void {
+        if ($request->status !== 'pending') {
+            throw new InvalidArgumentException(__('Only pending transfer requests can be cancelled.'));
+        }
+
+        $this->reviewWorkflow->markReviewed(
+            $request,
+            'cancelled',
+            $cancelledBy,
+            $remarks ?? __('Cancelled by member'),
+        );
+    }
+
     private function notifyAdminsOfNewRequest(MemberCashTransferRequest $request): void
     {
         try {

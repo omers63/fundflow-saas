@@ -47,6 +47,7 @@ final class MemberPortalAccountDetailInsightsService
         $since = $now->copy()->subDays(30);
 
         $stats30 = Transaction::query()
+            ->visibleToMember()
             ->where('account_id', $account->id)
             ->where('transacted_at', '>=', $since)
             ->selectRaw("
@@ -60,13 +61,14 @@ final class MemberPortalAccountDetailInsightsService
         $debits30 = (float) ($stats30->debits ?? 0);
         $net30 = $credits30 - $debits30;
         $txCount30 = (int) ($stats30->tx_count ?? 0);
-        $totalTx = Transaction::query()->where('account_id', $account->id)->count();
+        $totalTx = Transaction::query()->visibleToMember()->where('account_id', $account->id)->count();
 
         $sparklineCounts = [];
         $sparklineWindowStart = $now->copy()->subDays(6)->startOfDay();
         $sparklineWindowEnd = $now->copy()->endOfDay();
 
         Transaction::query()
+            ->visibleToMember()
             ->where('account_id', $account->id)
             ->whereBetween('transacted_at', [$sparklineWindowStart, $sparklineWindowEnd])
             ->get(['transacted_at'])
@@ -88,6 +90,7 @@ final class MemberPortalAccountDetailInsightsService
         }
 
         $recent = Transaction::query()
+            ->visibleToMember()
             ->where('account_id', $account->id)
             ->orderByDesc('transacted_at')
             ->limit(5)

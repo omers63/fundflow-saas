@@ -88,6 +88,32 @@ class Transaction extends Model
         return $query->where('type', 'debit');
     }
 
+    /**
+     * Member portal: hide reversal lines and originals that have been fully reversed.
+     *
+     * Window rollback keeps the audit trail on the ledger; members should not see
+     * undone activity as live transactions.
+     */
+    public function scopeVisibleToMember(Builder $query): Builder
+    {
+        $table = $query->getModel()->getTable();
+        $reversalType = self::class;
+
+        return $query
+            ->where(function (Builder $inner) use ($table, $reversalType): void {
+                $inner->whereNull($table.'.reference_type')
+                    ->orWhere($table.'.reference_type', '!=', $reversalType);
+            })
+            ->whereNotIn($table.'.id', function ($sub) use ($table, $reversalType): void {
+                $sub->from($table.' as member_portal_reversals')
+                    ->join($table.' as member_portal_originals', 'member_portal_originals.id', '=', 'member_portal_reversals.reference_id')
+                    ->where('member_portal_reversals.reference_type', $reversalType)
+                    ->groupBy('member_portal_reversals.reference_id', 'member_portal_originals.amount')
+                    ->havingRaw('SUM(member_portal_reversals.amount) >= member_portal_originals.amount - 0.00001')
+                    ->select('member_portal_reversals.reference_id');
+            });
+    }
+
     public function isDebit(): bool
     {
         return $this->type === 'debit';

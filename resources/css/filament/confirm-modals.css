@@ -348,3 +348,52 @@
         transform: translateX(280%);
     }
 }
+
+.fi-body .fi-modal-window.ff-confirm-modal-window--preview,
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window--preview {
+    max-width: min(48rem, 96vw) !important;
+}
+
+.fi-body .fi-modal-window.ff-confirm-modal-window .fi-modal-footer-actions:has(> :only-child),
+.fi-body .fi-modal-window.ff-tenant-confirm-modal-window .fi-modal-footer-actions:has(> :only-child) {
+    grid-template-columns: 1fr;
+}
+
+.fi-body .ff-confirm-modal-window--preview .ff-rollback-events {
+    gap: 0;
+}
+
+.fi-body .ff-rollback-events-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+}
+
+.fi-body .ff-rollback-events-list {
+    max-height: min(48dvh, 28rem);
+    overflow-y: auto;
+    padding-inline: 0.05rem;
+}
+
+.fi-body .ff-rollback-events-select-group {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--ff-muted, #64748b);
+}
+
+.fi-body .ff-rollback-events-table th,
+.fi-body .ff-rollback-events-table td {
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+.fi-body .ff-confirm-modal-window--preview .fi-section.fi-compact {
+    background: var(--ff-surface, #fff);
+}
+
+.dark .fi-body .ff-confirm-modal-window--preview .fi-section.fi-compact {
+    background: #1e293b;
+}

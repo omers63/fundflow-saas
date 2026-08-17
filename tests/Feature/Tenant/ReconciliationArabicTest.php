@@ -26,7 +26,7 @@ test('reconciliation page translation keys have arabic entries', function (): vo
         'How it works',
         'How reconciliation works',
         'Current reconciliation settings',
-        'Run check now',
+        'Real-time snapshot',
         'Snapshots',
     ];
 

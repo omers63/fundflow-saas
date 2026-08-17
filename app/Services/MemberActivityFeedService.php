@@ -151,7 +151,9 @@ final class MemberActivityFeedService
             return Transaction::query()->whereRaw('0 = 1');
         }
 
-        return Transaction::query()->whereIn('account_id', $accountIds);
+        return Transaction::query()
+            ->visibleToMember()
+            ->whereIn('account_id', $accountIds);
     }
 
     /**

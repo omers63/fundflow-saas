@@ -10,6 +10,7 @@ use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
 use App\Services\BankImportPostAsService;
+use App\Support\BusinessDay;
 use Tests\Concerns\InitializesTenancy;
 
 uses(InitializesTenancy::class);
@@ -129,7 +130,7 @@ test('post as member deposit mirrors cash and credits the member', function () {
         ->and($imported->member_id)->toBe($member->id)
         ->and((float) $member->cashAccount->fresh()->balance)->toBe(3.0)
         ->and((float) Account::masterCash()->fresh()->balance)->toBe(3.0)
-        ->and($imported->cleared_at->toDateString())->toBe('2025-11-05')
+        ->and($imported->cleared_at->toDateString())->toBe(BusinessDay::now()->toDateString())
         ->and(Transaction::query()
             ->where('reference_type', BankTransaction::class)
             ->where('reference_id', $imported->id)

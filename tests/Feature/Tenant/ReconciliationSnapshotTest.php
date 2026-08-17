@@ -196,6 +196,74 @@ test('contributions ledger check ignores in-flight partial posts on pending rows
         ->and($check['in_flight_pending_master_fund_credits'])->toBe(5000.0);
 });
 
+test('contributions ledger check ignores reversed master fund credits on deleted rows', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-CONTRIB-ORPHAN',
+        'name' => 'Deleted Contribution Member',
+        'email' => 'contrib-orphan@fund.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    $accounting = app(AccountingService::class);
+    $accounting->createMemberAccounts($member);
+    AccountingService::withoutMemberCashCollection(function () use ($accounting, $member): void {
+        $accounting->creditMemberCashWithMasterMirror(
+            $member->fresh()->cashAccount,
+            500,
+            'Seed cash',
+            '(test)',
+            $member,
+            now(),
+            $member->id,
+        );
+    });
+
+    $contribution = Contribution::create([
+        'member_id' => $member->id,
+        'period' => now()->startOfMonth()->toDateString(),
+        'amount' => 500,
+        'amount_due' => 500,
+        'amount_collected' => 500,
+        'status' => 'posted',
+        'posted_at' => now(),
+        'payment_method' => Contribution::PAYMENT_METHOD_CASH_ACCOUNT,
+    ]);
+    $accounting->postContributionPrincipal($contribution, 500);
+    $accounting->reverseAllSourceEntries($contribution, 'Business day window rollback');
+    $contribution->delete();
+
+    $check = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    )['checks']['contributions_ledger'];
+
+    expect($check['severity'])->toBe('ok')
+        ->and($check['missing_ledger_count'])->toBe(0)
+        ->and($check['orphan_master_fund_credit_count'])->toBe(0)
+        ->and($check['in_flight_pending_master_fund_credits'])->toBe(0.0);
+});
+
+test('contributions ledger check flags unreversed master fund credits without a living contribution', function () {
+    $masterFund = Account::masterFund();
+    expect($masterFund)->not->toBeNull();
+
+    Transaction::factory()->for($masterFund)->credit()->create([
+        'amount' => 500,
+        'reference_type' => Contribution::class,
+        'reference_id' => 9002,
+        'description' => 'Orphan master fund credit',
+        'balance_after' => 500,
+    ]);
+
+    $check = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    )['checks']['contributions_ledger'];
+
+    expect($check['severity'])->toBe('critical')
+        ->and($check['orphan_master_fund_credit_count'])->toBe(1);
+});
+
 test('global trial diagnostics surface suspected unbalanced posting groups', function () {
     $masterCash = Account::masterCash();
     expect($masterCash)->not->toBeNull();
@@ -811,6 +879,290 @@ test('global trial excludes accepted deposit master cash null-ref mirrors', func
         ->and($check['severity'])->toBe('warning');
 });
 
+test('global trial excludes fully reversed deposit-mirror null-ref credits after posting returns to pending', function () {
+    Account::factory()->masterBank()->withBalance(0)->create();
+
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 0,
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $collection = Mockery::mock(ContributionCollectionCycleService::class);
+    $collection->shouldReceive('onMemberCashIncreased')->andReturnNull();
+    app()->instance(ContributionCollectionCycleService::class, $collection);
+
+    $fundPostings = app(FundPostingService::class);
+    $posting = $fundPostings->submit($member, 6, now()->toDateString());
+    $fundPostings->accept($posting->fresh());
+
+    $masterMirror = Transaction::query()
+        ->where('account_id', Account::masterCash()->id)
+        ->where('type', 'credit')
+        ->where('amount', 6)
+        ->whereNull('reference_type')
+        ->where('member_id', $member->id)
+        ->first();
+
+    expect($masterMirror)->not->toBeNull();
+
+    AccountingService::withoutMasterPoolMirror(
+        fn () => app(AccountingService::class)->createReversalEntry(
+            $masterMirror,
+            'Business day window rollback',
+        ),
+    );
+
+    $posting->fresh()->update([
+        'status' => 'pending',
+        'reviewed_by' => null,
+        'reviewed_at' => null,
+    ]);
+
+    $manual = Transaction::factory()->for(Account::masterCash())->credit()->create([
+        'amount' => 50,
+        'reference_type' => null,
+        'reference_id' => null,
+        'description' => 'Genuine manual null-reference credit',
+        'balance_after' => 50,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+    $nullIds = collect($check['null_reference_lines'] ?? [])->pluck('transaction_id');
+    $suspectedOriginals = collect($check['suspected_postings'] ?? [])
+        ->where('reference_type', Transaction::class)
+        ->pluck('reference_id');
+
+    expect($nullIds)->toContain($manual->id)
+        ->and($nullIds)->not->toContain($masterMirror->id)
+        ->and($check['null_reference_line_count'])->toBe(1)
+        ->and($check['null_reference_credits'])->toBe(50.0)
+        ->and($suspectedOriginals)->not->toContain($masterMirror->id)
+        ->and($check['severity'])->toBe('warning');
+});
+
+test('global trial still flags unreverted deposit-mirror credits when the posting is no longer accepted', function () {
+    Account::factory()->masterBank()->withBalance(0)->create();
+
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 0,
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $collection = Mockery::mock(ContributionCollectionCycleService::class);
+    $collection->shouldReceive('onMemberCashIncreased')->andReturnNull();
+    app()->instance(ContributionCollectionCycleService::class, $collection);
+
+    $fundPostings = app(FundPostingService::class);
+    $posting = $fundPostings->submit($member, 6, now()->toDateString());
+    $fundPostings->accept($posting->fresh());
+
+    $masterMirror = Transaction::query()
+        ->where('account_id', Account::masterCash()->id)
+        ->where('type', 'credit')
+        ->where('amount', 6)
+        ->whereNull('reference_type')
+        ->where('member_id', $member->id)
+        ->first();
+
+    $posting->fresh()->update([
+        'status' => 'pending',
+        'reviewed_by' => null,
+        'reviewed_at' => null,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+    $nullIds = collect($check['null_reference_lines'] ?? [])->pluck('transaction_id');
+
+    expect($masterMirror)->not->toBeNull()
+        ->and($nullIds)->toContain($masterMirror->id)
+        ->and($check['null_reference_credits'])->toBe(6.0)
+        ->and($check['severity'])->toBe('warning');
+});
+
+test('global trial folds reversal chains into the original posting group', function () {
+    $masterCash = Account::masterCash();
+    expect($masterCash)->not->toBeNull();
+
+    $reversed = Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 500,
+        'reference_type' => Contribution::class,
+        'reference_id' => 9001,
+        'description' => 'Reversed contribution test credit',
+        'balance_after' => 500,
+    ]);
+    Transaction::factory()->for($masterCash)->debit()->create([
+        'amount' => 500,
+        'reference_type' => Transaction::class,
+        'reference_id' => $reversed->id,
+        'description' => 'Reversal of #'.$reversed->id.': reversed contribution test credit — Business day window rollback',
+        'balance_after' => 0,
+    ]);
+
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 400,
+        'reference_type' => Contribution::class,
+        'reference_id' => 9002,
+        'description' => 'Remaining contribution test credit',
+        'balance_after' => 400,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+
+    expect($check['severity'])->toBe('warning')
+        ->and($check['unbalanced_posting_group_count'])->toBe(1)
+        ->and($check['suspected_postings'])->toHaveCount(1)
+        ->and($check['suspected_postings'][0]['reference_type'])->toBe(Contribution::class)
+        ->and($check['suspected_postings'][0]['reference_id'])->toBe(9002)
+        ->and(collect($check['suspected_postings'])->pluck('reference_type'))
+        ->not->toContain(Transaction::class)
+        ->and(collect($check['suspected_postings'])->pluck('reference_id'))
+        ->not->toContain(9001);
+});
+
+test('global trial folds nested reversal repairs into the original posting group', function () {
+    $masterFund = Account::masterFund();
+    $masterCash = Account::masterCash();
+    expect($masterFund)->not->toBeNull()
+        ->and($masterCash)->not->toBeNull();
+
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 400,
+        'reference_type' => Contribution::class,
+        'reference_id' => 9002,
+        'description' => 'Remaining contribution test credit',
+        'balance_after' => 400,
+    ]);
+
+    $original = Transaction::factory()->for($masterFund)->credit()->create([
+        'amount' => 500,
+        'reference_type' => Contribution::class,
+        'reference_id' => 9001,
+        'description' => 'Contribution mirror',
+        'balance_after' => 500,
+    ]);
+    $extraMirror = Transaction::factory()->for($masterFund)->debit()->create([
+        'amount' => 500,
+        'reference_type' => Transaction::class,
+        'reference_id' => $original->id,
+        'description' => 'Reversal of #'.$original->id.': contribution mirror (reversal mirror) — Business day window rollback',
+        'balance_after' => 0,
+    ]);
+    Transaction::factory()->for($masterFund)->debit()->create([
+        'amount' => 500,
+        'reference_type' => Transaction::class,
+        'reference_id' => $original->id,
+        'description' => 'Reversal of #'.$original->id.': contribution — Business day window rollback',
+        'balance_after' => -500,
+    ]);
+    Transaction::factory()->for($masterFund)->credit()->create([
+        'amount' => 500,
+        'reference_type' => Transaction::class,
+        'reference_id' => $extraMirror->id,
+        'description' => 'Undo duplicate master pool reversal mirror of #'.$extraMirror->id,
+        'balance_after' => 0,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+
+    expect($check['severity'])->toBe('warning')
+        ->and($check['unbalanced_posting_group_count'])->toBe(1)
+        ->and($check['suspected_postings'][0]['reference_id'])->toBe(9002)
+        ->and(collect($check['suspected_postings'])->pluck('reference_id'))
+        ->not->toContain(9001)
+        ->and(collect($check['suspected_postings'])->pluck('reference_type'))
+        ->not->toContain(Transaction::class);
+});
+
+test('global trial folds fully reversed loan installment groups out of suspected postings', function () {
+    $masterCash = Account::masterCash();
+    $masterFund = Account::masterFund();
+    expect($masterCash)->not->toBeNull()
+        ->and($masterFund)->not->toBeNull();
+
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 500,
+        'reference_type' => Contribution::class,
+        'reference_id' => 9001,
+        'description' => 'Suspicious contribution test credit',
+        'balance_after' => 500,
+    ]);
+
+    $emiCashCredit = Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 3000,
+        'reference_type' => LoanInstallment::class,
+        'reference_id' => 2343,
+        'description' => 'Loan #176 installment #18 cash in',
+        'balance_after' => 3500,
+    ]);
+    $emiCashDebit = Transaction::factory()->for($masterCash)->debit()->create([
+        'amount' => 3000,
+        'reference_type' => LoanInstallment::class,
+        'reference_id' => 2343,
+        'description' => 'Loan #176 installment #18 cash out',
+        'balance_after' => 500,
+    ]);
+    $emiFundCredit = Transaction::factory()->for($masterFund)->credit()->create([
+        'amount' => 3000,
+        'reference_type' => LoanInstallment::class,
+        'reference_id' => 2343,
+        'description' => 'Loan #176 installment #18 fund credit',
+        'balance_after' => 3000,
+    ]);
+
+    Transaction::factory()->for($masterCash)->credit()->create([
+        'amount' => 3000,
+        'reference_type' => Transaction::class,
+        'reference_id' => $emiCashDebit->id,
+        'description' => 'Reversal of #'.$emiCashDebit->id.': installment cash out — Business day window rollback',
+        'balance_after' => 3500,
+    ]);
+    Transaction::factory()->for($masterCash)->debit()->create([
+        'amount' => 3000,
+        'reference_type' => Transaction::class,
+        'reference_id' => $emiCashCredit->id,
+        'description' => 'Reversal of #'.$emiCashCredit->id.': installment cash in — Business day window rollback',
+        'balance_after' => 500,
+    ]);
+    Transaction::factory()->for($masterFund)->debit()->create([
+        'amount' => 3000,
+        'reference_type' => Transaction::class,
+        'reference_id' => $emiFundCredit->id,
+        'description' => 'Reversal of #'.$emiFundCredit->id.': installment fund credit — Business day window rollback',
+        'balance_after' => 0,
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    $check = $report['checks']['global_trial'];
+
+    expect($check['severity'])->toBe('warning')
+        ->and($check['unbalanced_posting_group_count'])->toBe(1)
+        ->and($check['suspected_postings'][0]['reference_type'])->toBe(Contribution::class)
+        ->and($check['suspected_postings'][0]['reference_id'])->toBe(9001)
+        ->and(collect($check['suspected_postings'])->pluck('reference_type'))
+        ->not->toContain(LoanInstallment::class, Transaction::class);
+});
+
 test('global trial stays ok when only expected same-direction bank-import drift remains', function () {
     Account::factory()->masterBank()->withBalance(0)->create();
 
@@ -1409,7 +1761,7 @@ test('reconciliation page workspace tabs switch via livewire', function () {
         ->assertSet('sideTab', 'methodology');
 });
 
-test('run check now action queues reconciliation and stays responsive', function () {
+test('real-time snapshot action queues reconciliation and stays responsive', function () {
     $admin = User::create([
         'name' => 'Recon Run Check Admin',
         'email' => 'recon-run-check-'.uniqid('', true).'@fund.test',
@@ -1426,7 +1778,7 @@ test('run check now action queues reconciliation and stays responsive', function
     $before = ReconciliationSnapshot::query()->count();
 
     Livewire::test(ReconciliationOverviewPage::class)
-        ->assertSee(__('Run check now'))
+        ->assertSee(__('Real-time snapshot'))
         ->assertSee(__('How it works'))
         ->assertSee(__('Current reconciliation settings'))
         ->call('queueRealtimeReconciliation')
@@ -1567,13 +1919,21 @@ test('reconciliation overview renders run check actions', function () {
     Filament::setCurrentPanel('tenant');
     $this->actingAs($admin, 'tenant');
 
-    Livewire::test(ReconciliationOverviewPage::class)
+    $html = Livewire::test(ReconciliationOverviewPage::class)
         ->assertSet('sideTab', 'overview')
-        ->assertSee(__('Run check now'))
         ->assertSee(__('Exception queue re-check'))
+        ->assertSee(__('Real-time snapshot'))
         ->assertSee(__('Daily snapshot'))
         ->assertSee(__('Monthly snapshot'))
-        ->assertSee(__('Current reconciliation settings'));
+        ->assertSee(__('Current reconciliation settings'))
+        ->html();
+
+    $exceptionPos = strpos($html, e(__('Exception queue re-check')));
+    $realtimePos = strpos($html, e(__('Real-time snapshot')));
+
+    expect($exceptionPos)->not->toBeFalse()
+        ->and($realtimePos)->not->toBeFalse()
+        ->and($exceptionPos)->toBeLessThan($realtimePos);
 });
 
 test('real-time snapshot action queues and tabs remain switchable', function () {

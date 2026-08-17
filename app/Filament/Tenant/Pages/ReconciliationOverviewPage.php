@@ -542,7 +542,7 @@ class ReconciliationOverviewPage extends Page implements HasTable
             );
 
             $label = match ($mode) {
-                ReconciliationSnapshot::MODE_REALTIME => __('Real-time check'),
+                ReconciliationSnapshot::MODE_REALTIME => __('Real-time snapshot'),
                 ReconciliationSnapshot::MODE_DAILY => __('Daily snapshot'),
                 ReconciliationSnapshot::MODE_MONTHLY => __('Monthly snapshot'),
                 RunReconciliationJob::MODE_EXCEPTION_QUEUE => __('Exception queue re-check'),

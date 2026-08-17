@@ -11,6 +11,7 @@ use App\Services\AccountingService;
 use App\Services\ContributionService;
 use App\Services\FundFlowService;
 use App\Services\MemberInvariantService;
+use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use Tests\Concerns\InitializesTenancy;
 
@@ -136,7 +137,7 @@ test('post to member and mirror use the csv bank transaction date on ledger legs
 
     expect($legs)->toHaveCount(3)
         ->and($legs->every(fn (Transaction $leg): bool => $leg->transacted_at->toDateString() === $csvDate))->toBeTrue()
-        ->and($txn->fresh()->cleared_at->toDateString())->toBe($csvDate);
+        ->and($txn->fresh()->cleared_at->toDateString())->toBe(BusinessDay::now()->toDateString());
 });
 
 test('mirror to cash does not auto-reverse on unbalanced journal validation', function () {

@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\Transaction;
 use App\Support\BankStatementBuckets;
 use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
@@ -435,6 +436,96 @@ class BankClearingMatchService
                 $this->postMatchedImportToMasterBankLedger($imported->fresh());
             }
         });
+    }
+
+    /**
+     * Undo a clearance pair: reverse the master-bank ledger line and return both rows to uncleared.
+     */
+    public function unmatchClearedPair(BankTransaction $imported): void
+    {
+        if (! $imported->is_cleared) {
+            throw new InvalidArgumentException(__('This bank line is not cleared.'));
+        }
+
+        DB::transaction(function () use ($imported): void {
+            $partner = $this->clearedPartnerFor($imported);
+
+            if ($imported->master_bank_transaction_id !== null) {
+                $ledger = Transaction::query()->find($imported->master_bank_transaction_id);
+
+                if ($ledger !== null && ! $this->accounting->hasExistingReversal($ledger)) {
+                    AccountingService::withoutMemberCashCollection(
+                        fn () => $this->accounting->createReversalEntry(
+                            $ledger,
+                            __('Unmatch bank clearance'),
+                        ),
+                    );
+                }
+            }
+
+            $imported->update([
+                'is_cleared' => false,
+                'cleared_at' => null,
+                'fund_posting_id' => null,
+                'cash_out_request_id' => null,
+                'membership_application_id' => null,
+                'expense_disbursement_id' => null,
+                'fee_disbursement_id' => null,
+                'invest_disbursement_id' => null,
+                'invest_return_id' => null,
+                'master_bank_transaction_id' => null,
+                'status' => 'imported',
+            ]);
+
+            if ($partner !== null) {
+                $partner->update([
+                    'is_cleared' => false,
+                    'cleared_at' => null,
+                ]);
+            }
+        });
+    }
+
+    private function clearedPartnerFor(BankTransaction $imported): ?BankTransaction
+    {
+        return BankTransaction::query()
+            ->where('id', '!=', $imported->id)
+            ->where('is_cleared', true)
+            ->where(function (Builder $query) use ($imported): void {
+                if ($imported->fund_posting_id !== null) {
+                    $query->orWhere('fund_posting_id', $imported->fund_posting_id);
+                }
+
+                if ($imported->cash_out_request_id !== null) {
+                    $query->orWhere('cash_out_request_id', $imported->cash_out_request_id);
+                }
+
+                if ($imported->membership_application_id !== null) {
+                    $query->orWhere('membership_application_id', $imported->membership_application_id);
+                }
+
+                if ($imported->expense_disbursement_id !== null) {
+                    $query->orWhere('expense_disbursement_id', $imported->expense_disbursement_id);
+                }
+
+                if ($imported->fee_disbursement_id !== null) {
+                    $query->orWhere('fee_disbursement_id', $imported->fee_disbursement_id);
+                }
+
+                if ($imported->invest_disbursement_id !== null) {
+                    $query->orWhere('invest_disbursement_id', $imported->invest_disbursement_id);
+                }
+
+                if ($imported->invest_return_id !== null) {
+                    $query->orWhere('invest_return_id', $imported->invest_return_id);
+                }
+
+                if ($imported->cleared_at !== null) {
+                    $query->orWhere('cleared_at', $imported->cleared_at);
+                }
+            })
+            ->orderByRaw('CASE WHEN fund_posting_id IS NOT NULL OR cash_out_request_id IS NOT NULL OR expense_disbursement_id IS NOT NULL OR fee_disbursement_id IS NOT NULL OR invest_disbursement_id IS NOT NULL OR invest_return_id IS NOT NULL THEN 0 ELSE 1 END')
+            ->first();
     }
 
     /**

@@ -13,7 +13,9 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Transaction;
 use App\Services\AccountingService;
 use App\Support\BusinessDay;
+use App\Support\InstallmentCollectionStatus;
 use App\Support\LoanFundingStrategy;
+use App\Support\LoanRepaymentNote;
 use App\Support\LoanSettings;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
@@ -683,5 +685,94 @@ final class LoanLedgerService
 
             $this->postLoanPrincipalRepayment($loan, $amount, $description, $repayment, $member->id, $at);
         });
+    }
+
+    /**
+     * Reverse every ledger line for an installment (cash, fund, loan account, guarantor top-up, fees)
+     * and reset the installment without re-firing {@see LoanInstallmentObserver}.
+     */
+    public function reverseInstallmentPosting(LoanInstallment $installment, string $reason): int
+    {
+        $installment->loadMissing('loan.member');
+        $loan = $installment->loan;
+        $wasPaid = $installment->status === 'paid';
+        $wasLate = (bool) $installment->is_late;
+        $principal = (float) ($installment->amount_collected > 0
+            ? $installment->amount_collected
+            : $installment->amount);
+
+        $reversed = 0;
+
+        AccountingService::withoutMemberCashCollection(function () use ($installment, $reason, &$reversed): void {
+            $reversed = $this->accounting->reverseAllSourceEntries($installment, $reason);
+        });
+
+        LoanInstallment::withoutEvents(function () use ($installment): void {
+            $installment->update([
+                'status' => 'pending',
+                'collection_status' => InstallmentCollectionStatus::PENDING,
+                'paid_at' => null,
+                'paid_by_guarantor' => false,
+                'is_late' => false,
+                'late_fee_amount' => 0,
+                'late_fee_tier' => null,
+                'amount_collected' => 0,
+            ]);
+        });
+
+        LoanRepayment::query()
+            ->where('loan_id', $installment->loan_id)
+            ->whereIn('notes', [
+                LoanRepaymentNote::installment((int) $installment->installment_number),
+                LoanRepaymentNote::installment((int) $installment->installment_number, true),
+            ])
+            ->delete();
+
+        if ($wasPaid && $wasLate && $loan !== null) {
+            $loan->decrement('late_repayment_count');
+            if ($principal > 0) {
+                $loan->decrement('late_repayment_amount', $principal);
+            }
+            $member = $loan->member;
+            if ($member !== null) {
+                $member->decrement('late_repayment_count');
+                if ($principal > 0) {
+                    $member->decrement('late_repayment_amount', $principal);
+                }
+            }
+        }
+
+        return $reversed;
+    }
+
+    public function recomputeRepaidToMaster(Loan $loan): void
+    {
+        $masterPortion = (float) $loan->master_portion;
+        $running = 0.0;
+
+        $loan->installments()
+            ->where('status', 'paid')
+            ->orderBy('paid_at')
+            ->orderBy('id')
+            ->each(function (LoanInstallment $installment) use ($masterPortion, &$running): void {
+                $principal = (float) ($installment->amount_collected > 0
+                    ? $installment->amount_collected
+                    : $installment->amount);
+                $running += self::principalAmountCreditingMasterRepaidSlice(
+                    $masterPortion,
+                    $running,
+                    $principal,
+                );
+            });
+
+        $loan->update(['repaid_to_master' => round($running, 2)]);
+        $loan->refresh();
+
+        if (
+            $loan->guarantor_released_at !== null
+            && (float) $loan->repaid_to_master + 0.00001 < (float) $loan->master_portion
+        ) {
+            $loan->update(['guarantor_released_at' => null]);
+        }
     }
 }

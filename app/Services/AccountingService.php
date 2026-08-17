@@ -742,14 +742,16 @@ class AccountingService
         $count = 0;
 
         DB::transaction(function () use ($siblings, $reason, $transactedAt, &$count): void {
-            foreach ($siblings as $entry) {
-                if ($entry->account === null) {
-                    continue;
-                }
+            self::withoutMasterPoolMirror(function () use ($siblings, $reason, $transactedAt, &$count): void {
+                foreach ($siblings as $entry) {
+                    if ($entry->account === null) {
+                        continue;
+                    }
 
-                $this->createReversalEntry($entry, $reason, $transactedAt);
-                $count++;
-            }
+                    $this->createReversalEntry($entry, $reason, $transactedAt);
+                    $count++;
+                }
+            });
         });
 
         if ($count === 0) {
@@ -757,6 +759,134 @@ class AccountingService
         }
 
         return $count;
+    }
+
+    /**
+     * Reverse every non-reversal ledger line that points at the given source.
+     * Cash debits are reversed first so a later cash-credit reverse cannot overdraw.
+     */
+    public function reverseAllSourceEntries(
+        Model $source,
+        string $reason,
+        ?DateTimeInterface $transactedAt = null,
+    ): int {
+        $siblings = Transaction::query()
+            ->where('reference_type', $source::class)
+            ->where('reference_id', $source->getKey())
+            ->with('account')
+            ->orderByRaw("CASE WHEN type = 'debit' THEN 0 ELSE 1 END")
+            ->orderBy('id')
+            ->get();
+
+        $count = 0;
+
+        DB::transaction(function () use ($siblings, $reason, $transactedAt, &$count): void {
+            self::withoutMasterPoolMirror(function () use ($siblings, $reason, $transactedAt, &$count): void {
+                foreach ($siblings as $entry) {
+                    if ($this->isReversalEntry($entry) || $this->hasExistingReversal($entry)) {
+                        continue;
+                    }
+
+                    if ($entry->account === null) {
+                        continue;
+                    }
+
+                    $this->createReversalEntry($entry, $reason, $transactedAt);
+                    $count++;
+                }
+            });
+        });
+
+        return $count;
+    }
+
+    /**
+     * Undo extra master cash/fund reversal-mirrors created when a full-source reverse
+     * auto-mirrored member legs that already had explicit master siblings.
+     *
+     * @return int Number of duplicate master legs reversed.
+     */
+    public function repairDuplicateMasterPoolReversalMirrors(?string $reason = null): int
+    {
+        $reason ??= __('Undo duplicate master pool reversal mirror');
+        $repaired = 0;
+
+        self::withoutMemberCashCollection(function () use ($reason, &$repaired): void {
+            foreach ($this->duplicateMasterPoolReversalMirrors() as $mirror) {
+                $this->createReversalEntry($mirror, $reason);
+                $repaired++;
+            }
+        });
+
+        return $repaired;
+    }
+
+    /**
+     * Master cash/fund counter-entries that reverse a member pool line while the
+     * original source already has a reversed master sibling of the same type.
+     *
+     * @return Collection<int, Transaction>
+     */
+    public function duplicateMasterPoolReversalMirrors(): Collection
+    {
+        $masterIds = array_values(array_filter([
+            Account::masterCash()?->id,
+            Account::masterFund()?->id,
+        ]));
+
+        if ($masterIds === []) {
+            return collect();
+        }
+
+        $candidates = Transaction::query()
+            ->whereIn('account_id', $masterIds)
+            ->where('reference_type', Transaction::class)
+            ->whereNotNull('reference_id')
+            ->with('account')
+            ->orderBy('id')
+            ->get();
+
+        return $candidates
+            ->filter(fn (Transaction $mirror): bool => $this->isDuplicateMasterPoolReversalMirror($mirror))
+            ->values();
+    }
+
+    private function isDuplicateMasterPoolReversalMirror(Transaction $mirror): bool
+    {
+        if ($this->hasExistingReversal($mirror) || ! $this->isReversalEntry($mirror)) {
+            return false;
+        }
+
+        $mirrorAccount = $mirror->account;
+
+        if ($mirrorAccount === null || ! $mirrorAccount->is_master || ! in_array($mirrorAccount->type, ['cash', 'fund'], true)) {
+            return false;
+        }
+
+        $original = Transaction::query()->with('account')->find($mirror->reference_id);
+
+        if ($original === null || $original->account === null) {
+            return false;
+        }
+
+        if ($original->account->is_master || $original->account->type !== $mirrorAccount->type) {
+            return false;
+        }
+
+        if (blank($original->reference_type) || $original->reference_type === Transaction::class || blank($original->reference_id)) {
+            return false;
+        }
+
+        $masterSiblings = Transaction::query()
+            ->where('reference_type', $original->reference_type)
+            ->where('reference_id', $original->reference_id)
+            ->where('account_id', $mirror->account_id)
+            ->whereKeyNot($original->id)
+            ->get();
+
+        return $masterSiblings->contains(
+            fn (Transaction $sibling): bool => ! $this->isReversalEntry($sibling) && $this->hasExistingReversal($sibling),
+        );
     }
 
     public function canUseFullSourceReversal(Transaction $transaction): bool
@@ -1281,6 +1411,10 @@ class AccountingService
 
         $resolvedMemberId = $this->resolveTransactionMemberId($memberCash, $memberId);
 
+        if (self::masterPoolMirrorInProgress()) {
+            return $this->debit($memberCash, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
+        }
+
         self::$masterPoolMirrorDepth++;
 
         $masterReference = $this->masterPoolMirrorReference($reference);
@@ -1325,6 +1459,10 @@ class AccountingService
         }
 
         $resolvedMemberId = $this->resolveTransactionMemberId($memberCash, $memberId);
+
+        if (self::masterPoolMirrorInProgress()) {
+            return $this->credit($memberCash, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
+        }
 
         self::$masterPoolMirrorDepth++;
 
@@ -1371,6 +1509,10 @@ class AccountingService
 
         $resolvedMemberId = $this->resolveTransactionMemberId($memberFund, $memberId);
 
+        if (self::masterPoolMirrorInProgress()) {
+            return $this->debit($memberFund, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
+        }
+
         self::$masterPoolMirrorDepth++;
 
         $masterReference = $this->masterPoolMirrorReference($reference);
@@ -1415,6 +1557,10 @@ class AccountingService
         }
 
         $resolvedMemberId = $this->resolveTransactionMemberId($memberFund, $memberId);
+
+        if (self::masterPoolMirrorInProgress()) {
+            return $this->credit($memberFund, $amount, $description, $reference, $transactedAt, $resolvedMemberId);
+        }
 
         self::$masterPoolMirrorDepth++;
 

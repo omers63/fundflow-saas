@@ -12,6 +12,7 @@ use App\Filament\Tenant\Resources\FundPostings\FundPostingResource;
 use App\Filament\Tenant\Support\ViewFundPostingAction as TenantViewFundPostingAction;
 use App\Models\Tenant\Setting;
 use App\Services\FundPostingService;
+use App\Support\OperationalRequestStatus;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -66,11 +67,7 @@ class FundPostingsTable
                         ->color('primary'),
                     TextColumn::make('status')
                         ->badge()
-                        ->color(fn (string $state): string => match ($state) {
-                            'pending' => 'warning',
-                            'accepted' => 'success',
-                            'rejected' => 'danger',
-                        }),
+                        ->color(fn (string $state): string => OperationalRequestStatus::color($state)),
                     TextColumn::make('created_at')
                         ->label('Submitted')
                         ->dateTime()
@@ -78,11 +75,7 @@ class FundPostingsTable
                 ])
                 ->filters([
                     SelectFilter::make('status')
-                        ->options([
-                            'pending' => 'Pending',
-                            'accepted' => 'Accepted',
-                            'rejected' => 'Rejected',
-                        ]),
+                        ->options(OperationalRequestStatus::options()),
                     SelectFilter::make('member_id')
                         ->label('Member')
                         ->relationship('member', 'name')

@@ -122,6 +122,19 @@ test('admin can reject a pending cash transfer', function () {
         ->and((float) $this->to->fresh()->cashAccount->balance)->toBe(0.0);
 });
 
+test('member can cancel a pending cash transfer and restore available cash', function () {
+    $request = $this->service->submit($this->from, 1000, 'Recipient Member');
+
+    expect($this->service->availableCashForTransfer($this->from))->toBe(4000.0);
+
+    $this->service->cancel($request, $this->fromUser->id);
+
+    expect($request->fresh()->status)->toBe('cancelled')
+        ->and($this->service->availableCashForTransfer($this->from->fresh()))->toBe(5000.0)
+        ->and((float) $this->from->fresh()->cashAccount->balance)->toBe(5000.0)
+        ->and((float) $this->to->fresh()->cashAccount->balance)->toBe(0.0);
+});
+
 test('cannot transfer more than available cash', function () {
     expect(fn () => $this->service->submit($this->from, 6000, 'Recipient Member'))
         ->toThrow(InvalidArgumentException::class);

@@ -16,8 +16,10 @@ final class ActionModalFailure
 {
     /**
      * Surface an error inside the open action modal and keep it open (no toast).
+     *
+     * @param  bool  $allowRetry  Keep Confirm enabled so the user can fix the form and submit again.
      */
-    public static function present(Action $action, string $message, ?string $heading = null): void
+    public static function present(Action $action, string $message, ?string $heading = null, bool $allowRetry = false): void
     {
         if (filled($heading)) {
             $action->modalHeading($heading);
@@ -26,8 +28,11 @@ final class ActionModalFailure
         $action->modalDescription(self::messageHtml($message));
         $action->modalIcon('heroicon-o-exclamation-circle');
         $action->modalIconColor('danger');
-        $action->modalSubmitAction(false);
-        $action->modalCancelActionLabel(__('Close'));
+
+        if (! $allowRetry) {
+            $action->modalSubmitAction(false);
+            $action->modalCancelActionLabel(__('Close'));
+        }
 
         throw new Halt;
     }

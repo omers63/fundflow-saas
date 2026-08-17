@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Concerns;
 
+use App\Filament\Support\BusinessDayWindowRollbackHeaderAction;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -346,6 +347,7 @@ trait InteractsWithJobsTable
     protected function jobsAutomationControlActions(): array
     {
         return [
+            BusinessDayWindowRollbackHeaderAction::make(),
             Action::make('toggle_scheduler')
                 ->label(fn (): string => app(AutomationSchedulerGate::class)->isPaused()
                     ? __('Resume scheduler')

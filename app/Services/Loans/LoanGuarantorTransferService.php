@@ -13,6 +13,9 @@ use App\Services\FundAuditLogService;
 use App\Services\MemberStatusService;
 use App\Services\OperationalReviewWorkflowService;
 use App\Support\BusinessDay;
+use App\Support\InstallmentCollectionStatus;
+use App\Support\LoanRepaymentWindowPolicy;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -154,5 +157,136 @@ class LoanGuarantorTransferService
         }
 
         $loan->update(['installments_count' => $loan->installments()->count()]);
+    }
+
+    /**
+     * Move a guarantor-transferred loan back to the original borrower and rebuild
+     * unpaid EMI slots from loan terms. Reverse in-window guarantor collections first.
+     */
+    public function restoreToOriginalBorrower(Loan $loan): void
+    {
+        $originalBorrowerId = $loan->original_borrower_member_id;
+
+        if ($originalBorrowerId === null) {
+            throw new InvalidArgumentException(__('This loan has no original borrower on record.'));
+        }
+
+        $borrower = Member::query()->find($originalBorrowerId);
+
+        if ($borrower === null) {
+            throw new InvalidArgumentException(__('Original borrower member not found.'));
+        }
+
+        DB::transaction(function () use ($loan, $borrower): void {
+            $loan->installments()
+                ->whereIn('status', ['pending', 'overdue'])
+                ->forceDelete();
+
+            $loan->update([
+                'member_id' => $borrower->id,
+                'status' => 'active',
+                'lifecycle_stage' => 'active',
+                'transferred_to_guarantor_at' => null,
+                'guarantor_liability_transferred_at' => null,
+            ]);
+
+            $this->rebuildOriginalBorrowerUnpaidSchedule($loan->fresh());
+
+            $borrower->refresh();
+
+            if ($borrower->status === 'inactive' && $borrower->frozen_at === null) {
+                app(MemberStatusService::class)->restoreInactive($borrower);
+            }
+        });
+
+        $this->audit->log('LOAN_RESTORED_FROM_GUARANTOR', 'loan', $loan->fresh(), $borrower, [
+            'original_borrower_id' => $borrower->id,
+            'guarantor_id' => $loan->guarantor_member_id,
+        ]);
+    }
+
+    private function rebuildOriginalBorrowerUnpaidSchedule(Loan $loan): void
+    {
+        $loan->loadMissing('loanTier');
+
+        $amountApproved = (float) $loan->amount_approved;
+        $memberPortion = (float) $loan->member_portion;
+        $minInstall = (float) ($loan->loanTier?->min_monthly_installment ?? $loan->monthly_repayment ?? 1000);
+        $threshold = (float) $loan->settlement_threshold;
+        $count = Loan::computeInstallmentsCountFromPortions(
+            $amountApproved,
+            $memberPortion,
+            $minInstall,
+            $threshold,
+        );
+
+        if ($count <= 0) {
+            $loan->update(['installments_count' => $loan->installments()->count()]);
+
+            return;
+        }
+
+        $policy = app(LoanRepaymentWindowPolicy::class);
+        $asOf = BusinessDay::today()->startOfDay();
+        $firstPeriod = $this->originalScheduleStart($loan);
+
+        $existingNumbers = $loan->installments()
+            ->pluck('installment_number')
+            ->map(fn ($number): int => (int) $number)
+            ->all();
+
+        for ($i = 1; $i <= $count; $i++) {
+            if (in_array($i, $existingNumbers, true)) {
+                continue;
+            }
+
+            $period = $firstPeriod->copy()->addMonths($i - 1);
+            $due = $policy->installmentDueDateForCycle((int) $period->month, (int) $period->year);
+            $overdue = $due->copy()->startOfDay()->lte($asOf);
+
+            LoanInstallment::create([
+                'loan_id' => $loan->id,
+                'installment_number' => $i,
+                'amount' => Loan::scheduleInstallmentAmount(
+                    $i,
+                    $count,
+                    $minInstall,
+                    $loan->fullRepaymentThreshold(),
+                ),
+                'due_date' => $due->toDateString(),
+                'status' => $overdue ? 'overdue' : 'pending',
+                'collection_status' => $overdue
+                    ? InstallmentCollectionStatus::OVERDUE
+                    : InstallmentCollectionStatus::PENDING,
+                'overdue_since' => $overdue ? $due->copy()->endOfDay() : null,
+                'is_late' => $overdue,
+                'amount_collected' => 0,
+            ]);
+        }
+
+        $loan->update(['installments_count' => $count]);
+    }
+
+    private function originalScheduleStart(Loan $loan): Carbon
+    {
+        if ($loan->first_repayment_month && $loan->first_repayment_year) {
+            return Carbon::create(
+                (int) $loan->first_repayment_year,
+                (int) $loan->first_repayment_month,
+                1,
+            )->startOfMonth();
+        }
+
+        $earliest = $loan->installments()->orderBy('installment_number')->first();
+
+        if ($earliest?->due_date !== null) {
+            return Carbon::parse($earliest->due_date)
+                ->startOfMonth()
+                ->subMonths(max(0, (int) $earliest->installment_number - 1));
+        }
+
+        $from = $loan->disbursed_at ?? $loan->applied_at ?? BusinessDay::now();
+
+        return Carbon::parse($from)->startOfMonth();
     }
 }

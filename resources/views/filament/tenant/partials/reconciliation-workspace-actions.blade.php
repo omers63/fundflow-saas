@@ -3,23 +3,12 @@
 ])
 
 @php
-    $canRun = auth('tenant')->user()?->is_admin === true;
+$canRun = auth('tenant')->user()?->is_admin === true;
 @endphp
 
 @if ($canRun)
     <div @class(['ff-recon-run-toolbar space-y-3 mb-4', $class])>
         <div class="ff-recon-run-actions flex flex-wrap items-center gap-2">
-            <button
-                type="button"
-                wire:click="queueRealtimeReconciliation"
-                wire:loading.attr="disabled"
-                wire:target="queueRealtimeReconciliation,queueExceptionQueueRecheck,queueDailySnapshot,queueMonthlySnapshot"
-                class="fi-btn fi-size-md fi-btn-color-primary fi-color fi-color-primary relative grid-flow-col items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold outline-none transition duration-75 focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-70 inline-grid shadow-sm bg-primary-600 text-white hover:bg-primary-500 dark:bg-primary-500 dark:hover:bg-primary-400"
-            >
-                <x-heroicon-o-play class="h-4 w-4" />
-                <span>{{ __('Run check now') }}</span>
-            </button>
-
             <button
                 type="button"
                 wire:click="queueExceptionQueueRecheck"
@@ -30,6 +19,17 @@
             >
                 <x-heroicon-o-arrow-path class="h-4 w-4" />
                 <span>{{ __('Exception queue re-check') }}</span>
+            </button>
+
+            <button
+                type="button"
+                wire:click="queueRealtimeReconciliation"
+                wire:loading.attr="disabled"
+                wire:target="queueRealtimeReconciliation,queueExceptionQueueRecheck,queueDailySnapshot,queueMonthlySnapshot"
+                class="fi-btn fi-size-md fi-btn-color-primary fi-color fi-color-primary relative grid-flow-col items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold outline-none transition duration-75 focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-70 inline-grid shadow-sm bg-primary-600 text-white hover:bg-primary-500 dark:bg-primary-500 dark:hover:bg-primary-400"
+            >
+                <x-heroicon-o-play class="h-4 w-4" />
+                <span>{{ __('Real-time snapshot') }}</span>
             </button>
 
             <button
