@@ -277,8 +277,40 @@
             </div>
         </x-member::panel>
 
+        @if ($loanAmount > 0 && count($this->calculations) > 0)
+            <div class="mt-4 flex flex-wrap gap-2 sm:mt-5" role="tablist" aria-label="{{ __('Calculator mode') }}">
+                <button
+                    type="button"
+                    wire:click="setCalculatorMode('estimate')"
+                    @class([
+                        'inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold ring-1 transition-colors',
+                        'bg-primary-600 text-white ring-primary-600' => $this->calculatorMode === 'estimate',
+                        'bg-white text-gray-700 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700 dark:hover:bg-gray-700' => $this->calculatorMode !== 'estimate',
+                    ])
+                >
+                    {{ __('Estimate') }}
+                </button>
+                <button
+                    type="button"
+                    wire:click="setCalculatorMode('simulate')"
+                    @class([
+                        'inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold ring-1 transition-colors',
+                        'bg-primary-600 text-white ring-primary-600' => $this->calculatorMode === 'simulate',
+                        'bg-white text-gray-700 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700 dark:hover:bg-gray-700' => $this->calculatorMode !== 'simulate',
+                    ])
+                >
+                    {{ __('Lifecycle simulator') }}
+                </button>
+            </div>
+        @endif
+
         @if ($loanAmount > 0)
-            @if (count($this->calculations) > 0)
+            @if (count($this->calculations) > 0 && $this->calculatorMode === 'simulate')
+                @include('filament.member.pages.partials.loan-lifecycle-simulator', [
+                    'currency' => $currency,
+                    'calculations' => $this->calculations,
+                ])
+            @elseif (count($this->calculations) > 0)
                 @foreach ($this->calculations as $calc)
                     @php
                         $memberPct = $loanAmount > 0 ? min(100, $calc['member_portion'] / $loanAmount * 100) : 0;
@@ -391,6 +423,9 @@
                                             'ceiling' => \App\Filament\Support\MoneyDisplay::format($calc['eligibility_base'], $currency, precision: 0) ?? '—',
                                         ]) }}
                                     </p>
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        {{ __('After repayment you will need this fund balance before you can apply again.') }}
+                                    </p>
                                 </div>
                                 <div class="min-w-0">
                                     <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
@@ -405,9 +440,6 @@
                                             :tone="$eligibilityProgress >= 100 ? 'success' : 'warning'"
                                         />
                                     </div>
-                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        {{ __('After repayment you will need this fund balance before you can apply again.') }}
-                                    </p>
                                 </div>
                             </div>
                         </div>

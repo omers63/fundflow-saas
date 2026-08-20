@@ -1871,8 +1871,16 @@
         display: grid;
         grid-column: 1 / -1;
         grid-template-columns: subgrid;
-        align-items: center;
+        align-items: start;
         gap: 0;
+    }
+
+    .ff-member-loan-calc-schedule-header {
+        align-items: center;
+    }
+
+    .ff-member-loan-calc-schedule-header > * {
+        text-align: center;
     }
 
     .ff-member-loan-calc-schedule-header > :first-child,
@@ -1883,6 +1891,9 @@
     .ff-member-loan-calc-schedule-header > :last-child,
     .ff-member-loan-calc-schedule-row > :last-child {
         padding-inline-end: 0.75rem;
+    }
+
+    .ff-member-loan-calc-schedule-row > :last-child {
         text-align: end;
     }
 }
@@ -1899,8 +1910,18 @@
     background: rgb(120 53 15 / 0.28);
 }
 
-.dark .fi-body.fi-panel-member .ff-member-loan-calc-schedule-row--paid {
+.dark .fi-body.fi-panel-member .ff-member-loan-calc-schedule-row--paid,
+.dark .fi-body.fi-panel-member .ff-member-loan-calc-schedule-row--regular,
+.dark .fi-body.fi-panel-member .ff-member-loan-calc-schedule-row--contribution-paid {
     background: rgb(6 78 59 / 0.28);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-loan-calc-schedule-row--partial {
+    background: rgb(30 64 175 / 0.28);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-loan-calc-schedule-row--full {
+    background: rgb(120 53 15 / 0.28);
 }
 
 .dark .fi-body.fi-panel-member .ff-member-loan-calc-schedule-row--skipped {

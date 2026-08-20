@@ -13,6 +13,7 @@ use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanEligibilityService;
 use App\Services\MemberLoanCalculatorService;
+use App\Services\MemberLoanLifecycleSimulator;
 use App\Support\BusinessDay;
 use App\Support\ContributionAmountSettings;
 use App\Support\LoanExcessFundSettlementOption;
@@ -21,10 +22,12 @@ use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
+use Filament\Notifications\Notification;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\Computed;
+use Throwable;
 
 class LoanCalculatorPage extends Page
 {
@@ -44,6 +47,10 @@ class LoanCalculatorPage extends Page
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
+    public const MODE_ESTIMATE = 'estimate';
+
+    public const MODE_SIMULATE = 'simulate';
+
     public int|float|string|null $loanAmount = null;
 
     public string $fundingStrategy = '';
@@ -58,6 +65,17 @@ class LoanCalculatorPage extends Page
 
     public int $projectedContributionAmount = 0;
 
+    public string $calculatorMode = self::MODE_ESTIMATE;
+
+    public int $simulateTierIndex = 0;
+
+    /** @var array<string, mixed>|null */
+    public ?array $simulation = null;
+
+    public float|string|null $simulationPaymentAmount = null;
+
+    public int $simulationContributionAmount = 0;
+
     public function mount(): void
     {
         $this->fundingStrategy = LoanFundingStrategy::defaultForApplication();
@@ -68,6 +86,7 @@ class LoanCalculatorPage extends Page
         $this->projectedContributionAmount = $this->normalizeProjectedContribution(
             CurrentMember::get()?->monthly_contribution_amount,
         );
+        $this->simulationContributionAmount = $this->projectedContributionAmount;
     }
 
     public function updatedFundingStrategy(string $value): void
@@ -75,21 +94,187 @@ class LoanCalculatorPage extends Page
         if (! LoanFundingStrategy::isAvailableForApplication($value)) {
             $this->fundingStrategy = LoanFundingStrategy::defaultForApplication();
         }
+
+        $this->resetSimulation();
     }
 
     public function updatedGraceCycles(mixed $value): void
     {
         $this->graceCycles = LoanSettings::clampGraceCycles((int) $value);
+        $this->resetSimulation();
     }
 
     public function updatedProjectedContributionAmount(mixed $value): void
     {
         $this->projectedContributionAmount = $this->normalizeProjectedContribution($value);
+        $this->resetSimulation();
+    }
+
+    public function updatedLoanAmount(mixed $value): void
+    {
+        $this->resetSimulation();
+    }
+
+    public function updatedExcessFundSettlementOption(mixed $value): void
+    {
+        $this->resetSimulation();
+    }
+
+    public function updatedExcessFundDisposition(mixed $value): void
+    {
+        $this->excessFundDisposition = LoanFundExcessDisposition::normalize(
+            is_string($value) ? $value : null,
+        );
+        $this->resetSimulation();
     }
 
     public function calculate(): void
     {
         unset($this->calculations);
+        $this->resetSimulation();
+    }
+
+    public function setCalculatorMode(string $mode): void
+    {
+        if (! in_array($mode, [self::MODE_ESTIMATE, self::MODE_SIMULATE], true)) {
+            return;
+        }
+
+        $this->calculatorMode = $mode;
+
+        // Keep an existing simulation when toggling back from Estimate.
+        if ($mode === self::MODE_SIMULATE && ! is_array($this->simulation)) {
+            $this->startSimulationFromEstimate();
+        }
+    }
+
+    public function startSimulationFromEstimate(): void
+    {
+        $calcs = $this->calculations;
+
+        if ($calcs === []) {
+            $this->simulation = null;
+            Notification::make()
+                ->title(__('Calculate a loan estimate first'))
+                ->warning()
+                ->send();
+
+            $this->calculatorMode = self::MODE_ESTIMATE;
+
+            return;
+        }
+
+        $index = max(0, min($this->simulateTierIndex, count($calcs) - 1));
+        $this->simulateTierIndex = $index;
+        $calc = $calcs[$index];
+        $loanAmount = (float) ($this->loanAmount ?? 0);
+
+        $this->simulation = app(MemberLoanLifecycleSimulator::class)->startFromEstimate(
+            $calc,
+            $loanAmount,
+            $this->startDate,
+            $this->excessFundDisposition,
+        );
+        $this->simulationPaymentAmount = (float) ($calc['min_installment'] ?? 0);
+        $this->simulationContributionAmount = $this->normalizeProjectedContribution(
+            $this->simulationContributionAmount ?: $this->projectedContributionAmount,
+        );
+    }
+
+    public function applySimulationRegularPayment(): void
+    {
+        if (! is_array($this->simulation)) {
+            return;
+        }
+
+        try {
+            $this->simulation = app(MemberLoanLifecycleSimulator::class)->applyRegularPayment(
+                $this->simulation,
+                (float) ($this->simulation['min_installment'] ?? 0),
+            );
+        } catch (Throwable $e) {
+            Notification::make()
+                ->title($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    public function applySimulationPartialEarlySettlement(): void
+    {
+        if (! is_array($this->simulation)) {
+            return;
+        }
+
+        try {
+            // Mid-life simulator partials always roll up. Estimate roll-up/skip only shapes
+            // the disbursement snapshot (excess fund at start), not later lump payments.
+            $this->simulation = app(MemberLoanLifecycleSimulator::class)->applyPartialEarlySettlement(
+                $this->simulation,
+                (float) ($this->simulationPaymentAmount ?? 0),
+                MemberLoanLifecycleSimulator::PARTIAL_ROLL_UP,
+            );
+        } catch (Throwable $e) {
+            Notification::make()
+                ->title($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    public function applySimulationFullEarlySettlement(): void
+    {
+        if (! is_array($this->simulation)) {
+            return;
+        }
+
+        try {
+            $this->simulation = app(MemberLoanLifecycleSimulator::class)->applyFullEarlySettlement(
+                $this->simulation,
+            );
+        } catch (Throwable $e) {
+            Notification::make()
+                ->title($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    public function applySimulationContribution(): void
+    {
+        if (! is_array($this->simulation)) {
+            return;
+        }
+
+        try {
+            $this->simulation = app(MemberLoanLifecycleSimulator::class)->applyContribution(
+                $this->simulation,
+                (float) $this->simulationContributionAmount,
+            );
+        } catch (Throwable $e) {
+            Notification::make()
+                ->title($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    public function updatedSimulateTierIndex(mixed $value): void
+    {
+        $this->simulateTierIndex = max(0, (int) $value);
+
+        if ($this->calculatorMode === self::MODE_SIMULATE) {
+            $this->startSimulationFromEstimate();
+        }
+    }
+
+    public function resetSimulation(): void
+    {
+        $this->simulation = null;
+
+        if ($this->calculatorMode === self::MODE_SIMULATE) {
+            $this->calculatorMode = self::MODE_ESTIMATE;
+        }
     }
 
     public static function canAccess(): bool

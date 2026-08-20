@@ -19,6 +19,7 @@ use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Support\BusinessDaySettings;
 use App\Support\LoanExcessFundSettlementOption;
+use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use App\Support\PublicPageSettings;
@@ -402,11 +403,145 @@ test('loan calculator skipped installments show no EMI instead of an amount', fu
 
     $skipped = array_values(array_filter(
         $component->instance()->calculations[0]['schedule']['rows'],
-        fn(array $row): bool => ($row['kind'] ?? '') === 'skipped',
+        fn (array $row): bool => ($row['kind'] ?? '') === 'skipped',
     ));
 
     expect($skipped)->not->toBeEmpty()
         ->and(array_unique(array_column($skipped, 'amount')))->toBe([0.0]);
+
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('loan calculator lifecycle simulator supports regular payments and full early settlement', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    LoanSettings::save([
+        'settlement_threshold_pct' => 0.10,
+        'eligibility_threshold_pct' => 0.20,
+        'member_funding_split_pct' => 50,
+        'allow_funding_strategy_split_percentage' => true,
+        'max_allowed_grace_cycles' => 2,
+    ]);
+    LoanTier::query()->forceDelete();
+    LoanTier::create([
+        'tier_number' => 4,
+        'label' => 'Tier 4',
+        'min_amount' => 91000,
+        'max_amount' => 120000,
+        'min_monthly_installment' => 2500,
+        'is_active' => true,
+    ]);
+    $this->memberA->fundAccount->update(['balance' => 50_000]);
+
+    $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
+
+    $component = Livewire::test(LoanCalculatorPage::class)
+        ->set('graceCycles', 0)
+        ->set('fundingStrategy', LoanFundingStrategy::SPLIT_PERCENTAGE)
+        ->set('loanAmount', 100000)
+        ->call('calculate')
+        ->assertSee(__('Estimate'), false)
+        ->assertSee(__('Lifecycle simulator'), false);
+
+    expect($component->instance()->calculations)->not->toBeEmpty();
+
+    $component
+        ->call('setCalculatorMode', 'simulate')
+        ->assertSet('calculatorMode', 'simulate');
+
+    expect($component->instance()->simulation)->toBeArray()
+        ->and($component->instance()->simulation['maturity_amount'])->toBe(60000.0)
+        ->and($component->instance()->simulation['remaining_months'])->toBe(24)
+        ->and($component->instance()->simulation['fund_balance'])->toBe(-50000.0);
+
+    $component
+        ->assertSeeHtml('ff-member-loan-sim')
+        ->assertSee(__('Apply payments'), false)
+        ->assertSee(__('Partial settlement amount'), false)
+        ->assertSee(__('Full settlement amount'), false)
+        ->assertSee(__('Updating schedule'), false)
+        ->assertSee(__('Projected loan maturity date'), false)
+        ->assertSee(__('total cycle(s)'), false)
+        ->assertSee(__('pending installment(s)'), false)
+        ->assertSee(__('Simulation history'), false)
+        ->assertSeeHtml('text-2xl font-bold text-primary-600');
+
+    expect($component->instance()->simulation['schedule_rows'])->toHaveCount(25)
+        ->and($component->instance()->simulation['schedule_count'])->toBe(24)
+        ->and($component->instance()->simulation['pending_count'])->toBe(24);
+
+    $component
+        ->set('simulationPaymentAmount', 60000)
+        ->call('applySimulationPartialEarlySettlement')
+        ->assertSee(__('Paid (normal maturity)'), false)
+        ->assertSee(__('After close'), false);
+
+    expect($component->instance()->simulation['status'])->toBe('paid')
+        ->and($component->instance()->simulation['fund_balance'])->toBe(10000.0);
+
+    $component->call('startSimulationFromEstimate')
+        ->call('applySimulationRegularPayment')
+        ->call('applySimulationFullEarlySettlement')
+        ->assertSee(__('Fully settled'), false);
+
+    expect($component->instance()->simulation['status'])->toBe('fully_settled')
+        ->and($component->instance()->simulation['fund_balance'])->toBe(50000.0)
+        ->and($component->instance()->simulation['eligible_for_new_loan'])->toBeTrue();
+
+    $component
+        ->assertDontSee(__('Partial early settlement style'), false)
+        ->assertSeeHtml('<table');
+
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('loan calculator simulator partial early settlement rolls up even when estimate settlement option is skip', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    LoanSettings::save([
+        'settlement_threshold_pct' => 0.10,
+        'eligibility_threshold_pct' => 0.20,
+        'member_funding_split_pct' => 50,
+        'allow_funding_strategy_split_percentage' => true,
+        'allow_excess_fund_cash_out' => true,
+        'max_allowed_grace_cycles' => 2,
+    ]);
+    LoanTier::query()->forceDelete();
+    LoanTier::create([
+        'tier_number' => 4,
+        'label' => 'Tier 4',
+        'min_amount' => 91000,
+        'max_amount' => 120000,
+        'min_monthly_installment' => 2500,
+        'is_active' => true,
+    ]);
+    $this->memberA->fundAccount->update(['balance' => 50_000]);
+
+    $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
+
+    $component = Livewire::test(LoanCalculatorPage::class)
+        ->set('graceCycles', 0)
+        ->set('fundingStrategy', LoanFundingStrategy::SPLIT_PERCENTAGE)
+        ->set('excessFundDisposition', LoanFundExcessDisposition::KEEP_IN_FUND)
+        // Leftover from a prior early-settlement strategy must not force skip mid-life.
+        ->set('excessFundSettlementOption', LoanExcessFundSettlementOption::SKIP_FUTURE)
+        ->set('loanAmount', 100000)
+        ->call('calculate')
+        ->call('setCalculatorMode', 'simulate')
+        ->set('simulationPaymentAmount', 10000)
+        ->call('applySimulationPartialEarlySettlement');
+
+    $rows = $component->instance()->simulation['schedule_rows'];
+    $rolled = array_values(array_filter($rows, fn (array $row): bool => ($row['kind'] ?? '') === 'rolled_up'));
+    $skipped = array_values(array_filter($rows, fn (array $row): bool => ($row['kind'] ?? '') === 'skipped'));
+
+    expect($rolled)->toHaveCount(1)
+        ->and($rolled[0]['amount'])->toBe(10000.0)
+        ->and($skipped)->toBeEmpty()
+        ->and($component->instance()->simulation['pending_count'])->toBe(20)
+        ->and($component->instance()->simulation['schedule_count'])->toBe(21);
 
     BusinessDaySettings::saveFromForm(null);
 });
