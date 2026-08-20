@@ -69,6 +69,8 @@ final class DefaultTenantSettings
 
         // Public page + Arabic display
         PublicPageSettings::save($public);
+        BrandAppearanceSettings::save(BrandAppearanceSettings::defaults());
+        PublicPageContentSettings::save(PublicPageContentSettings::defaults());
         ArabicDisplaySettings::save(ArabicDisplaySettings::defaults());
 
         // Statements
@@ -155,6 +157,8 @@ final class DefaultTenantSettings
         self::seedMissingGroupKeys(LocalizationSettings::GROUP, LocalizationSettings::defaults());
         self::seedMissingGroupKeys(MemberNumberSettings::GROUP, MemberNumberSettings::defaults());
         self::seedMissingGroupKeys(PublicPageSettings::GROUP, PublicPageSettings::defaults());
+        self::seedMissingGroupKeys(BrandAppearanceSettings::GROUP, BrandAppearanceSettings::defaults());
+        self::seedMissingGroupKeys(PublicPageContentSettings::GROUP, PublicPageContentSettings::defaults());
         self::seedMissingGroupKeys(StatementSettings::GROUP, StatementSettings::defaults());
         self::seedMissingGroupKeys(CommunicationSettings::GROUP, CommunicationSettings::defaults());
         self::seedMissingGroupKeys(CommunicationBrandSettings::GROUP, CommunicationBrandSettings::defaults());

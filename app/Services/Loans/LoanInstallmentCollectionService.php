@@ -83,6 +83,19 @@ class LoanInstallmentCollectionService
 
     public function attemptCollection(LoanInstallment $installment, ?Member $member = null): string
     {
+        return DB::transaction(function () use ($installment, $member): string {
+            $locked = LoanInstallment::query()->whereKey($installment->id)->lockForUpdate()->first();
+
+            if ($locked === null) {
+                return 'inactive';
+            }
+
+            return $this->attemptLockedCollection($locked, $member);
+        });
+    }
+
+    protected function attemptLockedCollection(LoanInstallment $installment, ?Member $member = null): string
+    {
         if ($installment->isPaid()) {
             return 'paid';
         }

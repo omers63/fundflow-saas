@@ -9,14 +9,19 @@ use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Pages\Page;
 use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\LoanTier;
+use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Services\Loans\LoanEligibilityService;
 use App\Services\MemberLoanCalculatorService;
+use App\Support\BusinessDay;
+use App\Support\ContributionAmountSettings;
 use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundExcessDisposition;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\Computed;
@@ -37,6 +42,8 @@ class LoanCalculatorPage extends Page
 
     protected string $view = 'filament.member.pages.loan-calculator';
 
+    protected Width|string|null $maxContentWidth = Width::Full;
+
     public int|float|string|null $loanAmount = null;
 
     public string $fundingStrategy = '';
@@ -45,11 +52,22 @@ class LoanCalculatorPage extends Page
 
     public string $excessFundSettlementOption = LoanExcessFundSettlementOption::KEEP_IN_FUND;
 
+    public int $graceCycles = 0;
+
+    public string $startDate = '';
+
+    public int $projectedContributionAmount = 0;
+
     public function mount(): void
     {
         $this->fundingStrategy = LoanFundingStrategy::defaultForApplication();
         $this->excessFundDisposition = LoanFundExcessDisposition::defaultForApplication();
         $this->excessFundSettlementOption = LoanExcessFundSettlementOption::defaultForApplication();
+        $this->graceCycles = LoanSettings::defaultApplicationGraceCycles();
+        $this->startDate = BusinessDay::today()->toDateString();
+        $this->projectedContributionAmount = $this->normalizeProjectedContribution(
+            CurrentMember::get()?->monthly_contribution_amount,
+        );
     }
 
     public function updatedFundingStrategy(string $value): void
@@ -57,6 +75,21 @@ class LoanCalculatorPage extends Page
         if (! LoanFundingStrategy::isAvailableForApplication($value)) {
             $this->fundingStrategy = LoanFundingStrategy::defaultForApplication();
         }
+    }
+
+    public function updatedGraceCycles(mixed $value): void
+    {
+        $this->graceCycles = LoanSettings::clampGraceCycles((int) $value);
+    }
+
+    public function updatedProjectedContributionAmount(mixed $value): void
+    {
+        $this->projectedContributionAmount = $this->normalizeProjectedContribution($value);
+    }
+
+    public function calculate(): void
+    {
+        unset($this->calculations);
     }
 
     public static function canAccess(): bool
@@ -71,7 +104,7 @@ class LoanCalculatorPage extends Page
 
     public function getSubheading(): ?string
     {
-        return __('Estimate monthly installments and repayment split from your fund balance and active loan tiers.');
+        return __('See whether you can apply, then estimate how a loan would be funded, repaid, and what fund balance you would need afterwards.');
     }
 
     /**
@@ -83,10 +116,14 @@ class LoanCalculatorPage extends Page
      *     master_portion: float,
      *     settlement_amt: float,
      *     total_repay: float,
+     *     eligibility_amt: float,
+     *     eligibility_base: float,
      *     excess_fund: float,
      *     early_settlement_amount: float,
      *     installments_covered: int,
-     *     remaining_payment_months: int|null
+     *     remaining_payment_months: int|null,
+     *     duration_months: int,
+     *     schedule: array<string, mixed>
      * }>
      */
     #[Computed]
@@ -104,6 +141,9 @@ class LoanCalculatorPage extends Page
             $member,
             $this->fundingStrategy,
             $this->excessFundSettlementOption,
+            $this->graceCycles,
+            $this->startDate,
+            $this->projectedContributionAmount,
         );
     }
 
@@ -123,9 +163,52 @@ class LoanCalculatorPage extends Page
     }
 
     #[Computed]
+    public function eligibilityPct(): float
+    {
+        return app(MemberLoanCalculatorService::class)->eligibilityThresholdPercent();
+    }
+
+    #[Computed]
     public function memberFundBalance(): float
     {
         return CurrentMember::get()?->getFundBalance() ?? 0.0;
+    }
+
+    /**
+     * @return array{
+     *     eligible: bool,
+     *     reason: string,
+     *     fund_balance: float,
+     *     max_loan_amount: float,
+     *     min_fund_balance: float,
+     *     eligible_from: string
+     * }
+     */
+    #[Computed]
+    public function eligibility(): array
+    {
+        $member = CurrentMember::get();
+
+        if ($member === null) {
+            return [
+                'eligible' => false,
+                'reason' => '',
+                'fund_balance' => 0.0,
+                'max_loan_amount' => 0.0,
+                'min_fund_balance' => LoanSettings::minFundBalance(),
+                'eligible_from' => '—',
+            ];
+        }
+
+        $member->loadMissing('fundAccount');
+
+        return app(LoanEligibilityService::class)->context($member);
+    }
+
+    #[Computed]
+    public function fundAccountUrl(): string
+    {
+        return FundAccountPage::getUrl();
     }
 
     #[Computed]
@@ -192,6 +275,75 @@ class LoanCalculatorPage extends Page
         return LoanSettings::masterFundingSplitPercent();
     }
 
+    /**
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function graceCycleOptions(): array
+    {
+        return LoanSettings::graceCycleSelectOptions();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    #[Computed]
+    public function projectedContributionOptions(): array
+    {
+        $options = Member::contributionAmountOptions();
+        $selected = (int) $this->projectedContributionAmount;
+
+        if ($selected > 0 && ! isset($options[$selected])) {
+            $options[$selected] = MoneyDisplay::format($selected, $this->currency, precision: 0) ?? (string) $selected;
+            ksort($options, SORT_NUMERIC);
+        }
+
+        return $options;
+    }
+
+    #[Computed]
+    public function currentCycleLabel(): string
+    {
+        return app(MemberLoanCalculatorService::class)->cycleLabelForDate($this->startDate);
+    }
+
+    /**
+     * @return array{
+     *     current_fund: float,
+     *     contribution_amount: float,
+     *     cycles_added: int,
+     *     projected_fund: float,
+     *     start_cycle_month: int,
+     *     start_cycle_year: int,
+     *     start_cycle_label: string,
+     *     start_cycle_paid: bool
+     * }
+     */
+    #[Computed]
+    public function projection(): array
+    {
+        $member = CurrentMember::get();
+
+        if ($member === null) {
+            return [
+                'current_fund' => 0.0,
+                'contribution_amount' => 0.0,
+                'cycles_added' => 0,
+                'projected_fund' => 0.0,
+                'start_cycle_month' => 0,
+                'start_cycle_year' => 0,
+                'start_cycle_label' => '—',
+                'start_cycle_paid' => false,
+            ];
+        }
+
+        return app(MemberLoanCalculatorService::class)->fundProjection(
+            $member,
+            $this->startDate,
+            $this->projectedContributionAmount,
+        );
+    }
+
     public function formatTierRange(LoanTier $tier): string
     {
         $currency = $this->currency;
@@ -199,5 +351,22 @@ class LoanCalculatorPage extends Page
         return (MoneyDisplay::format((float) $tier->min_amount, $currency, precision: 0) ?? '—')
             .' – '
             .(MoneyDisplay::format((float) $tier->max_amount, $currency, precision: 0) ?? '—');
+    }
+
+    private function normalizeProjectedContribution(mixed $value): int
+    {
+        $amount = (int) $value;
+
+        if (Member::isValidContributionAmount($amount)) {
+            return $amount;
+        }
+
+        $current = (int) (CurrentMember::get()?->monthly_contribution_amount ?? 0);
+
+        if (Member::isValidContributionAmount($current)) {
+            return $current;
+        }
+
+        return ContributionAmountSettings::minAmount();
     }
 }

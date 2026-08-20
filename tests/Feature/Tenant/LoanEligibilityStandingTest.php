@@ -5,7 +5,7 @@ declare(strict_types=1);
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
-use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
@@ -238,38 +238,87 @@ test('member with three consecutive late cycles is not eligible', function () {
 });
 
 test('loan settlement threshold cooldown cycles round up threshold slice over emi', function () {
+    $tier = LoanTier::create([
+        'label' => 'Band 0-10K',
+        'tier_number' => LoanTier::nextTierNumber(),
+        'min_amount' => 0,
+        'max_amount' => 10_000,
+        'min_monthly_installment' => 1_000,
+        'is_active' => true,
+    ]);
+
+    $loan = Loan::make([
+        'loan_tier_id' => $tier->id,
+        'amount' => 10000,
+        'amount_approved' => 10000,
+        'monthly_repayment' => 1000,
+        'settlement_threshold' => 0.16,
+        'eligibility_threshold' => 0.20,
+    ]);
+
+    expect($loan->eligibilityThresholdAmount())->toBe(2000.0);
+});
+
+test('loan eligibility threshold cooldown is independent of settlement threshold', function () {
+    $tier = LoanTier::create([
+        'label' => 'Band 0-10K independent',
+        'tier_number' => LoanTier::nextTierNumber(),
+        'min_amount' => 0,
+        'max_amount' => 10_000,
+        'min_monthly_installment' => 1_000,
+        'is_active' => true,
+    ]);
+
+    $loan = Loan::make([
+        'loan_tier_id' => $tier->id,
+        'amount' => 10000,
+        'amount_approved' => 10000,
+        'monthly_repayment' => 1000,
+        'settlement_threshold' => 0.16,
+        'eligibility_threshold' => 0.40,
+        'master_portion' => 5000,
+    ]);
+
+    expect($loan->eligibilityThresholdAmount())->toBe(4000.0)
+        ->and($loan->fullRepaymentThreshold())->toBe(6600.0);
+});
+
+test('zero eligibility threshold adds no extra post-settlement fund requirement', function () {
     $loan = Loan::make([
         'amount' => 10000,
         'amount_approved' => 10000,
         'monthly_repayment' => 1000,
         'settlement_threshold' => 0.16,
+        'eligibility_threshold' => 0,
     ]);
 
-    expect($loan->settlementThresholdCooldownCycles())->toBe(2);
+    expect($loan->eligibilityThresholdAmount())->toBe(0.0);
 });
 
-test('loan settlement threshold cooldown falls back to schedule emi when monthly repayment is zero', function () {
+test('eligibility threshold uses last loan tier ceiling as the base amount', function () {
+    $tier = LoanTier::create([
+        'label' => 'Band 91K-120K',
+        'tier_number' => LoanTier::nextTierNumber(),
+        'min_amount' => 91_000,
+        'max_amount' => 120_000,
+        'min_monthly_installment' => 3_000,
+        'is_active' => true,
+    ]);
+
     $loan = Loan::factory()->create([
-        'amount' => 50000,
-        'amount_approved' => 50000,
-        'monthly_repayment' => 0,
+        'loan_tier_id' => $tier->id,
+        'amount' => 100000,
+        'amount_approved' => 100000,
+        'monthly_repayment' => 3000,
         'settlement_threshold' => 0.16,
+        'eligibility_threshold' => 0.10,
     ]);
 
-    LoanInstallment::query()->create([
-        'loan_id' => $loan->id,
-        'installment_number' => 1,
-        'amount' => 1500,
-        'due_date' => now()->addMonth(),
-        'status' => 'pending',
-    ]);
-
-    expect($loan->fresh()->settlementThresholdCooldownCycles())->toBe(6);
+    expect($loan->fresh()->eligibilityThresholdBaseAmount())->toBe(120000.0)
+        ->and($loan->fresh()->eligibilityThresholdAmount())->toBe(12000.0);
 });
 
-test('member remains ineligible until settlement threshold waiting period ends', function () {
-    BusinessDaySettings::saveFromForm('2026-05-20');
-
+test('member remains ineligible until fund balance reaches the eligibility threshold amount', function () {
     $member = Member::create([
         'member_number' => 'MEM-EARLY-SETTLE-'.uniqid(),
         'name' => 'Recent Early Settler',
@@ -278,20 +327,31 @@ test('member remains ineligible until settlement threshold waiting period ends',
         'status' => 'active',
     ]);
     $this->accounting->createMemberAccounts($member);
-    $member->fundAccount()->update(['balance' => 20000]);
+    $member->fundAccount()->update(['balance' => 8000]);
     seedPostedContributionsThroughOpenPeriod($member);
+
+    $tier = LoanTier::create([
+        'label' => 'Band 91K-120K',
+        'tier_number' => LoanTier::nextTierNumber(),
+        'min_amount' => 91_000,
+        'max_amount' => 120_000,
+        'min_monthly_installment' => 3_000,
+        'is_active' => true,
+    ]);
 
     Loan::create([
         'member_id' => $member->id,
-        'amount' => 10000,
-        'amount_requested' => 10000,
-        'amount_approved' => 10000,
-        'amount_disbursed' => 10000,
+        'loan_tier_id' => $tier->id,
+        'amount' => 100000,
+        'amount_requested' => 100000,
+        'amount_approved' => 100000,
+        'amount_disbursed' => 100000,
         'interest_rate' => 0,
         'term_months' => 10,
-        'monthly_repayment' => 1000,
-        'total_repaid' => 10000,
+        'monthly_repayment' => 3000,
+        'total_repaid' => 100000,
         'settlement_threshold' => 0.16,
+        'eligibility_threshold' => 0.10,
         'status' => 'early_settled',
         'applied_at' => Carbon::create(2025, 1, 1),
         'approved_at' => Carbon::create(2025, 1, 2),
@@ -302,41 +362,50 @@ test('member remains ineligible until settlement threshold waiting period ends',
     $result = $this->service->checkEligibility($member->fresh());
 
     expect($result['eligible'])->toBeFalse()
-        ->and($result['reasons'][0])->toContain('settlement threshold waiting period');
+        ->and($result['reasons'][0])->toContain('must reach 12,000.00')
+        ->and($result['reasons'][0])->toContain('last loan tier ceiling (120,000.00)');
 
-    BusinessDaySettings::saveFromForm('2026-06-20');
-    seedPostedContributionsThroughOpenPeriod($member->fresh());
+    $member->fundAccount()->update(['balance' => 12000]);
 
     $resultAfterCooldown = $this->service->checkEligibility($member->fresh());
 
     expect($resultAfterCooldown['eligible'])->toBeTrue();
-
-    BusinessDaySettings::saveFromForm(null);
 });
 
-test('settlement cooldown uses configured business day not calendar date', function () {
+test('eligibility threshold blocks based on tier ceiling even when approved amount is lower', function () {
     $member = Member::create([
         'member_number' => 'MEM-BIZ-DAY-'.uniqid(),
-        'name' => 'Business Day Cooldown Member',
+        'name' => 'Tier Ceiling Eligibility Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => Carbon::create(2020, 1, 1),
         'status' => 'active',
     ]);
     $this->accounting->createMemberAccounts($member);
-    $member->fundAccount()->update(['balance' => 20000]);
+    $member->fundAccount()->update(['balance' => 9500]);
     seedPostedContributionsThroughOpenPeriod($member);
+
+    $tier = LoanTier::create([
+        'label' => 'Band 91K-120K',
+        'tier_number' => LoanTier::nextTierNumber(),
+        'min_amount' => 91_000,
+        'max_amount' => 120_000,
+        'min_monthly_installment' => 3_000,
+        'is_active' => true,
+    ]);
 
     Loan::create([
         'member_id' => $member->id,
-        'amount' => 50000,
-        'amount_requested' => 50000,
-        'amount_approved' => 50000,
-        'amount_disbursed' => 50000,
+        'loan_tier_id' => $tier->id,
+        'amount' => 91000,
+        'amount_requested' => 91000,
+        'amount_approved' => 91000,
+        'amount_disbursed' => 91000,
         'interest_rate' => 0,
         'term_months' => 18,
-        'monthly_repayment' => 0,
-        'total_repaid' => 50000,
+        'monthly_repayment' => 3000,
+        'total_repaid' => 91000,
         'settlement_threshold' => 0.16,
+        'eligibility_threshold' => 0.08,
         'status' => 'early_settled',
         'applied_at' => Carbon::create(2025, 6, 1),
         'approved_at' => Carbon::create(2025, 6, 2),
@@ -344,33 +413,16 @@ test('settlement cooldown uses configured business day not calendar date', funct
         'settled_at' => Carbon::create(2025, 12, 22),
     ]);
 
-    LoanInstallment::query()->create([
-        'loan_id' => $member->lastFullySettledLoan()->id,
-        'installment_number' => 1,
-        'amount' => 1500,
-        'due_date' => Carbon::create(2025, 7, 1),
-        'status' => 'pending',
-    ]);
-
-    expect($member->lastFullySettledLoan()->fresh()->settlementThresholdCooldownCycles())->toBe(6);
-
-    Carbon::setTestNow(Carbon::create(2026, 7, 14));
-    BusinessDaySettings::saveFromForm('2025-12-22');
-
     $blockedOnBusinessDay = $this->service->checkEligibility($member->fresh());
 
     expect($blockedOnBusinessDay['eligible'])->toBeFalse()
-        ->and($blockedOnBusinessDay['reasons'][0])->toContain('settlement threshold waiting period');
+        ->and($blockedOnBusinessDay['reasons'][0])->toContain('9,600.00')
+        ->and($member->lastFullySettledLoan()->fresh()->eligibilityThresholdAmount())->toBe(9600.0);
 
-    BusinessDaySettings::saveFromForm('2026-06-23');
-    seedPostedContributionsThroughOpenPeriod($member->fresh());
-
+    $member->fundAccount()->update(['balance' => 9600]);
     $eligibleAfterBusinessDay = $this->service->checkEligibility($member->fresh());
 
     expect($eligibleAfterBusinessDay['eligible'])->toBeTrue();
-
-    Carbon::setTestNow();
-    BusinessDaySettings::saveFromForm(null);
 });
 
 test('member with active loan after partial early settlement remains ineligible', function () {

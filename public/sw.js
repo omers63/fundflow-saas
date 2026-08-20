@@ -1,16 +1,9 @@
-const CACHE_VERSION = 'fundflow-v8';
+const CACHE_VERSION = 'fundflow-v9';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
     '/offline',
-    '/manifest.json',
-    '/icons/icon-192x192.png',
-    '/icons/icon-512x512.png',
-    '/icons/notification-badge-96x96.png',
-    '/icons/notification-icon-192x192.png',
-    '/icons/apple-touch-icon.png',
-    '/favicon.png',
 ];
 
 self.addEventListener('install', (event) => {

@@ -2201,3 +2201,268 @@ test('bank pipeline unposted excludes synthetic operational clearance rows', fun
             collect($report['checks'])->filter(fn (array $check): bool => ($check['severity'] ?? '') === 'warning')->count(),
         );
 });
+
+test('duplicate live collection on a legacy-imported loan is reversed and recon nets', function () {
+    $accounting = app(AccountingService::class);
+    $ledger = app(LoanLedgerService::class);
+
+    $borrower = Member::create([
+        'member_number' => 'RECON-DUP-EMI',
+        'name' => 'Duplicate Emi Borrower',
+        'email' => 'dup-emi-recon@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYears(3),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($borrower);
+    AccountingService::withoutMemberCashCollection(
+        fn () => $accounting->credit($borrower->fresh()->cashAccount, 20_000, 'Seed cash'),
+    );
+
+    $loan = Loan::create([
+        'member_id' => $borrower->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'member_portion' => 6_000,
+        'master_portion' => 6_000,
+        'interest_rate' => 0,
+        'term_months' => 4,
+        'monthly_repayment' => 3000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'disbursed_at' => now()->subYear(),
+        'approved_at' => now()->subYear(),
+        'applied_at' => now()->subYear(),
+        'installments_count' => 4,
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 3000,
+        'due_date' => now()->subMonths(6)->toDateString(),
+        'status' => 'paid',
+        'paid_at' => now()->subMonths(6),
+    ]);
+    $repayment = LoanRepayment::create([
+        'loan_id' => $loan->id,
+        'amount' => 3000,
+        'paid_at' => now()->subMonths(6),
+        'notes' => 'legacy-import:test|dup-emi-recon@fund.test|2025-01-01|3000|loan_repayment|2025-01',
+    ]);
+    $ledger->postImportedLoanRepaymentWithCashFlow($loan->fresh(), $repayment, 3000, now()->subMonths(6));
+
+    $live = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 3000,
+        'due_date' => now()->subMonth()->toDateString(),
+        'status' => 'pending',
+        'amount_collected' => 0,
+    ]);
+
+    $ledger->debitCashForRepayment($borrower->fresh(), $live, 0);
+    $ledger->postLoanRepayment($live->fresh());
+    $accounting->debitMemberCashWithMasterMirror(
+        $borrower->fresh()->cashAccount,
+        3000,
+        'Forced duplicate cash',
+        __('(loan repayment mirror)'),
+        $live,
+        now(),
+        $borrower->id,
+    );
+    $accounting->creditMemberFundWithMasterMirror(
+        $borrower->fresh()->fundAccount,
+        3000,
+        'Forced duplicate fund',
+        __('(loan repayment mirror)'),
+        $live,
+        now(),
+        $borrower->id,
+    );
+    $accounting->credit(
+        $ledger->ensureLoanAccount($loan->fresh()),
+        3000,
+        'Forced duplicate loan',
+        $live,
+        now(),
+        $borrower->id,
+    );
+
+    LoanInstallment::withoutEvents(function () use ($live): void {
+        $live->update([
+            'status' => 'paid',
+            'paid_at' => now(),
+            'amount_collected' => 3000,
+        ]);
+    });
+    LoanRepayment::create([
+        'loan_id' => $loan->id,
+        'amount' => 3000,
+        'paid_at' => now(),
+        'notes' => LoanRepaymentNote::installment(2),
+    ]);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    expect($report['checks']['loan_installment_flow_integrity']['severity'])->toBe('critical');
+
+    expect($ledger->reverseExcessInstallmentCollectionLegs($live->fresh()))->toBe(3000.0);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    expect($report['checks']['loan_installment_flow_integrity']['severity'])->toBe('ok')
+        ->and($report['checks']['loan_installment_flow_integrity']['issues'] ?? [])->toBeEmpty();
+});
+
+test('window rollback then re-collection does not leave loan schedule vs ledger drift', function () {
+    $accounting = app(AccountingService::class);
+    $ledger = app(LoanLedgerService::class);
+
+    $borrower = Member::create([
+        'member_number' => 'RECON-ROLLBACK-EMI',
+        'name' => 'Rollback Emi Borrower',
+        'email' => 'rollback-emi-recon@fund.test',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYears(3),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($borrower);
+    AccountingService::withoutMemberCashCollection(
+        fn () => $accounting->credit($borrower->fresh()->cashAccount, 20_000, 'Seed cash'),
+    );
+
+    $loan = Loan::create([
+        'member_id' => $borrower->id,
+        'amount' => 9_000,
+        'amount_requested' => 9_000,
+        'amount_approved' => 9_000,
+        'amount_disbursed' => 9_000,
+        'member_portion' => 0,
+        'master_portion' => 9_000,
+        'interest_rate' => 0,
+        'term_months' => 3,
+        'monthly_repayment' => 3000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'disbursed_at' => now()->subYear(),
+        'approved_at' => now()->subYear(),
+        'applied_at' => now()->subYear(),
+        'installments_count' => 3,
+    ]);
+
+    $loanAccount = $ledger->ensureLoanAccount($loan);
+    $accounting->debit($loanAccount, 9_000, 'Imported disbursement', $loan, now()->subYear(), $borrower->id);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 3000,
+        'due_date' => now()->subMonths(6)->toDateString(),
+        'status' => 'paid',
+        'paid_at' => now()->subMonths(6),
+    ]);
+    $repayment = LoanRepayment::create([
+        'loan_id' => $loan->id,
+        'amount' => 3000,
+        'paid_at' => now()->subMonths(6),
+        'notes' => 'legacy-import:test|rollback-emi-recon@fund.test|2025-01-01|3000|loan_repayment|2025-01',
+    ]);
+    $ledger->postImportedLoanRepaymentWithCashFlow($loan->fresh(), $repayment, 3000, now()->subMonths(6));
+
+    $live = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 3000,
+        'due_date' => now()->subMonth()->toDateString(),
+        'status' => 'pending',
+        'amount_collected' => 0,
+    ]);
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 3,
+        'amount' => 3000,
+        'due_date' => now()->addMonth()->toDateString(),
+        'status' => 'pending',
+    ]);
+
+    $ledger->debitCashForRepayment($borrower->fresh(), $live, 0);
+    $ledger->postLoanRepayment($live->fresh());
+    LoanInstallment::withoutEvents(function () use ($live): void {
+        $live->update([
+            'status' => 'paid',
+            'paid_at' => now(),
+            'amount_collected' => 3000,
+        ]);
+    });
+    LoanRepayment::create([
+        'loan_id' => $loan->id,
+        'amount' => 3000,
+        'paid_at' => now(),
+        'notes' => LoanRepaymentNote::installment(2),
+    ]);
+
+    $ledger->reverseInstallmentPosting($live->fresh(), 'Business day window rollback');
+    $ledger->recomputeRepaidToMaster($loan->fresh());
+
+    $live = $live->fresh();
+    $ledger->debitCashForRepayment($borrower->fresh(), $live, 0);
+    $ledger->postLoanRepayment($live->fresh());
+    LoanInstallment::withoutEvents(function () use ($live): void {
+        $live->update([
+            'status' => 'paid',
+            'paid_at' => now(),
+            'amount_collected' => 3000,
+        ]);
+    });
+    LoanRepayment::create([
+        'loan_id' => $loan->id,
+        'amount' => 3000,
+        'paid_at' => now(),
+        'notes' => LoanRepaymentNote::installment(2),
+    ]);
+
+    expect($ledger->reverseExcessInstallmentCollectionLegs($live->fresh()))->toBe(0.0);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    expect($report['checks']['active_loans_schedule_vs_ledger']['severity'])->toBe('ok')
+        ->and($report['checks']['loan_installment_flow_integrity']['severity'])->toBe('ok');
+
+    $accounting->debit(
+        $loanAccount->fresh(),
+        3000,
+        __('Reverse duplicate EMI collection — loan #:id installment #:num', [
+            'id' => $loan->id,
+            'num' => 2,
+        ]),
+        $live,
+        now(),
+        $borrower->id,
+    );
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    expect($report['checks']['active_loans_schedule_vs_ledger']['severity'])->toBe('warning');
+
+    expect($ledger->reverseExcessInstallmentCollectionLegs($live->fresh()))->toBe(3000.0);
+
+    $report = app(ReconciliationReportService::class)->buildReport(
+        ReconciliationSnapshot::MODE_REALTIME,
+    );
+
+    expect($report['checks']['active_loans_schedule_vs_ledger']['severity'])->toBe('ok')
+        ->and($report['checks']['loan_installment_flow_integrity']['severity'])->toBe('ok')
+        ->and($report['checks']['active_loans_schedule_vs_ledger']['mismatches'] ?? [])->toBeEmpty();
+});

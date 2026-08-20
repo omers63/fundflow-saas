@@ -34,7 +34,7 @@ final class LoanEligibilityGate
             self::MEMBERSHIP_TENURE => __('Membership tenure'),
             self::MIN_FUND_BALANCE => __('Minimum fund balance'),
             self::DELINQUENCY => __('Delinquency / payment history'),
-            self::SETTLEMENT_COOLDOWN => __('Post-settlement waiting period'),
+            self::SETTLEMENT_COOLDOWN => __('Post-settlement eligibility threshold'),
             self::OTHER => __('Other'),
         ];
     }

@@ -1584,6 +1584,95 @@ html[dir='rtl'] .fi-body.fi-panel-tenant .ff-templates-editor__back svg {
     transform: scaleX(-1);
 }
 
+/* Branding uploads: FilePond's image-edit pencil is hover-only in compact layout. */
+.fi-body.fi-panel-tenant .ff-editable-image-upload .filepond--file-action-button,
+.fi-body.fi-panel-tenant .ff-editable-image-upload .filepond--action-edit-item {
+    opacity: 1 !important;
+    pointer-events: auto;
+}
+
+.fi-body.fi-panel-tenant .ff-pixel-editor__viewport {
+    max-height: min(60vh, 24rem);
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+.fi-body.fi-panel-tenant .ff-pixel-editor__preview-pane {
+    max-width: 100%;
+    max-height: min(60vh, 24rem);
+    overflow: auto;
+}
+
+.fi-body.fi-panel-tenant .ff-pixel-editor__preview {
+    display: block;
+    width: auto;
+    height: auto;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+.fi-body.fi-panel-tenant .ff-pixel-editor__stage {
+    background-color: #fff;
+    background-image:
+        linear-gradient(45deg, #e5e7eb 25%, transparent 25%),
+        linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #e5e7eb 75%),
+        linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    background-size: 16px 16px;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-pixel-editor__stage {
+    background-color: #0f172a;
+    background-image:
+        linear-gradient(45deg, rgb(255 255 255 / 0.08) 25%, transparent 25%),
+        linear-gradient(-45deg, rgb(255 255 255 / 0.08) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgb(255 255 255 / 0.08) 75%),
+        linear-gradient(-45deg, transparent 75%, rgb(255 255 255 / 0.08) 75%);
+}
+
+.fi-body.fi-panel-tenant .ff-pixel-editor__canvas {
+    display: block;
+    touch-action: none;
+    cursor: crosshair;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+.fi-body.fi-panel-tenant .ff-pixel-editor__canvas.is-panning {
+    cursor: grab;
+}
+
+.fi-body.fi-panel-tenant .ff-pixel-editor__canvas.is-selecting {
+    cursor: crosshair;
+}
+
+.fi-body.fi-panel-tenant .ff-pixel-editor__canvas.is-moving-selection {
+    cursor: move;
+}
+
+.fi-body.fi-panel-tenant .ff-pixel-editor__overlay {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+.fi-body.fi-panel-tenant .ff-pixel-editor__grid {
+    background-image:
+        linear-gradient(to right, rgb(15 23 42 / 0.35) 1px, transparent 1px),
+        linear-gradient(to bottom, rgb(15 23 42 / 0.35) 1px, transparent 1px),
+        linear-gradient(to right, rgb(15 23 42 / 0.6) 1px, transparent 1px),
+        linear-gradient(to bottom, rgb(15 23 42 / 0.6) 1px, transparent 1px);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-pixel-editor__grid {
+    background-image:
+        linear-gradient(to right, rgb(255 255 255 / 0.28) 1px, transparent 1px),
+        linear-gradient(to bottom, rgb(255 255 255 / 0.28) 1px, transparent 1px),
+        linear-gradient(to right, rgb(255 255 255 / 0.5) 1px, transparent 1px),
+        linear-gradient(to bottom, rgb(255 255 255 / 0.5) 1px, transparent 1px);
+}
+
 @media (min-width: 1024px) {
     .fi-body.fi-panel-tenant .ff-templates-preview {
         position: sticky;

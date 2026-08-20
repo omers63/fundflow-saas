@@ -1,0 +1,39 @@
+{
+    "name": "Sheikh Sulaiman Samman Family Fund",
+    "short_name": "Samman Fund",
+    "description_en": "A family fund of balance, authenticity, and lasting bonds",
+    "description_ar": "صندوق عائلي يقوم على التوازن والأصالة والروابط الممتدة",
+    "assets": {
+        "logo": "logo.png",
+        "logo_svg": "logo.svg",
+        "favicon_svg": "favicon.svg",
+        "wordmark": "marks/wordmark.png",
+        "splash": "splash/splash.png",
+        "icons": {
+            "favicon_16": "icons/favicon-16x16.png",
+            "favicon_32": "icons/favicon-32x32.png",
+            "apple_touch": "icons/apple-touch-icon.png",
+            "pwa_72": "icons/icon-72x72.png",
+            "pwa_96": "icons/icon-96x96.png",
+            "pwa_128": "icons/icon-128x128.png",
+            "pwa_144": "icons/icon-144x144.png",
+            "pwa_152": "icons/icon-152x152.png",
+            "pwa_192": "icons/icon-192x192.png",
+            "pwa_384": "icons/icon-384x384.png",
+            "pwa_512": "icons/icon-512x512.png",
+            "notification_icon": "icons/notification-icon-192x192.png",
+            "notification_badge": "icons/notification-badge-96x96.png"
+        },
+        "marks": {
+            "diamond": "marks/diamond.png",
+            "leaves": "marks/leaves.png",
+            "calligraphy": "marks/calligraphy.png",
+            "frame": "marks/frame.png",
+            "emblem": "marks/emblem.png"
+        }
+    },
+    "communication": {
+        "footer_en": "This message was sent by the Sheikh Sulaiman Samman Family Fund.",
+        "footer_ar": "أُرسلت هذه الرسالة من صندوق عائلة الشيخ سليمان سمان."
+    }
+}

@@ -248,57 +248,49 @@ class LoanEligibilityService
     }
 
     /**
-     * @return array{blocked: bool, eligible_from: ?CarbonInterface, message: string, loan: ?Loan, cycles: int}
+     * @return array{blocked: bool, eligible_from: ?CarbonInterface, message: string, loan: ?Loan, required_balance: float, current_balance: float}
      */
     public function settlementCooldownStatus(Member $member): array
     {
         $loan = $member->lastFullySettledLoan();
 
-        if (! $loan instanceof Loan || $loan->settled_at === null) {
+        if (! $loan instanceof Loan) {
             return [
                 'blocked' => false,
                 'eligible_from' => null,
                 'message' => '',
                 'loan' => null,
-                'cycles' => 0,
+                'required_balance' => 0.0,
+                'current_balance' => (float) ($member->fundAccount?->balance ?? 0),
             ];
         }
 
-        $cycles = $loan->settlementThresholdCooldownCycles();
+        $requiredBalance = $loan->eligibilityThresholdAmount();
+        $currentBalance = (float) ($member->fundAccount?->balance ?? 0);
 
-        if ($cycles <= 0) {
+        if ($requiredBalance <= 0.00001 || $currentBalance + 0.00001 >= $requiredBalance) {
             return [
                 'blocked' => false,
                 'eligible_from' => null,
                 'message' => '',
                 'loan' => $loan,
-                'cycles' => 0,
-            ];
-        }
-
-        $eligibleFrom = $loan->settled_at->copy()->addMonths($cycles);
-
-        if ($eligibleFrom->isAfter(BusinessDay::now())) {
-            return [
-                'blocked' => true,
-                'eligible_from' => $eligibleFrom,
-                'message' => __('You fully settled loan #:id on :settled. You can apply again on :date after :cycles repayment cycle(s) (settlement threshold waiting period).', [
-                    'id' => $loan->id,
-                    'settled' => $loan->settled_at->format('d M Y'),
-                    'date' => $eligibleFrom->format('d M Y'),
-                    'cycles' => $cycles,
-                ]),
-                'loan' => $loan,
-                'cycles' => $cycles,
+                'required_balance' => round($requiredBalance, 2),
+                'current_balance' => round($currentBalance, 2),
             ];
         }
 
         return [
-            'blocked' => false,
+            'blocked' => true,
             'eligible_from' => null,
-            'message' => '',
+            'message' => __('You fully settled loan #:id, but your fund balance (:balance) must reach :required before you can apply again. This eligibility threshold is based on the last loan tier ceiling (:base).', [
+                'id' => $loan->id,
+                'balance' => number_format($currentBalance, 2),
+                'required' => number_format($requiredBalance, 2),
+                'base' => number_format($loan->eligibilityThresholdBaseAmount(), 2),
+            ]),
             'loan' => $loan,
-            'cycles' => $cycles,
+            'required_balance' => round($requiredBalance, 2),
+            'current_balance' => round($currentBalance, 2),
         ];
     }
 }

@@ -162,6 +162,15 @@ final class LoanViewInfolist
 
                                 return number_format((float) $state * 100, 1).'% ('.number_format($amount, 2).')';
                             }),
+                        TextEntry::make('eligibility_threshold')
+                            ->label(__('Eligibility threshold'))
+                            ->formatStateUsing(function (?string $state, Loan $record): string {
+                                $pct = $record->eligibilityThresholdPercent();
+                                $amount = $record->eligibilityThresholdAmount();
+                                $base = $record->eligibilityThresholdBaseAmount();
+
+                                return number_format($pct * 100, 1).'% ('.number_format($amount, 2).' · '.__('tier ceiling').' '.number_format($base, 2).')';
+                            }),
                     ]),
                 self::detailSection(__('Repayment terms'), __('Scheduled collection and balance metrics'))
                     ->columns(['default' => 1, 'md' => 2, 'xl' => 3])

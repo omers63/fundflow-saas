@@ -2,29 +2,29 @@
     @php
         $kpis = $this->getQueueKpis();
         $currency = \App\Models\Tenant\Setting::get('general', 'currency', 'USD');
+        $money = fn(mixed $amount): string => \App\Filament\Support\MoneyDisplay::format((float) $amount, $currency, precision: 0) ?? '—';
     @endphp
 
-    <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+    <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         @foreach ([
-    ['label' => __('Intake'), 'value' => (string) $kpis['intake'], 'amount' => null, 'sub' => __('Awaiting triage'), 'accent' => 'text-amber-600 dark:text-amber-400'],
-    ['label' => __('In tier queues'), 'value' => (string) $kpis['queued'], 'amount' => null, 'sub' => __('Approved, waiting'), 'accent' => 'text-sky-600 dark:text-sky-400'],
-    ['label' => __('Queued demand'), 'value' => null, 'amount' => (float) $kpis['queued_demand'], 'sub' => __('Remaining to fund'), 'accent' => 'text-violet-600 dark:text-violet-400'],
-    ['label' => __('Master fund'), 'value' => null, 'amount' => (float) $kpis['disbursable'], 'sub' => __('On hand (shared across tiers)'), 'accent' => $kpis['disbursable'] > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500'],
-    ['label' => __('Ready to process'), 'value' => (string) $kpis['process'], 'amount' => null, 'sub' => $kpis['process'] > 0 ? __('Fundable now') : __('Waiting on pool headroom'), 'accent' => $kpis['process'] > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500'],
-    ['label' => __('Running'), 'value' => (string) $kpis['running'], 'amount' => null, 'sub' => __('Loans in repayment'), 'accent' => 'text-teal-600 dark:text-teal-400'],
-] as $kpi)
-                                <div
-                                    class="min-w-0 rounded-xl border border-gray-200/80 bg-white px-3 py-2 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                                    <p class="m-0 break-words text-[11px] font-semibold uppercase tracking-wider text-gray-500">{{ $kpi['label'] }}</p>
-                                    <p class="m-0 break-words text-lg font-bold {{ $kpi['accent'] }}">
-                                        @if ($kpi['amount'] !== null)
-                                            {!! \App\Filament\Support\MoneyDisplay::html($kpi['amount'], $currency, precision: 0)?->toHtml() ?? e('—') !!}
-                                        @else
-                                            {{ $kpi['value'] }}
-                                        @endif
-                                    </p>
-                                    <p class="m-0 break-words text-xs text-gray-500">{{ $kpi['sub'] }}</p>
-                                </div>
+                ['label' => __('Intake'), 'value' => (string) $kpis['intake'], 'amount' => null, 'sub' => __('Awaiting triage'), 'accent' => 'text-amber-600 dark:text-amber-400'],
+                ['label' => __('In tier queues'), 'value' => (string) $kpis['queued'], 'amount' => null, 'sub' => __('Approved, waiting'), 'accent' => 'text-sky-600 dark:text-sky-400'],
+                ['label' => __('Queued demand'), 'value' => null, 'amount' => (float) $kpis['queued_demand'], 'sub' => __('Remaining to fund'), 'accent' => 'text-violet-600 dark:text-violet-400'],
+                ['label' => __('Master fund'), 'value' => null, 'amount' => (float) $kpis['disbursable'], 'sub' => __('On hand (shared across tiers)'), 'accent' => $kpis['disbursable'] > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500'],
+                ['label' => __('Ready to process'), 'value' => (string) $kpis['process'], 'amount' => null, 'sub' => $kpis['process'] > 0 ? __('Fundable now') : __('Waiting on pool headroom'), 'accent' => $kpis['process'] > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500'],
+                ['label' => __('Running'), 'value' => (string) $kpis['running'], 'amount' => null, 'sub' => __('Loans in repayment'), 'accent' => 'text-teal-600 dark:text-teal-400'],
+            ] as $kpi)
+                <div
+                    class="ff-loan-queue-kpi min-w-0 overflow-hidden rounded-xl border border-gray-200/80 bg-white px-3 py-2 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                    <p class="m-0 break-words text-[11px] font-semibold uppercase tracking-wider text-gray-500">{{ $kpi['label'] }}</p>
+                    @if ($kpi['amount'] !== null)
+                        <x-ff-stat-line :amount="$kpi['amount']" :currency="$currency" :precision="0" :compact="true"
+                            @class(['m-0 min-w-0 max-w-full', $kpi['accent'], 'text-base font-bold leading-tight sm:text-lg']) />
+                    @else
+                        <p class="m-0 break-words text-lg font-bold {{ $kpi['accent'] }}">{{ $kpi['value'] }}</p>
+                    @endif
+                    <p class="m-0 break-words text-xs text-gray-500">{{ $kpi['sub'] }}</p>
+                </div>
         @endforeach
     </div>
 

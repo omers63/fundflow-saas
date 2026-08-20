@@ -334,6 +334,11 @@ final class LoanLedgerService
             'name' => $member->name,
         ]);
 
+        $loanAccount = $this->ensureLoanAccount($loan);
+        if ($this->netSignedReferenceAmount($loanAccount->id, LoanInstallment::class, (int) $installment->id) >= $amount - 0.00001) {
+            return;
+        }
+
         DB::transaction(function () use ($installment, $loan, $member, $amount, $description): void {
             $this->postLoanPrincipalRepayment($loan, $amount, $description, $installment, $member->id);
         });
@@ -358,9 +363,15 @@ final class LoanLedgerService
             'num' => $installment->installment_number,
         ]);
 
+        $alreadyDebited = -$this->netSignedReferenceAmount($cash->id, LoanInstallment::class, (int) $installment->id);
+        $remaining = round($total - $alreadyDebited, 2);
+        if ($remaining <= 0.00001) {
+            return;
+        }
+
         $this->accounting->debitMemberCashWithMasterMirror(
             $cash,
-            $total,
+            $remaining,
             $description,
             __('(loan repayment mirror)'),
             $installment,
@@ -488,6 +499,171 @@ final class LoanLedgerService
 
         $loan->refresh();
         $loan->releaseGuarantorIfDue();
+    }
+
+    /**
+     * Credits minus debits on one account for a morph reference, including
+     * createReversalEntry descendants that point at those original rows.
+     */
+    public function netSignedReferenceAmount(int $accountId, string $referenceType, int $referenceId): float
+    {
+        $ids = Transaction::idsForMorphIncludingReversals($referenceType, [$referenceId]);
+
+        if ($ids === []) {
+            return 0.0;
+        }
+
+        return (float) Transaction::query()
+            ->where('account_id', $accountId)
+            ->whereIn('id', $ids)
+            ->sum(DB::raw("CASE WHEN type = 'credit' THEN amount ELSE -amount END"));
+    }
+
+    /**
+     * Bring cash/fund/loan legs back to the collected EMI amount.
+     *
+     * Nets createReversalEntry descendants (window rollback) so a later re-collection
+     * is not treated as a duplicate. Does not change repaid_to_master.
+     */
+    public function reverseExcessInstallmentCollectionLegs(LoanInstallment $installment): float
+    {
+        $installment->loadMissing('loan.member.cashAccount', 'loan.member.fundAccount');
+        $loan = $installment->loan;
+        $member = $loan?->member;
+
+        if ($loan === null || $member === null) {
+            return 0.0;
+        }
+
+        $amount = round((float) ($installment->amount_collected > 0
+            ? $installment->amount_collected
+            : $installment->amount), 2);
+        $lateFee = round((float) ($installment->late_fee_amount ?? 0), 2);
+        $loanAccount = $this->ensureLoanAccount($loan);
+        $cash = $member->cashAccount;
+        $fund = $member->fundAccount;
+        $expectedCash = $amount + max(0.0, $lateFee);
+
+        $loanNet = round($this->netSignedReferenceAmount($loanAccount->id, LoanInstallment::class, (int) $installment->id), 2);
+        $fundNet = $fund === null
+            ? 0.0
+            : round($this->netSignedReferenceAmount($fund->id, LoanInstallment::class, (int) $installment->id), 2);
+        $cashDebited = $cash === null
+            ? 0.0
+            : round(-$this->netSignedReferenceAmount($cash->id, LoanInstallment::class, (int) $installment->id), 2);
+
+        $excessLoan = max(0.0, round($loanNet - $amount, 2));
+        $excessFund = max(0.0, round($fundNet - $amount, 2));
+        $excessCash = max(0.0, round($cashDebited - $expectedCash, 2));
+
+        $canRestore = $installment->status === 'paid' || (bool) $installment->paid_by_guarantor;
+        $shortLoan = $canRestore ? max(0.0, round($amount - $loanNet, 2)) : 0.0;
+        $shortFund = $canRestore ? max(0.0, round($amount - $fundNet, 2)) : 0.0;
+        $shortCash = $canRestore ? max(0.0, round($expectedCash - $cashDebited, 2)) : 0.0;
+
+        if (
+            $excessLoan <= 0.00001 && $excessFund <= 0.00001 && $excessCash <= 0.00001
+            && $shortLoan <= 0.00001 && $shortFund <= 0.00001 && $shortCash <= 0.00001
+        ) {
+            return 0.0;
+        }
+
+        $reverseDescription = __('Reverse duplicate EMI collection — loan #:id installment #:num', [
+            'id' => $loan->id,
+            'num' => $installment->installment_number,
+        ]);
+        $restoreDescription = __('Restore EMI collection legs — loan #:id installment #:num', [
+            'id' => $loan->id,
+            'num' => $installment->installment_number,
+        ]);
+
+        AccountingService::withoutMemberCashCollection(function () use (
+            $installment,
+            $member,
+            $cash,
+            $fund,
+            $loanAccount,
+            $excessCash,
+            $excessFund,
+            $excessLoan,
+            $shortCash,
+            $shortFund,
+            $shortLoan,
+            $reverseDescription,
+            $restoreDescription,
+        ): void {
+            if ($excessCash > 0.00001 && $cash !== null) {
+                $this->accounting->creditMemberCashWithMasterMirror(
+                    $cash,
+                    $excessCash,
+                    $reverseDescription,
+                    __('(duplicate EMI reversal mirror)'),
+                    $installment,
+                    BusinessDay::now(),
+                    $member->id,
+                );
+            }
+
+            if ($excessFund > 0.00001 && $fund !== null) {
+                $this->accounting->debitMemberFundWithMasterMirror(
+                    $fund,
+                    $excessFund,
+                    $reverseDescription,
+                    __('(duplicate EMI reversal mirror)'),
+                    $installment,
+                    BusinessDay::now(),
+                    $member->id,
+                );
+            }
+
+            if ($excessLoan > 0.00001) {
+                $this->accounting->debit(
+                    $loanAccount,
+                    $excessLoan,
+                    $reverseDescription,
+                    $installment,
+                    BusinessDay::now(),
+                    $member->id,
+                );
+            }
+
+            if ($shortCash > 0.00001 && $cash !== null) {
+                $this->accounting->debitMemberCashWithMasterMirror(
+                    $cash,
+                    $shortCash,
+                    $restoreDescription,
+                    __('(EMI restore mirror)'),
+                    $installment,
+                    BusinessDay::now(),
+                    $member->id,
+                );
+            }
+
+            if ($shortFund > 0.00001 && $fund !== null) {
+                $this->accounting->creditMemberFundWithMasterMirror(
+                    $fund,
+                    $shortFund,
+                    $restoreDescription,
+                    __('(EMI restore mirror)'),
+                    $installment,
+                    BusinessDay::now(),
+                    $member->id,
+                );
+            }
+
+            if ($shortLoan > 0.00001) {
+                $this->accounting->credit(
+                    $loanAccount,
+                    $shortLoan,
+                    $restoreDescription,
+                    $installment,
+                    BusinessDay::now(),
+                    $member->id,
+                );
+            }
+        });
+
+        return max($excessLoan, $excessFund, $excessCash, $shortLoan, $shortFund, $shortCash);
     }
 
     /**

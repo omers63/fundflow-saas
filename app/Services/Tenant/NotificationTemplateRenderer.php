@@ -175,7 +175,7 @@ final class NotificationTemplateRenderer
             }
         }
 
-        $fallback = public_path(FundflowBrand::LOGO_ASSET);
+        $fallback = FundflowBrand::logoAbsolutePath();
 
         return is_file($fallback) ? $fallback : null;
     }

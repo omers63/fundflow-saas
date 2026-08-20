@@ -1453,6 +1453,24 @@ html.fi.fi-panel-tenant #nprogress .peg {
     padding-block: 0.25rem;
 }
 
+.fi-body.fi-panel-tenant.fi-page-loan-queue .ff-loan-queue-kpi .ff-stat-line {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.fi-body.fi-panel-tenant.fi-page-loan-queue .ff-loan-queue-kpi .ff-member-amount {
+    max-width: 100%;
+    min-width: 0;
+}
+
+.fi-body.fi-panel-tenant.fi-page-loan-queue .ff-loan-queue-kpi .ff-member-amount__digits {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* ── Loan detail shell (view / edit insights) ── */
 @keyframes ff-loan-stepper-step-in {
     from {

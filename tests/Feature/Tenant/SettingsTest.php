@@ -150,3 +150,15 @@ test('statement and communication settings persist from form state', function ()
         ->and(CommunicationSettings::inAppEnabled())->toBeFalse()
         ->and(CommunicationSettings::emailEnabled())->toBeTrue();
 });
+
+test('eligibility threshold helper refers to the most recently repaid loan', function () {
+    $settings = (string) file_get_contents(app_path('Filament/Tenant/Pages/Settings.php'));
+    $arabic = json_decode((string) file_get_contents(lang_path('ar.json')), true, 512, JSON_THROW_ON_ERROR);
+    $key = "After the loan is fully repaid, the member fund balance must reach this percentage of the most recently repaid loan's tier ceiling before applying again.";
+
+    expect($settings)
+        ->toContain('most recently repaid loan')
+        ->and($settings)->not->toContain('previous loan tier ceiling')
+        ->and($arabic)->toHaveKey($key)
+        ->and($arabic[$key])->toContain('أحدث قرض');
+});

@@ -1,6 +1,6 @@
 @php
     $pageTitle = $title ?? \App\Support\PublicPageSettings::fundName(tenant('name'));
-    $metaDescription = $metaDescription ?? __('A transparent family fund platform for membership, contributions, and interest-free loans.');
+    $metaDescription = $metaDescription ?? \App\Support\PublicPageContentSettings::text('meta_description');
 @endphp
 
 <meta charset="utf-8">

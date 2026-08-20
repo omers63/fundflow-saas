@@ -73,6 +73,7 @@ class Loan extends Model
         'first_repayment_month',
         'first_repayment_year',
         'settlement_threshold',
+        'eligibility_threshold',
         'late_repayment_count',
         'late_repayment_amount',
         'rejection_reason',
@@ -98,6 +99,7 @@ class Loan extends Model
             'repaid_to_master' => 'decimal:2',
             'late_repayment_amount' => 'decimal:2',
             'settlement_threshold' => 'decimal:4',
+            'eligibility_threshold' => 'decimal:4',
             'is_emergency' => 'boolean',
             'cash_out_excess_fund' => 'boolean',
             'member_fund_balance_at_disbursement' => 'decimal:2',
@@ -343,24 +345,51 @@ class Loan extends Model
     }
 
     /**
-     * Repayment cycles a member must wait after fully settling this loan before applying again.
-     * ceil((settlement_threshold × loan_amount) / monthly_installment)
+     * Percentage used for the next-loan eligibility requirement (0–1).
      */
-    public function settlementThresholdCooldownCycles(): int
+    public function eligibilityThresholdPercent(): float
     {
-        $loanAmount = (float) ($this->amount_approved ?: $this->amount);
-        $thresholdPct = (float) ($this->settlement_threshold ?? LoanSettings::settlementThreshold());
-        $monthlyInstallment = (float) $this->monthly_repayment;
-
-        if ($monthlyInstallment <= 0.00001) {
-            $monthlyInstallment = $this->representativeEmiAmount();
+        if ($this->eligibility_threshold !== null) {
+            return max(0.0, (float) $this->eligibility_threshold);
         }
 
-        if ($loanAmount <= 0 || $thresholdPct <= 0 || $monthlyInstallment <= 0.00001) {
-            return 0;
+        if ($this->settlement_threshold !== null) {
+            return max(0.0, (float) $this->settlement_threshold);
         }
 
-        return (int) ceil(($loanAmount * $thresholdPct) / $monthlyInstallment);
+        return LoanSettings::eligibilityThreshold();
+    }
+
+    /**
+     * Base amount for the next-loan eligibility threshold.
+     *
+     * Uses the settled loan tier ceiling when available, otherwise falls back to the approved amount.
+     */
+    public function eligibilityThresholdBaseAmount(): float
+    {
+        $this->loadMissing('loanTier');
+
+        $ceiling = (float) ($this->loanTier?->max_amount ?? 0);
+        if ($ceiling > 0.00001) {
+            return $ceiling;
+        }
+
+        $approvedAmount = (float) ($this->amount_approved ?: $this->amount);
+        if ($approvedAmount <= 0.00001) {
+            return 0.0;
+        }
+
+        $tier = LoanTier::forAmount($approvedAmount);
+
+        return (float) ($tier?->max_amount ?? $approvedAmount);
+    }
+
+    /**
+     * Fund balance the member must hold after settling this loan before applying again.
+     */
+    public function eligibilityThresholdAmount(): float
+    {
+        return round($this->eligibilityThresholdBaseAmount() * $this->eligibilityThresholdPercent(), 2);
     }
 
     /**

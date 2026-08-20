@@ -3,15 +3,16 @@
 declare(strict_types=1);
 
 use App\Notifications\Tenant\TestAdminWebPushNotification;
+use App\Support\AppBrand;
 use App\Support\WebPushNotification;
 
 test('web push notification assets use transparent badge and icon paths', function () {
-    expect(WebPushNotification::BADGE_PATH)->toBe('/icons/notification-badge-96x96.png')
-        ->and(WebPushNotification::ICON_PATH)->toBe('/icons/notification-icon-192x192.png')
+    expect(is_file(AppBrand::iconAbsolutePath('notification_badge')))->toBeTrue()
+        ->and(is_file(AppBrand::iconAbsolutePath('notification_icon')))->toBeTrue()
         ->and(file_exists(public_path('icons/notification-badge-96x96.png')))->toBeTrue()
         ->and(file_exists(public_path('icons/notification-icon-192x192.png')))->toBeTrue()
-        ->and(WebPushNotification::badgeUrl())->toEndWith(WebPushNotification::BADGE_PATH)
-        ->and(WebPushNotification::iconUrl())->toEndWith(WebPushNotification::ICON_PATH)
+        ->and(WebPushNotification::badgeUrl())->toContain(AppBrand::iconWebPath('notification_badge'))
+        ->and(WebPushNotification::iconUrl())->toContain(AppBrand::iconWebPath('notification_icon'))
         ->and(str_starts_with(WebPushNotification::badgeUrl(), 'http'))->toBeTrue();
 });
 

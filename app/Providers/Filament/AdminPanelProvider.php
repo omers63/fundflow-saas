@@ -70,6 +70,9 @@ class AdminPanelProvider extends PanelProvider
                 .view('partials.arabic-display-body-class')->render()
                 .view('partials.pwa-head')->render()
             ))
+            ->renderHook(PanelsRenderHook::BODY_START, fn (): HtmlString => new HtmlString(
+                view('partials.pwa-splash')->render()
+            ))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(view('partials.pwa-sw')->render()))
             ->middleware([
                 EncryptCookies::class,

@@ -1,0 +1,30 @@
+{
+    "name": "FundFlow",
+    "short_name": "FundFlow",
+    "description_en": "Manage family fund contributions, loans, and member accounts",
+    "description_ar": "إدارة مساهمات صندوق العائلة والقروض وحسابات الأعضاء",
+    "assets": {
+        "logo": "logo.png",
+        "logo_svg": "logo.svg",
+        "favicon_svg": "favicon.svg",
+        "icons": {
+            "favicon_16": "icons/favicon-16x16.png",
+            "favicon_32": "icons/favicon-32x32.png",
+            "apple_touch": "icons/apple-touch-icon.png",
+            "pwa_72": "icons/icon-72x72.png",
+            "pwa_96": "icons/icon-96x96.png",
+            "pwa_128": "icons/icon-128x128.png",
+            "pwa_144": "icons/icon-144x144.png",
+            "pwa_152": "icons/icon-152x152.png",
+            "pwa_192": "icons/icon-192x192.png",
+            "pwa_384": "icons/icon-384x384.png",
+            "pwa_512": "icons/icon-512x512.png",
+            "notification_icon": "icons/notification-icon-192x192.png",
+            "notification_badge": "icons/notification-badge-96x96.png"
+        }
+    },
+    "communication": {
+        "footer_en": "This message was sent by your fund administration.",
+        "footer_ar": "أُرسلت هذه الرسالة من إدارة الصندوق."
+    }
+}

@@ -275,6 +275,7 @@ final class LoanAdminTransferService
                 'admin_transferred_at' => BusinessDay::now(),
                 'original_borrower_member_id' => $borrower->id,
                 'settlement_threshold' => $loan->settlement_threshold,
+                'eligibility_threshold' => $loan->eligibility_threshold,
             ]);
 
             $this->lifecycle->disbursePartial(

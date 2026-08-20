@@ -2,12 +2,13 @@
 
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Support\AppBrand;
+use App\Support\BrandAppearanceSettings;
 use App\Support\PublicPageSettings;
 use Illuminate\Support\Facades\Storage;
 use Tests\Concerns\InitializesTenancy;
-use Tests\TestCase;
 
-uses(TestCase::class, InitializesTenancy::class);
+uses(InitializesTenancy::class);
 
 beforeEach(function () {
     $this->initializeTenancy();
@@ -84,8 +85,8 @@ it('uses the built-in terms download route when no custom rules url is configure
 
 it('uses the default FundFlow brand logo when no custom logo is configured', function () {
     expect(PublicPageSettings::hasFundLogo())->toBeFalse()
-        ->and(PublicPageSettings::fundLogoUrl())->toContain('favicon-192x192.png')
-        ->and(PublicPageSettings::fundPanelBrandLogoUrl())->toContain('favicon-192x192.png');
+        ->and(PublicPageSettings::fundLogoUrl())->toContain(AppBrand::logoWebPath())
+        ->and(PublicPageSettings::fundPanelBrandLogoUrl())->toContain(AppBrand::logoWebPath());
 });
 
 it('serves uploaded fund logos through the tenancy assets route when tenancy is active', function () {
@@ -110,7 +111,7 @@ it('falls back to the default brand logo when the configured file is missing', f
         'fund_logo' => 'fund-branding/missing.png',
     ]);
 
-    expect(PublicPageSettings::fundLogoUrl())->toContain('favicon-192x192.png');
+    expect(PublicPageSettings::fundLogoUrl())->toContain(AppBrand::logoWebPath());
 });
 
 it('stores fund logo path and exposes a public url', function () {
@@ -144,4 +145,24 @@ it('deletes the previous logo file when replaced', function () {
 
     Storage::disk('public')->assertMissing('fund-branding/old.png');
     Storage::disk('public')->assertExists('fund-branding/new.png');
+});
+
+it('does not persist a bundled logo preview as a custom logo', function () {
+    Storage::fake('public');
+
+    $path = BrandAppearanceSettings::ensureEditableFile(
+        '',
+        AppBrand::logoWebPath(),
+        BrandAppearanceSettings::BUNDLED_LOGO_PATH,
+    );
+
+    expect($path)->toBe(BrandAppearanceSettings::BUNDLED_LOGO_PATH);
+
+    PublicPageSettings::save([
+        ...PublicPageSettings::defaults(),
+        'fund_logo' => $path,
+    ]);
+
+    expect(PublicPageSettings::hasFundLogo())->toBeFalse()
+        ->and(PublicPageSettings::formLogoState())->toBe([BrandAppearanceSettings::BUNDLED_LOGO_PATH]);
 });

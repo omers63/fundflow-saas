@@ -2,6 +2,8 @@
     $fundName = \App\Support\PublicPageSettings::fundName(tenant('name'));
     $isHome = request()->routeIs('tenant.home');
     $isAuthPage = \App\Support\ShowsFundPublicShell::onTenantFilamentAuthPage();
+    $content = \App\Support\PublicPageContentSettings::class;
+    $headerBanner = $content::html('header_banner');
 @endphp
 
 <nav x-data="{ open: false }" @class([
@@ -25,17 +27,23 @@
                         'tenant-public-nav__badge',
                         'tenant-public-nav__badge--current' => $isHome,
                     ]) @if ($isHome) aria-current="page"
-@endif>{{ __('Home') }}</a>
-                    <a href="{{ route('tenant.home') }}#features"
-                        class="tenant-public-nav__badge">{{ __('Features') }}</a>
-                    <a href="{{ route('tenant.home') }}#how-it-works"
-                        class="tenant-public-nav__badge">{{ __('How it works') }}</a>
-                    <a href="{{ route('tenant.application.status') }}"
-                        class="tenant-public-nav__badge">{{ __('Check application status') }}</a>
+@endif>{{ $content::text('nav_home') }}</a>
+                    @if ($content::enabled('nav_show_features'))
+                        <a href="{{ route('tenant.home') }}#features"
+                            class="tenant-public-nav__badge">{{ $content::text('nav_features') }}</a>
+                    @endif
+                    @if ($content::enabled('nav_show_how_it_works'))
+                        <a href="{{ route('tenant.home') }}#how-it-works"
+                            class="tenant-public-nav__badge">{{ $content::text('nav_how_it_works') }}</a>
+                    @endif
+                    @if ($content::enabled('nav_show_check_status'))
+                        <a href="{{ route('tenant.application.status') }}"
+                            class="tenant-public-nav__badge">{{ $content::text('nav_check_status') }}</a>
+                    @endif
                     <a href="{{ route('filament.member.auth.login') }}"
-                        class="tenant-public-nav__badge tenant-public-nav__badge--emphasis">{{ __('Member login') }}</a>
+                        class="tenant-public-nav__badge tenant-public-nav__badge--emphasis">{{ $content::text('nav_member_login') }}</a>
                     <a href="{{ route('tenant.membership') }}"
-                        class="tenant-public-nav__badge tenant-public-nav__badge--primary">{{ __('Apply for membership') }}</a>
+                        class="tenant-public-nav__badge tenant-public-nav__badge--primary">{{ $content::text('nav_apply') }}</a>
                 </div>
 
                 <button type="button"
@@ -65,20 +73,42 @@
                     'tenant-public-nav__badge',
                     'tenant-public-nav__badge--current' => $isHome,
                 ]) @if ($isHome) aria-current="page"
-@endif>{{ __('Home') }}</a>
-                <a href="{{ route('tenant.home') }}#features" @click="open = false"
-                    class="tenant-public-nav__badge">{{ __('Features') }}</a>
-                <a href="{{ route('tenant.home') }}#how-it-works" @click="open = false"
-                    class="tenant-public-nav__badge">{{ __('How it works') }}</a>
-                <a href="{{ route('tenant.application.status') }}" @click="open = false"
-                    class="tenant-public-nav__badge">{{ __('Check application status') }}</a>
+@endif>{{ $content::text('nav_home') }}</a>
+                @if ($content::enabled('nav_show_features'))
+                    <a href="{{ route('tenant.home') }}#features" @click="open = false"
+                        class="tenant-public-nav__badge">{{ $content::text('nav_features') }}</a>
+                @endif
+                @if ($content::enabled('nav_show_how_it_works'))
+                    <a href="{{ route('tenant.home') }}#how-it-works" @click="open = false"
+                        class="tenant-public-nav__badge">{{ $content::text('nav_how_it_works') }}</a>
+                @endif
+                @if ($content::enabled('nav_show_check_status'))
+                    <a href="{{ route('tenant.application.status') }}" @click="open = false"
+                        class="tenant-public-nav__badge">{{ $content::text('nav_check_status') }}</a>
+                @endif
             </div>
             <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <a href="{{ route('tenant.membership') }}" @click="open = false"
-                    class="tenant-public-nav__badge tenant-public-nav__badge--primary">{{ __('Apply for membership') }}</a>
+                    class="tenant-public-nav__badge tenant-public-nav__badge--primary">{{ $content::text('nav_apply') }}</a>
                 <a href="{{ route('filament.member.auth.login') }}" @click="open = false"
-                    class="tenant-public-nav__badge tenant-public-nav__badge--emphasis">{{ __('Member login') }}</a>
+                    class="tenant-public-nav__badge tenant-public-nav__badge--emphasis">{{ $content::text('nav_member_login') }}</a>
             </div>
         </div>
     </div>
 </nav>
+
+@if ($headerBanner !== '')
+    <div class="tenant-public-header-banner">
+        <div class="mx-auto max-w-7xl px-4 py-2 sm:px-6 lg:px-8">
+            {!! $headerBanner !!}
+        </div>
+    </div>
+@endif
+
+@if ($headerBanner !== '')
+    <div class="tenant-public-header-banner">
+        <div class="mx-auto max-w-7xl px-4 py-2 sm:px-6 lg:px-8">
+            {!! $headerBanner !!}
+        </div>
+    </div>
+@endif

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Samman Fund">
+  <rect width="512" height="512" rx="64" fill="#1A2A1F"/>
+  <g fill="none" stroke="#AD8B51" stroke-width="10">
+    <ellipse cx="256" cy="256" rx="118" ry="176"/>
+    <ellipse cx="256" cy="256" rx="102" ry="160"/>
+  </g>
+  <polygon points="256,88 268,108 256,128 244,108" fill="#AD8B51"/>
+  <path fill="#AD8B51" d="M198 230c18-48 46-70 70-58 12 6 18 20 14 40-8 36-40 62-70 58-18-2-26-18-14-40z"/>
+  <path fill="#AD8B51" d="M318 242c-22-42-52-62-74-46-12 8-16 24-8 42 14 32 48 52 76 44 18-4 22-22 6-40z"/>
+  <ellipse cx="214" cy="368" rx="28" ry="16" fill="#AD8B51" transform="rotate(-28 214 368)"/>
+  <ellipse cx="298" cy="368" rx="28" ry="16" fill="#AD8B51" transform="rotate(28 298 368)"/>
+</svg>

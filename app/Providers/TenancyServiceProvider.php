@@ -24,7 +24,7 @@ class TenancyServiceProvider extends ServiceProvider
     public function events()
     {
         return [
-                // Tenant events
+            // Tenant events
             Events\CreatingTenant::class => [],
             Events\TenantCreated::class => [
                 JobPipeline::make([
@@ -52,7 +52,7 @@ class TenancyServiceProvider extends ServiceProvider
                 })->shouldBeQueued(false), // `false` by default, but you probably want to make this `true` for production.
             ],
 
-                // Domain events
+            // Domain events
             Events\CreatingDomain::class => [],
             Events\DomainCreated::class => [],
             Events\SavingDomain::class => [],
@@ -62,14 +62,14 @@ class TenancyServiceProvider extends ServiceProvider
             Events\DeletingDomain::class => [],
             Events\DomainDeleted::class => [],
 
-                // Database events
+            // Database events
             Events\DatabaseCreated::class => [],
             Events\DatabaseMigrated::class => [],
             Events\DatabaseSeeded::class => [],
             Events\DatabaseRolledBack::class => [],
             Events\DatabaseDeleted::class => [],
 
-                // Tenancy events
+            // Tenancy events
             Events\InitializingTenancy::class => [],
             Events\TenancyInitialized::class => [
                 Listeners\BootstrapTenancy::class,
@@ -82,19 +82,19 @@ class TenancyServiceProvider extends ServiceProvider
 
             Events\BootstrappingTenancy::class => [],
             Events\TenancyBootstrapped::class => [
-                ConfigureTenantFilesystemUrls::class . '@handleTenancyBootstrapped',
+                ConfigureTenantFilesystemUrls::class.'@handleTenancyBootstrapped',
             ],
             Events\RevertingToCentralContext::class => [],
             Events\RevertedToCentralContext::class => [
-                ConfigureTenantFilesystemUrls::class . '@handleRevertedToCentralContext',
+                ConfigureTenantFilesystemUrls::class.'@handleRevertedToCentralContext',
             ],
 
-                // Resource syncing
+            // Resource syncing
             Events\SyncedResourceSaved::class => [
                 Listeners\UpdateSyncedResource::class,
             ],
 
-                // Fired only when a synced resource is changed in a different DB than the origin DB (to avoid infinite loops)
+            // Fired only when a synced resource is changed in a different DB than the origin DB (to avoid infinite loops)
             Events\SyncedResourceChangedInForeignDatabase::class => [],
         ];
     }
@@ -112,6 +112,18 @@ class TenancyServiceProvider extends ServiceProvider
         $this->mapRoutes();
 
         $this->makeTenancyMiddlewareHighestPriority();
+        $this->returnNotFoundWhenTenantCannotBeIdentified();
+    }
+
+    /**
+     * Raw IP / unknown-host hits (bots, default vhost) are not tenants.
+     * Abort 404 instead of rethrowing, which Laravel would log as production.ERROR.
+     */
+    protected function returnNotFoundWhenTenantCannotBeIdentified(): void
+    {
+        Middleware\InitializeTenancyByDomain::$onFail = function (): never {
+            abort(404);
+        };
     }
 
     protected function disableCacheTenancyBootstrapperWhenStoreDoesNotSupportTags(): void
@@ -129,7 +141,7 @@ class TenancyServiceProvider extends ServiceProvider
         config([
             'tenancy.bootstrappers' => array_values(array_filter(
                 $bootstrappers,
-                fn(string $bootstrapper): bool => $bootstrapper !== CacheTenancyBootstrapper::class,
+                fn (string $bootstrapper): bool => $bootstrapper !== CacheTenancyBootstrapper::class,
             )),
         ]);
     }
@@ -160,7 +172,7 @@ class TenancyServiceProvider extends ServiceProvider
     protected function makeTenancyMiddlewareHighestPriority()
     {
         $tenancyMiddleware = [
-                // Even higher priority than the initialization middleware
+            // Even higher priority than the initialization middleware
             Middleware\PreventAccessFromCentralDomains::class,
 
             Middleware\InitializeTenancyByDomain::class,

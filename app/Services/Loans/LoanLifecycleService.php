@@ -269,6 +269,7 @@ final class LoanLifecycleService
             'approved_at' => $at,
             'approved_by_id' => $approvedById ?? auth()->id(),
             'settlement_threshold' => $threshold,
+            'eligibility_threshold' => LoanSettings::eligibilityThreshold(),
             'monthly_repayment' => (float) $loanTier->min_monthly_installment,
             'has_grace_cycle' => $hasGraceCycle,
             'grace_cycles' => LoanSettings::clampGraceCycles($graceCycles ?? ($hasGraceCycle ? 1 : 0)),

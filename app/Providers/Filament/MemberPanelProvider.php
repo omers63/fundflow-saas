@@ -15,6 +15,7 @@ use App\Http\Middleware\SetFilamentPanelAuthGuard;
 use App\Http\Middleware\StartWallClockSession;
 use App\Http\Middleware\UseWallClockForSessions;
 use App\Livewire\Tenant\MemberLoginPage;
+use App\Support\BrandAppearanceSettings;
 use App\Support\PublicPageSettings;
 use Filament\Actions\Action;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -23,7 +24,6 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
-use Filament\Support\Colors\Color;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -48,11 +48,11 @@ class MemberPanelProvider extends PanelProvider
             ->disabledErrorNotification(419)
             ->disabledErrorNotification(401)
             ->viteTheme('resources/css/filament/member/theme.css')
-            ->colors([
-                'primary' => Color::hex('#534AB7'),
+            ->colors(fn (): array => [
+                'primary' => BrandAppearanceSettings::memberPanelColor(),
             ])
             ->brandName(fn (): string => PublicPageSettings::fundName(tenant('name')))
-            ->favicon(fn (): string => PublicPageSettings::fundLogoUrl())
+            ->favicon(fn (): string => BrandAppearanceSettings::faviconUrl())
             ->brandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
             ->darkModeBrandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
             ->brandLogoHeight(PublicPageSettings::BRAND_LOGO_HEIGHT)
@@ -99,10 +99,13 @@ class MemberPanelProvider extends PanelProvider
                 .view('partials.arabic-display-body-class')->render()
                 .view('partials.pwa-head')->render()
             ))
+            ->renderHook(PanelsRenderHook::BODY_START, fn (): HtmlString => new HtmlString(
+                view('partials.pwa-splash')->render()
+            ))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(
                 view('partials.portal-bottom-bar')->render()
-                . view('partials.status-footer-banners')->render()
-                . view('partials.pwa-sw')->render()
+                .view('partials.status-footer-banners')->render()
+                .view('partials.pwa-sw')->render()
                 .view('filament.member.partials.webpush-member')->render()
             ))
             ->middleware([

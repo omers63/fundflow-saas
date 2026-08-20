@@ -29,12 +29,20 @@ final class WebPushNotification
      */
     public static function badgeUrl(): string
     {
-        return url(self::BADGE_PATH);
+        if (tenant() !== null) {
+            return BrandAppearanceSettings::notificationBadgeUrl();
+        }
+
+        return AppBrand::iconUrl('notification_badge');
     }
 
     public static function iconUrl(): string
     {
-        return url(self::ICON_PATH);
+        if (tenant() !== null) {
+            return BrandAppearanceSettings::notificationIconUrl();
+        }
+
+        return AppBrand::iconUrl('notification_icon');
     }
 
     public static function truncate(string $text, int $maxChars): string
@@ -45,6 +53,6 @@ final class WebPushNotification
             return $text;
         }
 
-        return rtrim(mb_substr($text, 0, max(1, $maxChars - 1))) . '…';
+        return rtrim(mb_substr($text, 0, max(1, $maxChars - 1))).'…';
     }
 }

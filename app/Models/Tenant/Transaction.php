@@ -50,6 +50,97 @@ class Transaction extends Model
         return $this->morphTo();
     }
 
+    /**
+     * createReversalEntry rows point at the original transaction, not the installment/repayment.
+     *
+     * @param  array<int, list<int>>|null  $childIdsByParent
+     * @param  list<int>  $seedIds
+     * @return list<int>
+     */
+    public static function expandIdsWithReversalDescendants(array $seedIds, ?array $childIdsByParent = null): array
+    {
+        $seen = [];
+        $frontier = [];
+
+        foreach ($seedIds as $seedId) {
+            $id = (int) $seedId;
+            if ($id <= 0 || isset($seen[$id])) {
+                continue;
+            }
+            $seen[$id] = true;
+            $frontier[] = $id;
+        }
+
+        if ($frontier === []) {
+            return [];
+        }
+
+        $morph = (new self)->getMorphClass();
+
+        while ($frontier !== []) {
+            if ($childIdsByParent !== null) {
+                $next = [];
+                foreach ($frontier as $parentId) {
+                    foreach ($childIdsByParent[$parentId] ?? [] as $childId) {
+                        $childId = (int) $childId;
+                        if ($childId > 0 && ! isset($seen[$childId])) {
+                            $seen[$childId] = true;
+                            $next[] = $childId;
+                        }
+                    }
+                }
+                $frontier = $next;
+
+                continue;
+            }
+
+            $children = self::query()
+                ->where('reference_type', $morph)
+                ->whereIn('reference_id', $frontier)
+                ->pluck('id')
+                ->all();
+            $frontier = [];
+
+            foreach ($children as $childId) {
+                $childId = (int) $childId;
+                if ($childId > 0 && ! isset($seen[$childId])) {
+                    $seen[$childId] = true;
+                    $frontier[] = $childId;
+                }
+            }
+        }
+
+        return array_map(intval(...), array_keys($seen));
+    }
+
+    /**
+     * @param  list<int>  $referenceIds
+     * @param  array<int, list<int>>|null  $childIdsByParent
+     * @return list<int>
+     */
+    public static function idsForMorphIncludingReversals(
+        string $referenceType,
+        array $referenceIds,
+        ?array $childIdsByParent = null,
+    ): array {
+        $referenceIds = array_values(array_unique(array_filter(
+            array_map(intval(...), $referenceIds),
+            fn (int $id): bool => $id > 0,
+        )));
+
+        if ($referenceIds === []) {
+            return [];
+        }
+
+        $seedIds = self::query()
+            ->where('reference_type', $referenceType)
+            ->whereIn('reference_id', $referenceIds)
+            ->pluck('id')
+            ->all();
+
+        return self::expandIdsWithReversalDescendants($seedIds, $childIdsByParent);
+    }
+
     public function sourcedBankTransaction(): ?BankTransaction
     {
         if ($this->reference instanceof BankTransaction) {

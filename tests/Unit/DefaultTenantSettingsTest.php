@@ -154,6 +154,7 @@ it('persists samman-shaped settings defaults for a fresh tenant', function () {
         ->and(Setting::get(PublicPageSettings::GROUP, 'membership_max_members'))->toBe('100')
         ->and(Setting::get(LoanSettings::GROUP, 'max_loan_amount'))->toBe('300000')
         ->and(Setting::get(LoanSettings::GROUP, 'settlement_threshold_pct'))->toBe('0.2')
+        ->and(Setting::get(LoanSettings::GROUP, 'eligibility_threshold_pct'))->toBe('0.2')
         ->and(Setting::get(LoanSettings::GROUP, 'max_allowed_grace_cycles'))->toBe('1')
         ->and(Setting::get(LoanSettings::GROUP, 'allow_funding_strategy_member_topup'))->toBe('0')
         ->and(Setting::get(LoanSettings::GROUP, 'max_active_loans'))->toBe('1')
@@ -222,6 +223,8 @@ it('seeds every settings-tab policy group used by the admin Settings page', func
         'member_number',
         'fiscal',
         'public',
+        'branding',
+        'public_content',
         'statement',
         'communication',
         'communication_brand',

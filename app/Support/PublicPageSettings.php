@@ -86,6 +86,20 @@ final class PublicPageSettings
         return self::fundLogoPath() !== null;
     }
 
+    /**
+     * @return list<string>
+     */
+    public static function formLogoState(): array
+    {
+        $path = BrandAppearanceSettings::ensureEditableFile(
+            self::fundLogoPath(),
+            AppBrand::logoWebPath(),
+            BrandAppearanceSettings::BUNDLED_LOGO_PATH,
+        );
+
+        return $path !== '' ? [$path] : [];
+    }
+
     public static function membershipNoLimit(): bool
     {
         return filter_var(self::get('membership_no_limit', '1'), FILTER_VALIDATE_BOOLEAN);
@@ -377,9 +391,18 @@ final class PublicPageSettings
 
     private static function persistFundLogo(string $newPath): void
     {
+        if (BrandAppearanceSettings::isBundledEditablePath($newPath)) {
+            $newPath = '';
+        }
+
         $previous = self::fundLogoPath();
 
-        if ($previous !== null && $previous !== $newPath && ! str_starts_with($previous, 'http')) {
+        if (
+            $previous !== null
+            && $previous !== $newPath
+            && ! str_starts_with($previous, 'http')
+            && ! BrandAppearanceSettings::isBundledEditablePath($previous)
+        ) {
             Storage::disk('public')->delete($previous);
         }
 

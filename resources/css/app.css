@@ -46,7 +46,7 @@
         border: 1px solid #6ee7b7;
         padding: 1.5rem;
         color: #ffffff;
-        background: linear-gradient(135deg, #059669 0%, #10b981 50%, #14b8a6 100%);
+        background: linear-gradient(135deg, var(--ff-theme, #059669) 0%, #10b981 50%, #14b8a6 100%);
         box-shadow: 0 10px 15px -3px rgb(5 150 105 / 0.25);
     }
 
@@ -147,7 +147,7 @@
         font-size: 0.875rem;
         font-weight: 600;
         line-height: 1.25;
-        color: #047857;
+        color: var(--ff-theme-hover, #047857);
         text-decoration: none;
         transition: background-color 0.15s ease, border-color 0.15s ease;
     }
@@ -167,7 +167,7 @@
     .enrollment-status-card-header {
         padding: 1.5rem;
         color: #ffffff;
-        background: linear-gradient(135deg, #059669 0%, #10b981 50%, #14b8a6 100%);
+        background: linear-gradient(135deg, var(--ff-theme, #059669) 0%, #10b981 50%, #14b8a6 100%);
     }
 
     .enrollment-status-submit-btn {
@@ -177,7 +177,7 @@
         font-size: 0.875rem;
         font-weight: 700;
         color: #ffffff;
-        background: linear-gradient(135deg, #059669 0%, #10b981 50%, #14b8a6 100%);
+        background: linear-gradient(135deg, var(--ff-theme, #059669) 0%, #10b981 50%, #14b8a6 100%);
         cursor: pointer;
         transition: opacity 0.15s ease;
     }
@@ -285,7 +285,7 @@
         border-radius: 1rem;
         border: 1px solid #6ee7b7;
         background-color: rgb(255 255 255 / 0.75);
-        color: #059669;
+        color: var(--ff-theme, #059669);
     }
 
     .member-login-card__title {
@@ -298,7 +298,7 @@
     .member-login-card__subtitle {
         margin-top: 0.25rem;
         font-size: 0.875rem;
-        color: #047857;
+        color: var(--ff-theme-hover, #047857);
     }
 
     .member-login-cta {
@@ -308,7 +308,7 @@
         padding: 2.5rem 1.5rem;
         text-align: center;
         color: #ffffff;
-        background: linear-gradient(135deg, #047857 0%, #059669 50%, #0d9488 100%);
+        background: linear-gradient(135deg, var(--ff-theme-hover, #047857) 0%, var(--ff-theme, #059669) 50%, #0d9488 100%);
         box-shadow: 0 20px 25px -5px rgb(5 150 105 / 0.25);
     }
 
@@ -523,7 +523,7 @@
     .member-login-remember__checkbox {
         border-radius: 0.25rem;
         border-color: #cbd5e1;
-        color: #059669;
+        color: var(--ff-theme, #059669);
     }
 
     .member-login-submit {
@@ -538,14 +538,14 @@
         font-size: 1rem;
         font-weight: 700;
         color: #ffffff;
-        background: linear-gradient(135deg, #059669 0%, #0d9488 100%);
+        background: linear-gradient(135deg, var(--ff-theme, #059669) 0%, #0d9488 100%);
         box-shadow: 0 4px 14px rgb(5 150 105 / 0.35);
         cursor: pointer;
         transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
     }
 
     .member-login-submit:hover:not(:disabled) {
-        background: linear-gradient(135deg, #047857 0%, #0f766e 100%);
+        background: linear-gradient(135deg, var(--ff-theme-hover, #047857) 0%, #0f766e 100%);
         box-shadow: 0 6px 18px rgb(5 150 105 / 0.4);
         transform: translateY(-1px);
     }
@@ -580,7 +580,7 @@
 
     .member-login-links__accent {
         font-weight: 600;
-        color: #059669;
+        color: var(--ff-theme, #059669);
         text-decoration: none;
     }
 
@@ -795,7 +795,7 @@
         background: rgb(255 255 255 / 0.72);
         font-size: 0.875rem;
         font-weight: 500;
-        color: #047857;
+        color: var(--ff-theme-hover, #047857);
     }
 
     .landing-hero-title {
@@ -820,7 +820,7 @@
     }
 
     .landing-hero-title-accent {
-        color: #059669;
+        color: var(--ff-theme, #059669);
     }
 
     .landing-hero-lead {
@@ -895,7 +895,7 @@
         max-width: 36rem;
         font-size: 1.125rem;
         line-height: 1.6;
-        color: #047857;
+        color: var(--ff-theme-hover, #047857);
     }
 
     .landing-cta-card__actions {
@@ -922,7 +922,7 @@
         font-size: 1rem;
         font-weight: 600;
         color: #ffffff;
-        background: linear-gradient(135deg, #059669 0%, #0d9488 100%);
+        background: linear-gradient(135deg, var(--ff-theme, #059669) 0%, #0d9488 100%);
         box-shadow: 0 4px 14px rgb(5 150 105 / 0.3);
         text-decoration: none;
         transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -1131,15 +1131,41 @@
 }
 
 .tenant-public-nav__badge--primary {
-    border-color: rgb(13 148 136);
-    background: rgb(13 148 136);
+    border-color: var(--ff-theme, rgb(13 148 136));
+    background: var(--ff-theme, rgb(13 148 136));
     color: rgb(255 255 255);
 }
 
 .tenant-public-nav__badge--primary:hover {
-    border-color: rgb(15 118 110);
-    background: rgb(15 118 110);
+    border-color: var(--ff-theme-hover, rgb(15 118 110));
+    background: var(--ff-theme-hover, rgb(15 118 110));
     color: rgb(255 255 255);
+}
+
+.tenant-public-header-banner {
+    padding-top: var(--tenant-public-topbar-offset, 6rem);
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    color: #374151;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.tenant-public-layout:has(.tenant-public-header-banner) .tenant-public-layout__main {
+    padding-top: 0;
+}
+
+.tenant-public-sidebar {
+    color: #374151;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.tenant-public-footer__extra {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #6b7280;
 }
 
 .tenant-public-nav__mobile-menu .tenant-public-nav__badge {

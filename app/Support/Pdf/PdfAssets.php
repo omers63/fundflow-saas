@@ -60,7 +60,7 @@ final class PdfAssets
             return self::fileDataUriIfSupported(Storage::disk('public')->path($path));
         }
 
-        $default = public_path(FundflowBrand::LOGO_ASSET);
+        $default = FundflowBrand::logoAbsolutePath();
 
         if (is_file($default)) {
             return self::fileDataUriIfSupported($default);

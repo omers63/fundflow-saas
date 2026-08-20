@@ -236,6 +236,7 @@ class LoanImportService
             'approved_at' => $approvedAt,
             'approved_by_id' => auth('tenant')->id(),
             'settlement_threshold' => $threshold,
+            'eligibility_threshold' => LoanSettings::eligibilityThreshold(),
             'is_emergency' => $isEmergency,
             'guarantor_member_id' => $guarantorMemberId,
         ], $this->parseOptionalLegacyLoanId($row));
@@ -344,6 +345,7 @@ class LoanImportService
                 'has_grace_cycle' => $graceCycles > 0,
                 ...(filled($fundingStrategy) ? ['funding_strategy' => $fundingStrategy] : []),
                 'settlement_threshold' => $threshold,
+                'eligibility_threshold' => LoanSettings::eligibilityThreshold(),
                 'is_emergency' => $isEmergency,
                 'member_portion' => $memberPortion,
                 'master_portion' => $masterPortion,

@@ -15,11 +15,13 @@ final class CommunicationBrandSettings
      */
     public static function defaults(): array
     {
+        $communication = AppBrand::communication();
+
         return [
             'from_name' => null,
-            'primary_color' => '#0f766e',
-            'footer_en' => 'This message was sent by your fund administration.',
-            'footer_ar' => 'أُرسلت هذه الرسالة من إدارة الصندوق.',
+            'primary_color' => AppBrand::communicationPrimary(),
+            'footer_en' => (string) ($communication['footer_en'] ?? 'This message was sent by your fund administration.'),
+            'footer_ar' => (string) ($communication['footer_ar'] ?? 'أُرسلت هذه الرسالة من إدارة الصندوق.'),
             'logo_path' => null,
         ];
     }
@@ -54,7 +56,7 @@ final class CommunicationBrandSettings
     public static function saveFromForm(array $state): void
     {
         Setting::set(self::GROUP, 'from_name', filled($state['brand_from_name'] ?? null) ? (string) $state['brand_from_name'] : null);
-        Setting::set(self::GROUP, 'primary_color', (string) ($state['brand_primary_color'] ?? '#0f766e'));
+        Setting::set(self::GROUP, 'primary_color', (string) ($state['brand_primary_color'] ?? AppBrand::communicationPrimary()));
         Setting::set(self::GROUP, 'footer_en', (string) ($state['brand_footer_en'] ?? self::defaults()['footer_en']));
         Setting::set(self::GROUP, 'footer_ar', (string) ($state['brand_footer_ar'] ?? self::defaults()['footer_ar']));
         Setting::set(self::GROUP, 'logo_path', filled($state['brand_logo_path'] ?? null) ? (string) $state['brand_logo_path'] : null);

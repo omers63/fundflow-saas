@@ -1,0 +1,9 @@
+{
+    "theme_color": "#0E7C7B",
+    "background_color": "#0D2D4E",
+    "splash_background_color": "#F4F6F8",
+    "tenant_panel_primary": "#0D2D4E",
+    "member_panel_primary": "#0E7C7B",
+    "communication_primary": "#0D2D4E",
+    "accent_color": "#40A8AA"
+}

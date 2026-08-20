@@ -10,13 +10,13 @@ use App\Http\Middleware\AuthenticateFilamentPanel;
 use App\Http\Middleware\StartWallClockSession;
 use App\Http\Middleware\UseWallClockForSessions;
 use App\Livewire\Tenant\TenantAdminLoginPage;
+use App\Support\BrandAppearanceSettings;
 use App\Support\PublicPageSettings;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
 use Filament\PanelProvider;
-use Filament\Support\Colors\Color;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -41,11 +41,11 @@ class TenantPanelProvider extends PanelProvider
             ->disabledErrorNotification(419)
             ->disabledErrorNotification(401)
             ->viteTheme('resources/css/filament/tenant/theme.css')
-            ->colors([
-                'primary' => Color::Sky,
+            ->colors(fn (): array => [
+                'primary' => BrandAppearanceSettings::tenantPanelColor(),
             ])
             ->brandName(fn (): string => PublicPageSettings::fundName(tenant('name')))
-            ->favicon(fn (): string => PublicPageSettings::fundLogoUrl())
+            ->favicon(fn (): string => BrandAppearanceSettings::faviconUrl())
             ->brandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
             ->darkModeBrandLogo(fn (): string => PublicPageSettings::fundPanelBrandLogoUrl())
             ->brandLogoHeight(PublicPageSettings::BRAND_LOGO_HEIGHT)
@@ -70,6 +70,9 @@ class TenantPanelProvider extends PanelProvider
                 view('partials.arabic-fonts')->render()
                 .view('partials.arabic-display-body-class')->render()
                 .view('partials.pwa-head')->render()
+            ))
+            ->renderHook(PanelsRenderHook::BODY_START, fn (): HtmlString => new HtmlString(
+                view('partials.pwa-splash')->render()
             ))
             ->renderHook(PanelsRenderHook::BODY_END, fn (): HtmlString => new HtmlString(
                 view('partials.portal-bottom-bar')->render()

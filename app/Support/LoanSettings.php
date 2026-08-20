@@ -24,6 +24,7 @@ final class LoanSettings
             'default_term_months' => 12,
             'max_loan_amount' => 300000,
             'settlement_threshold_pct' => 0.2,
+            'eligibility_threshold_pct' => 0.2,
             'default_grace_cycles' => 2,
             'max_allowed_grace_cycles' => 1,
             'guarantor_transfer_missed_threshold' => 3,
@@ -82,6 +83,18 @@ final class LoanSettings
     public static function settlementThreshold(): float
     {
         return (float) self::get('settlement_threshold_pct', self::defaults()['settlement_threshold_pct']);
+    }
+
+    /**
+     * Share of the most recently repaid loan's tier ceiling that the member fund must hold
+     * after settlement before applying again (0–1).
+     */
+    public static function eligibilityThreshold(): float
+    {
+        return max(0.0, min(1.0, (float) self::get(
+            'eligibility_threshold_pct',
+            self::defaults()['eligibility_threshold_pct'],
+        )));
     }
 
     public static function defaultGraceCycles(): int

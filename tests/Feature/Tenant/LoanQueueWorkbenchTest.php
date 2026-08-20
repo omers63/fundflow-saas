@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tables\Columns\Summarizers\LoanRemainingToDisburseSum;
 use App\Filament\Tenant\Pages\LoanQueueWorkbenchPage;
 use App\Models\Central\Tenant;
@@ -336,7 +337,8 @@ test('tier queues tab renders pool figures, queued loans, and running loans with
         ->assertSee(__(':percent% repaid', ['percent' => 50]))
         ->assertSeeHtml('ff-tier-heat')
         ->assertSeeHtml('ff-tier-heat__repay-fill')
-        ->assertSeeHtml('bg-teal-500');
+        ->assertSeeHtml('bg-teal-500')
+        ->assertSee(MoneyDisplay::format(10_000, precision: 0));
 });
 
 test('intake and process queue tables expose money column summary footers', function () {
@@ -478,6 +480,22 @@ test('tier queues tab shows per-tier and all-tiers summary footers', function ()
         ->and($summary['queued_remaining'])->toBe(10_000.0)
         ->and($summary['running_count'])->toBe(0)
         ->and($summary['running_outstanding'])->toBe(0.0);
+});
+
+test('loan queue master fund kpi uses a compact amount that stays inside the card', function () {
+    Account::query()->where('is_master', true)->where('type', 'fund')->update(['balance' => 1_234_567]);
+
+    $component = Livewire::test(LoanQueueWorkbenchPage::class)->assertSuccessful();
+    $html = $component->html();
+    $amount = $component->instance()->getQueueKpis()['disbursable'];
+
+    expect($amount)->toBe(1_234_567.0)
+        ->and($html)
+        ->toContain('ff-loan-queue-kpi min-w-0 overflow-hidden')
+        ->toContain('xl:grid-cols-6')
+        ->not->toContain('lg:grid-cols-6')
+        ->toContain(MoneyDisplay::compactHtml($amount)->toHtml())
+        ->toContain('1.2M');
 });
 
 test('loan queue workbench kpi and projection keys have arabic translations', function () {

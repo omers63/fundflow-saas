@@ -26,8 +26,19 @@ it('uses defaults when loan settings are not stored', function () {
         ->and(LoanSettings::allowExcessFundCashOut())->toBeTrue()
         ->and(LoanSettings::maxLoanAmount())->toBe(300000.0)
         ->and(LoanSettings::settlementThreshold())->toBe(0.2)
+        ->and(LoanSettings::eligibilityThreshold())->toBe(0.2)
         ->and(LoanSettings::maxAllowedGraceCycles())->toBe(1)
         ->and(Setting::loanGuarantorTransferMissedThreshold())->toBe(3);
+});
+
+it('persists eligibility threshold independently of settlement threshold', function () {
+    LoanSettings::save([
+        'settlement_threshold_pct' => 0.16,
+        'eligibility_threshold_pct' => 0.40,
+    ]);
+
+    expect(LoanSettings::settlementThreshold())->toBe(0.16)
+        ->and(LoanSettings::eligibilityThreshold())->toBe(0.4);
 });
 
 it('falls back guarantor transfer threshold to grace cycles plus one', function () {

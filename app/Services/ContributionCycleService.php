@@ -214,8 +214,18 @@ class ContributionCycleService
      */
     public function currentOpenPeriod(): array
     {
-        $now = BusinessDay::now();
-        $cursor = $now->copy()->startOfMonth();
+        return $this->periodContaining(BusinessDay::now());
+    }
+
+    /**
+     * Labelled contribution cycle (month, year) that contains the given instant.
+     *
+     * @return array{0: int, 1: int}
+     */
+    public function periodContaining(Carbon $at): array
+    {
+        $at = $at->copy();
+        $cursor = $at->copy()->startOfMonth();
 
         for ($i = 0; $i < 15; $i++) {
             $m = (int) $cursor->month;
@@ -223,14 +233,14 @@ class ContributionCycleService
             $start = $this->cycleStartAt($m, $y);
             $dueEnd = $this->cycleDueEndAt($m, $y);
 
-            if ($now->gte($start) && $now->lte($dueEnd)) {
+            if ($at->gte($start) && $at->lte($dueEnd)) {
                 return [$m, $y];
             }
 
             $cursor->subMonthNoOverflow();
         }
 
-        $fallback = $now->copy()->subMonthNoOverflow();
+        $fallback = $at->copy()->subMonthNoOverflow();
 
         return [(int) $fallback->month, (int) $fallback->year];
     }

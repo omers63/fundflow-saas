@@ -1,0 +1,166 @@
+{
+    "meta_description_en": "The Sheikh Sulaiman Samman Family Fund — a transparent family fund for membership, contributions, and interest-free loans.",
+    "meta_description_ar": "صندوق عائلة الشيخ سليمان سمان — منصة صندوق عائلي شفافة للعضوية والمساهمات والقروض الخالية من الفوائد.",
+    "pwa_description_en": "Balance, authenticity, and lasting bonds — manage contributions, loans, and member accounts",
+    "pwa_description_ar": "توازن وأصالة وروابط ممتدة — إدارة المساهمات والقروض وحسابات الأعضاء",
+    "pwa_short_name_en": "Samman",
+    "pwa_short_name_ar": "سمان",
+    "nav_home_en": "Home",
+    "nav_home_ar": "الرئيسية",
+    "nav_features_en": "Features",
+    "nav_features_ar": "الميزات",
+    "nav_how_it_works_en": "How it works",
+    "nav_how_it_works_ar": "كيف يعمل",
+    "nav_check_status_en": "Check application status",
+    "nav_check_status_ar": "التحقق من حالة الطلب",
+    "nav_member_login_en": "Member login",
+    "nav_member_login_ar": "دخول الأعضاء",
+    "nav_apply_en": "Apply for membership",
+    "nav_apply_ar": "تقديم طلب عضوية",
+    "nav_show_features": "1",
+    "nav_show_how_it_works": "1",
+    "nav_show_check_status": "1",
+    "header_banner_en": "",
+    "header_banner_ar": "",
+    "footer_tagline_en": "A family fund of balance, authenticity, and lasting bonds — mutual support and zero-interest principles.",
+    "footer_tagline_ar": "صندوق عائلي يقوم على التوازن والأصالة والروابط الممتدة — مبادئ التكافل وعدم الفائدة.",
+    "footer_links_heading_en": "Quick links",
+    "footer_links_heading_ar": "روابط سريعة",
+    "footer_contact_heading_en": "Contact",
+    "footer_contact_heading_ar": "التواصل",
+    "footer_copyright_en": ":year © :fund. All rights reserved.",
+    "footer_copyright_ar": ":year © :fund. جميع الحقوق محفوظة.",
+    "footer_contact_empty_en": "Contact details are configured in fund settings.",
+    "footer_contact_empty_ar": "تُضبط بيانات التواصل من إعدادات الصندوق.",
+    "footer_terms_en": "Terms & conditions (PDF)",
+    "footer_terms_ar": "الشروط والأحكام (PDF)",
+    "footer_extra_en": "",
+    "footer_extra_ar": "",
+    "sidebar_html_en": "",
+    "sidebar_html_ar": "",
+    "hero_badge_en": "Balance, authenticity, and continuity",
+    "hero_badge_ar": "توازن وأصالة واستمرار",
+    "hero_title_before_en": "Building wealth",
+    "hero_title_before_ar": "نبني الثروة",
+    "hero_title_accent_en": "together",
+    "hero_title_accent_ar": "معاً",
+    "hero_title_after_en": "as a family",
+    "hero_title_after_ar": "كعائلة",
+    "hero_lead_en": "Join the Sheikh Sulaiman Samman Family Fund. The Seen and the Meem, bound in one seal — monthly contributions, interest-free loans, and transparent accounts.",
+    "hero_lead_ar": "انضم إلى صندوق عائلة الشيخ سليمان سمان. السين والميم في ختم واحد — مساهمات شهرية وقروض بلا فوائد وحسابات شفافة.",
+    "show_stats": "1",
+    "stat_members_fallback_en": "50+",
+    "stat_members_fallback_ar": "50+",
+    "stat_members_label_en": "Active members",
+    "stat_members_label_ar": "أعضاء نشطون",
+    "stat_months_value_en": "12+",
+    "stat_months_value_ar": "12+",
+    "stat_months_label_en": "Months track record",
+    "stat_months_label_ar": "سجل أشهر",
+    "stat_transparent_value_en": "100%",
+    "stat_transparent_value_ar": "100%",
+    "stat_transparent_label_en": "Transparent",
+    "stat_transparent_label_ar": "شفافية",
+    "stat_rates_value_en": "Low",
+    "stat_rates_value_ar": "منخفضة",
+    "stat_rates_label_en": "Interest rates",
+    "stat_rates_label_ar": "أسعار الفائدة",
+    "features_heading_en": "What this fund stands for",
+    "features_heading_ar": "قيم الصندوق",
+    "features_subheading_en": "Inspired by the seal of Sheikh Sulaiman Samman — balance, authenticity, family bonds, and continuity.",
+    "features_subheading_ar": "مستوحى من ختم الشيخ سليمان سمان — التوازن والأصالة وروابط العائلة والاستمرار.",
+    "features": [
+        {
+            "title_en": "Balance and stability",
+            "title_ar": "توازن واستقرار",
+            "body_en": "The diamond at the peak — a fund managed with care, order, and a steady hand.",
+            "body_ar": "المعين في القمة — صندوق يُدار بعناية ونظام ويد ثابتة."
+        },
+        {
+            "title_en": "Authenticity and growth",
+            "title_ar": "أصالة ونماء",
+            "body_en": "Laurel leaves at the base: heritage that grows through contributions and fair loans.",
+            "body_ar": "أغصان في القاعدة: إرث ينمو بالمساهمات والقروض العادلة."
+        },
+        {
+            "title_en": "Bonds and relationship",
+            "title_ar": "روابط وعلاقة",
+            "body_en": "Interlocking lines for Seen and Meem — Sulaiman and Samman, family members bound together.",
+            "body_ar": "خطوط متداخلة للسين والميم — سليمان وسمان، أفراد عائلة يرتبطون معاً."
+        },
+        {
+            "title_en": "Trust and continuity",
+            "title_ar": "ثقة واستمرار",
+            "body_en": "A seal for the family name: private membership, traceable ledgers, and lasting stewardship.",
+            "body_ar": "ختم لاسم العائلة: عضوية خاصة وقيود قابلة للتتبع ورعاية ممتدة."
+        },
+        {
+            "title_en": "Monthly contributions",
+            "title_ar": "مساهمات شهرية",
+            "body_en": "Flexible contribution amounts tailored to each member. Build savings consistently with automated tracking and receipts.",
+            "body_ar": "مبالغ مساهمة مرنة لكل عضو. ابنِ مدخراتك بانتظام مع تتبع آلي وإيصالات."
+        },
+        {
+            "title_en": "Affordable loans",
+            "title_ar": "قروض بأسعار مناسبة",
+            "body_en": "Access loans at favorable rates after one year of membership. Funded from the collective with fair, transparent terms.",
+            "body_ar": "احصل على قروض بشروط عادلة بعد سنة من العضوية، ممولة من الصندوق الجماعي بشفافية."
+        },
+        {
+            "title_en": "Monthly statements",
+            "title_ar": "الكشوفات الشهرية",
+            "body_en": "Download detailed PDF statements showing contributions, loan repayments, and account balance.",
+            "body_ar": "نزّل كشوف PDF تفصيلية تعرض المساهمات وسداد القروض ورصيد الحساب."
+        },
+        {
+            "title_en": "Dual account system",
+            "title_ar": "نظام حسابين",
+            "body_en": "Each member maintains a Cash account for incoming funds and a Fund account for long-term savings.",
+            "body_ar": "لكل عضو حساب نقدي للوارد وحساب صندوق للمدخرات طويلة الأجل."
+        },
+        {
+            "title_en": "Admin dashboard and transparent accounting",
+            "title_ar": "لوحة الإدارة والمحاسبة الشفافة",
+            "body_en": "Every transaction is recorded and traceable with real-time balances and full history.",
+            "body_ar": "كل معاملة مسجّلة وقابلة للتتبع مع أرصدة فورية وسجل كامل."
+        }
+    ],
+    "how_heading_en": "How it works",
+    "how_heading_ar": "كيف يعمل",
+    "how_subheading_en": "Getting started is simple. Join, contribute, and benefit from the collective fund.",
+    "how_subheading_ar": "البدء بسيط: انضم، ساهم، واستفد من الصندوق الجماعي.",
+    "steps": [
+        {
+            "title_en": "Apply",
+            "title_ar": "تقديم",
+            "body_en": "Start your membership application on our dedicated enrollment page.",
+            "body_ar": "ابدأ طلب العضوية من صفحة التسجيل المخصّصة."
+        },
+        {
+            "title_en": "Get approved",
+            "title_ar": "الموافقة",
+            "body_en": "Fund administrators review your application and activate your membership.",
+            "body_ar": "يراجع مسؤولو الصندوق طلبك ويفعّلون عضويتك."
+        },
+        {
+            "title_en": "Contribute",
+            "title_ar": "المساهمة",
+            "body_en": "Make monthly contributions that are tracked in your personal fund account.",
+            "body_ar": "قدّم مساهمات شهرية تُسجّل في حساب صندوقك الشخصي."
+        },
+        {
+            "title_en": "Access loans",
+            "title_ar": "القروض",
+            "body_en": "After 12 months, apply for affordable loans funded by the collective.",
+            "body_ar": "بعد 12 شهراً، تقدّم لقروض مناسبة ممولة من الصندوق الجماعي."
+        }
+    ],
+    "cta_heading_en": "Ready to join the family fund?",
+    "cta_heading_ar": "مستعد للانضمام إلى صندوق العائلة؟",
+    "cta_body_en": "Apply for membership today and start building a stronger financial future together.",
+    "cta_body_ar": "قدّم طلب العضوية اليوم وابدأ بناء مستقبل مالي أقوى معاً.",
+    "cta_apply_en": "Apply for membership",
+    "cta_apply_ar": "تقديم طلب عضوية",
+    "cta_status_en": "Check status",
+    "cta_status_ar": "تتبع الطلب"
+}

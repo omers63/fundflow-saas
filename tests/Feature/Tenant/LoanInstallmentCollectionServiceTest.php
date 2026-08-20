@@ -6,11 +6,13 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Notifications\Tenant\LoanRepaymentAppliedNotification;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
 use App\Services\Loans\LoanInstallmentCollectionService;
+use App\Services\Loans\LoanLedgerService;
 use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Notification;
@@ -317,4 +319,64 @@ test('disabling open-cycle partial collection leaves EMI unpaid when cash is sho
         ->and((float) $installment->fresh()->amount_collected)->toBe(0.0)
         ->and($installment->fresh()->status)->toBe('pending')
         ->and($member->fresh()->getCashBalance())->toBe(400.0);
+});
+
+test('repayment cash and fund posting is idempotent for the same installment', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-EMI-IDEM',
+        'name' => 'Idempotent Borrower',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($member->cashAccount, 5000, 'Seed cash'),
+    );
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 12_000,
+        'amount_requested' => 12_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2026-01-01'),
+        'disbursed_at' => Carbon::parse('2026-01-01'),
+    ]);
+
+    $installment = LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2026-06-15'),
+        'status' => 'pending',
+    ]);
+
+    $ledger = app(LoanLedgerService::class);
+    $ledger->debitCashForRepayment($member->fresh(), $installment, 0);
+    $ledger->debitCashForRepayment($member->fresh(), $installment, 0);
+    $ledger->postLoanRepayment($installment->fresh());
+    $ledger->postLoanRepayment($installment->fresh());
+
+    $cashDebits = (float) Transaction::query()
+        ->where('reference_type', LoanInstallment::class)
+        ->where('reference_id', $installment->id)
+        ->where('type', 'debit')
+        ->where('account_id', $member->fresh()->cashAccount->id)
+        ->sum('amount');
+    $fundCredits = (float) Transaction::query()
+        ->where('reference_type', LoanInstallment::class)
+        ->where('reference_id', $installment->id)
+        ->where('type', 'credit')
+        ->where('account_id', $member->fresh()->fundAccount->id)
+        ->sum('amount');
+
+    expect($cashDebits)->toBe(1000.0)
+        ->and($fundCredits)->toBe(1000.0);
 });

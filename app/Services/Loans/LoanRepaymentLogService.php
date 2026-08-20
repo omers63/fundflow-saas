@@ -45,15 +45,29 @@ final class LoanRepaymentLogService
             ? $installment->amount_collected
             : $installment->amount);
         $lateFee = (float) ($installment->late_fee_amount ?? 0);
+        $notes = LoanRepaymentNote::installment(
+            (int) $installment->installment_number,
+            (bool) $installment->paid_by_guarantor,
+        );
+
+        $existing = LoanRepayment::query()
+            ->where('loan_id', $installment->loan_id)
+            ->whereIn('notes', [
+                $notes,
+                LoanRepaymentNote::installment((int) $installment->installment_number, false),
+                LoanRepaymentNote::installment((int) $installment->installment_number, true),
+            ])
+            ->first();
+
+        if ($existing !== null) {
+            return $existing;
+        }
 
         return LoanRepayment::query()->create([
             'loan_id' => $installment->loan_id,
             'amount' => round($principal + $lateFee, 2),
             'paid_at' => $installment->paid_at ?? BusinessDay::now(),
-            'notes' => LoanRepaymentNote::installment(
-                (int) $installment->installment_number,
-                (bool) $installment->paid_by_guarantor,
-            ),
+            'notes' => $notes,
         ]);
     }
 

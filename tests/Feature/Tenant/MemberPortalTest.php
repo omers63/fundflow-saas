@@ -8,15 +8,17 @@ use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
 use App\Filament\Support\DatabaseNotificationsRefresh;
-use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Support\BusinessDaySettings;
+use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use App\Support\PublicPageSettings;
@@ -226,30 +228,51 @@ test('apply for loan page is registered on member panel', function () {
 
 test('loan calculator page renders for member', function () {
     $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
 
     Livewire::test(LoanCalculatorPage::class)
         ->assertSuccessful()
         ->assertSee(__('Loan calculator'))
-        ->assertSee(__('Estimate your loan repayment'))
+        ->assertSee(__('How this estimate works'))
+        ->assertSee(__('Fund balance'))
+        ->assertSee(__('Loan eligibility'))
+        ->assertSee(__('Settlement threshold'))
+        ->assertSee(__('Eligibility threshold'))
+        ->assertSee(__('Calculate'), false)
+        ->assertSee(__('Grace cycles before first repayment'), false)
+        ->assertSee(__('Assumed start date'), false)
+        ->assertSee(__('Projected monthly contribution'), false)
+        ->assertSeeHtml('wire:model.live="startDate"')
+        ->assertSeeHtml('wire:model.live="projectedContributionAmount"')
+        ->assertSet('projectedContributionAmount', 1000)
+        ->set('projectedContributionAmount', 1500)
+        ->assertSet('projectedContributionAmount', 1500)
+        ->assertSeeHtml('wire:model="loanAmount"')
+        ->assertDontSeeHtml('wire:model.live.debounce.400ms="loanAmount"')
         ->set('loanAmount', 10000)
+        ->call('calculate')
         ->assertSet('loanAmount', 10000);
 });
 
-test('loan calculator intro renders fund balance as text not raw html', function () {
+test('loan calculator shows fund balance and eligibility without raw html', function () {
     $this->actingAs($this->memberUserA, 'tenant');
-
-    $member = Member::query()->where('user_id', $this->memberUserA->id)->firstOrFail();
-    $formatted = MoneyDisplay::format($member->getFundBalance()) ?? '—';
+    Filament::setCurrentPanel('member');
 
     Livewire::test(LoanCalculatorPage::class)
         ->assertSuccessful()
-        ->assertSee(__('Calculations use your current fund balance (:amount)', [
-            'amount' => $formatted,
-        ]), false)
+        ->assertSee(__('Fund balance'), false)
+        ->assertSee(__('Not eligible'), false)
         ->assertDontSee('&lt;span class=&quot;ff-member-amount', false);
 });
 
 test('loan calculator shows repayment estimate when tier matches', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    LoanSettings::save([
+        'settlement_threshold_pct' => 0.20,
+        'eligibility_threshold_pct' => 0.10,
+        'max_allowed_grace_cycles' => 2,
+    ]);
     LoanTier::query()->forceDelete();
     LoanTier::create([
         'tier_number' => 1,
@@ -261,11 +284,50 @@ test('loan calculator shows repayment estimate when tier matches', function () {
     ]);
 
     $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
+
+    $component = Livewire::test(LoanCalculatorPage::class)
+        ->set('graceCycles', 1)
+        ->set('loanAmount', 10000)
+        ->call('calculate')
+        ->assertSee(__('months'), false)
+        ->assertSee('Standard', false)
+        ->assertSee(__('Settlement amount'), false)
+        ->assertSee(__('Eligibility threshold amount'), false)
+        ->assertSee(__('Total to repay'), false)
+        ->assertSee(__('Duration'), false)
+        ->assertSee(__('This loan'), false)
+        ->assertSee(__('After this loan'), false)
+        ->assertSee(__('Your fund now'), false)
+        ->assertSee(__('Projected fund at start'), false)
+        ->assertSee(__('Assumed start date'), false)
+        ->assertSee(__('Estimated schedule'), false)
+        ->assertSee(__('Grace'), false)
+        ->assertSee(__('This cycle’s contribution is skipped because this cycle is grace.'), false);
+
+    $calc = $component->instance()->calculations[0];
+
+    expect($calc['settlement_amt'])->toBe(2000.0)
+        ->and($calc['eligibility_amt'])->toBe(5000.0)
+        ->and($calc['eligibility_base'])->toBe(50000.0)
+        ->and($calc['installments'])->toBe((int) ceil($calc['total_repay'] / 500))
+        ->and($calc['schedule']['first_due_date'])->toBe('2025-03-05')
+        ->and($calc['schedule']['grace_cycles'])->toBe(1)
+        ->and($calc['schedule']['current_cycle_contribution'])->toBe('exempt_grace');
+
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('loan calculator shows eligible status when fund balance meets the minimum', function () {
+    $this->memberA->fundAccount->update(['balance' => 10_000]);
+
+    $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
 
     Livewire::test(LoanCalculatorPage::class)
-        ->set('loanAmount', 10000)
-        ->assertSee(__('months'), false)
-        ->assertSee('Standard', false);
+        ->assertSuccessful()
+        ->assertSee(__('Eligible to apply'), false)
+        ->assertDontSee(__('Not eligible'), false);
 });
 
 test('loan calculator funding strategy options are translated in Arabic locale', function () {
@@ -290,6 +352,7 @@ test('loan calculator exposes all available funding strategies and settlement ch
     ]);
 
     $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
 
     Livewire::test(LoanCalculatorPage::class)
         ->assertSuccessful()
@@ -300,6 +363,52 @@ test('loan calculator exposes all available funding strategies and settlement ch
         ->set('fundingStrategy', LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT)
         ->assertSee(__('Apply remaining fund as early settlement (roll up schedule)'), false)
         ->assertSee(__('Apply remaining fund as early settlement (skip installments)'), false);
+});
+
+test('loan calculator skipped installments show no EMI instead of an amount', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    LoanSettings::save([
+        'settlement_threshold_pct' => 0.20,
+        'eligibility_threshold_pct' => 0.10,
+        'member_funding_split_pct' => 50,
+        'allow_funding_strategy_split_with_early_settlement' => true,
+        'max_allowed_grace_cycles' => 2,
+    ]);
+    LoanTier::query()->forceDelete();
+    LoanTier::create([
+        'tier_number' => 1,
+        'label' => 'Standard',
+        'min_amount' => 1000,
+        'max_amount' => 50000,
+        'min_monthly_installment' => 500,
+        'is_active' => true,
+    ]);
+    $this->memberA->fundAccount->update(['balance' => 6500]);
+
+    $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
+
+    $component = Livewire::test(LoanCalculatorPage::class)
+        ->set('graceCycles', 1)
+        ->set('fundingStrategy', LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT)
+        ->set('excessFundSettlementOption', LoanExcessFundSettlementOption::SKIP_FUTURE)
+        ->set('loanAmount', 10000)
+        ->call('calculate')
+        ->assertSee(__('Skipped'), false)
+        ->assertSee(__('No EMI'), false)
+        ->assertSeeHtml('ff-member-loan-calc-schedule-header')
+        ->assertSeeHtml('ff-member-loan-calc-schedule-row');
+
+    $skipped = array_values(array_filter(
+        $component->instance()->calculations[0]['schedule']['rows'],
+        fn(array $row): bool => ($row['kind'] ?? '') === 'skipped',
+    ));
+
+    expect($skipped)->not->toBeEmpty()
+        ->and(array_unique(array_column($skipped, 'amount')))->toBe([0.0]);
+
+    BusinessDaySettings::saveFromForm(null);
 });
 
 test('member panel has database notifications enabled', function () {

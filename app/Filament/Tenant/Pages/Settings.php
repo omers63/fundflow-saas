@@ -5,7 +5,9 @@ namespace App\Filament\Tenant\Pages;
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Pages\Page;
 use App\Filament\Support\SmsImportTemplateFieldsets;
+use App\Filament\Tenant\Concerns\InteractsWithIconPixelEditor;
 use App\Filament\Tenant\Support\AuditSystemTabRegistry;
+use App\Filament\Tenant\Support\PublicPageSettingsForm;
 use App\Filament\Tenant\Support\SettingsTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Filament\Tenant\Widgets\FundTiersManageTableWidget;
@@ -17,6 +19,7 @@ use App\Models\Tenant\SmsImportTemplate;
 use App\Services\FiscalClose\FiscalClosePeriodResolver;
 use App\Services\SmsImportTemplateSyncService;
 use App\Support\ArabicDisplaySettings;
+use App\Support\BrandAppearanceSettings;
 use App\Support\BusinessDay;
 use App\Support\BusinessDaySettings;
 use App\Support\CommunicationSettings;
@@ -32,6 +35,7 @@ use App\Support\LoanSettings;
 use App\Support\LocalizationSettings;
 use App\Support\MemberNumberSettings;
 use App\Support\NotificationSettings;
+use App\Support\PublicPageContentSettings;
 use App\Support\PublicPageSettings;
 use App\Support\PushEventSettings;
 use App\Support\ReconciliationDigestSettings;
@@ -41,7 +45,6 @@ use Carbon\Carbon;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
@@ -64,6 +67,7 @@ use Livewire\Attributes\Url;
 class Settings extends Page implements HasForms
 {
     use InteractsWithForms;
+    use InteractsWithIconPixelEditor;
     use TranslatesPageNavigationLabel;
 
     #[Url(as: 'settingsTab')]
@@ -226,6 +230,7 @@ class Settings extends Page implements HasForms
             'loan_default_term_months' => $loan['default_term_months'] ?? $loanDefaults['default_term_months'],
             'loan_max_loan_amount' => $loan['max_loan_amount'] ?? $loanDefaults['max_loan_amount'],
             'loan_settlement_threshold_pct' => ((float) ($loan['settlement_threshold_pct'] ?? $loanDefaults['settlement_threshold_pct'])) * 100,
+            'loan_eligibility_threshold_pct' => ((float) ($loan['eligibility_threshold_pct'] ?? $loanDefaults['eligibility_threshold_pct'])) * 100,
             'loan_require_guarantor_above_fund' => (bool) ($loan['require_guarantor_above_fund_balance'] ?? $loanDefaults['require_guarantor_above_fund_balance']),
             'loan_member_funding_split_pct' => (float) ($loan['member_funding_split_pct'] ?? $loanDefaults['member_funding_split_pct']),
             'loan_allow_funding_strategy_member_topup' => (bool) ($loan['allow_funding_strategy_member_topup'] ?? $loanDefaults['allow_funding_strategy_member_topup']),
@@ -267,7 +272,9 @@ class Settings extends Page implements HasForms
             'fee_transfer_iban' => $public['fee_transfer_iban'] ?? $publicDefaults['fee_transfer_iban'],
             'contact_email' => $public['contact_email'] ?? $publicDefaults['contact_email'],
             'contact_phone' => $public['contact_phone'] ?? $publicDefaults['contact_phone'],
-            'fund_logo' => filled($public['fund_logo'] ?? '') ? [$public['fund_logo']] : [],
+            'fund_logo' => PublicPageSettings::formLogoState(),
+            ...BrandAppearanceSettings::allForForm(),
+            ...PublicPageContentSettings::allForForm(),
             ...ArabicDisplaySettings::allForForm(),
         ];
     }
@@ -497,21 +504,9 @@ class Settings extends Page implements HasForms
                         Toggle::make('arabic_enhanced_name_style')
                             ->label(__('Enhanced Arabic member names'))
                             ->helperText(__('Larger display and explicit right-to-left layout for Arabic names in tables and headings. When off, names use normal size with RTL text only.')),
-                        FileUpload::make('fund_logo')
-                            ->label(__('Fund logo'))
-                            ->image()
-                            ->disk('public')
-                            ->directory('fund-branding')
-                            ->maxSize(2048)
-                            ->acceptedFileTypes([
-                                'image/png',
-                                'image/jpeg',
-                                'image/webp',
-                                'image/svg+xml',
-                            ])
-                            ->columnSpanFull()
-                            ->helperText(__('Optional. Replaces the default FundFlow logo in the navbar, footer, Filament panels, browser tab, and PWA icon. Square images work best.')),
+                        PublicPageSettingsForm::fundLogoUpload(),
                     ]),
+                ...PublicPageSettingsForm::appearanceSections(),
                 Section::make(__('Public contact'))
                     ->description(__('Shown in the site footer on public pages.'))
                     ->columns(2)
@@ -832,7 +827,15 @@ class Settings extends Page implements HasForms
                             ->maxValue(100)
                             ->step(0.1)
                             ->required()
-                            ->helperText(__('Percentage of approved amount member must hold in fund for full settlement.')),
+                            ->helperText(__('Percentage of approved amount added to the master portion to consider the loan fully repaid.')),
+                        TextInput::make('loan_eligibility_threshold_pct')
+                            ->label(__('Eligibility threshold (%)'))
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(100)
+                            ->step(0.1)
+                            ->required()
+                            ->helperText(__('After the loan is fully repaid, the member fund balance must reach this percentage of the most recently repaid loan\'s tier ceiling before applying again.')),
                         TextInput::make('loan_max_allowed_grace_cycles')
                             ->label(__('Maximum grace cycles on application'))
                             ->numeric()
@@ -1078,10 +1081,7 @@ class Settings extends Page implements HasForms
                         TextInput::make('statement_tagline')
                             ->label(__('Tagline'))
                             ->maxLength(120),
-                        TextInput::make('statement_accent_color')
-                            ->label(__('Header accent color (hex)'))
-                            ->required()
-                            ->maxLength(7)
+                        PublicPageSettingsForm::colorPicker('statement_accent_color', __('Header accent color'))
                             ->placeholder('#059669'),
                     ]),
                 Section::make(__('Footer & signature'))
@@ -1442,6 +1442,7 @@ class Settings extends Page implements HasForms
             'default_term_months' => (int) $state['loan_default_term_months'],
             'max_loan_amount' => (float) ($state['loan_max_loan_amount'] ?? 0),
             'settlement_threshold_pct' => ((float) ($state['loan_settlement_threshold_pct'] ?? ($loanDefaults['settlement_threshold_pct'] * 100))) / 100,
+            'eligibility_threshold_pct' => ((float) ($state['loan_eligibility_threshold_pct'] ?? ($loanDefaults['eligibility_threshold_pct'] * 100))) / 100,
             'default_grace_cycles' => (int) ($state['loan_default_grace_cycles'] ?? $loanDefaults['default_grace_cycles']),
             'max_allowed_grace_cycles' => max(0, min(12, (int) ($state['loan_max_allowed_grace_cycles'] ?? $loanDefaults['max_allowed_grace_cycles']))),
             'require_guarantor_above_fund_balance' => (bool) ($state['loan_require_guarantor_above_fund'] ?? $loanDefaults['require_guarantor_above_fund_balance']),
@@ -1492,6 +1493,9 @@ class Settings extends Page implements HasForms
             'contact_email' => $state['contact_email'] ?? '',
             'contact_phone' => $state['contact_phone'] ?? '',
         ]);
+
+        BrandAppearanceSettings::saveFromForm($state);
+        PublicPageContentSettings::saveFromForm($state);
 
         $existingIds = BankTemplate::pluck('id')->toArray();
         $keptIds = [];

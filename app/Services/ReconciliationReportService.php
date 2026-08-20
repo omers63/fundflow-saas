@@ -47,6 +47,11 @@ class ReconciliationReportService
     public const LOAN_SCHEDULE_TOLERANCE = 1.0;
 
     /**
+     * @var array<int, list<int>>|null
+     */
+    private ?array $reversalChildIdsByParent = null;
+
+    /**
      * Optional inputs from UI or {@see Setting} keys for scheduled runs:
      * - declared_bank_balance (float): statement / bank closing balance to compare to master_cash book.
      * - declared_bank_date (string|null): informational (Y-m-d).
@@ -70,6 +75,8 @@ class ReconciliationReportService
         array $options = [],
     ): array {
         @set_time_limit(0);
+
+        $this->reversalChildIdsByParent = null;
 
         $asOf = $asOf ? Carbon::parse($asOf) : BusinessDay::now();
 
@@ -854,12 +861,12 @@ class ReconciliationReportService
                     $borrowerId = (int) ($installment->loan->member_id ?? 0);
                     $guarantorId = (int) ($installment->loan->guarantor_member_id ?? 0);
 
-                    $masterFundCredits = (float) Transaction::query()
-                        ->where('reference_type', $sourceType)
-                        ->where('reference_id', $sourceId)
-                        ->where('type', 'credit')
-                        ->where('account_id', $masterFundId)
-                        ->sum('amount');
+                    $masterFundCredits = $this->signedAmountForReference(
+                        $sourceType,
+                        $sourceId,
+                        fn ($query) => $query->where('account_id', $masterFundId),
+                        includeOperationalDebits: false,
+                    );
                     if ($masterFundId === null || abs($masterFundCredits - $amount) > self::AMOUNT_TOLERANCE) {
                         $loanInstallmentFlowIssues[] = [
                             'installment_id' => $sourceId,
@@ -870,15 +877,16 @@ class ReconciliationReportService
                         ];
                     }
 
-                    $memberFundCredits = (float) Transaction::query()
-                        ->where('reference_type', $sourceType)
-                        ->where('reference_id', $sourceId)
-                        ->where('type', 'credit')
-                        ->where('member_id', $borrowerId)
-                        ->whereHas('account', fn ($q) => $q
-                            ->where('type', 'fund')
-                            ->where('member_id', $borrowerId))
-                        ->sum('amount');
+                    $memberFundCredits = $this->signedAmountForReference(
+                        $sourceType,
+                        $sourceId,
+                        fn ($query) => $query
+                            ->where('member_id', $borrowerId)
+                            ->whereHas('account', fn ($q) => $q
+                                ->where('type', 'fund')
+                                ->where('member_id', $borrowerId)),
+                        includeOperationalDebits: false,
+                    );
                     if (abs($memberFundCredits - $amount) > self::AMOUNT_TOLERANCE) {
                         $loanInstallmentFlowIssues[] = [
                             'installment_id' => $sourceId,
@@ -890,14 +898,14 @@ class ReconciliationReportService
                         ];
                     }
 
-                    $loanAccountCredits = (float) Transaction::query()
-                        ->where('reference_type', $sourceType)
-                        ->where('reference_id', $sourceId)
-                        ->where('type', 'credit')
-                        ->whereHas('account', fn ($q) => $q
+                    $loanAccountCredits = $this->signedAmountForReference(
+                        $sourceType,
+                        $sourceId,
+                        fn ($query) => $query->whereHas('account', fn ($q) => $q
                             ->where('type', 'loan')
-                            ->where('loan_id', $installment->loan_id))
-                        ->sum('amount');
+                            ->where('loan_id', $installment->loan_id)),
+                        includeOperationalDebits: false,
+                    );
                     if (abs($loanAccountCredits - $amount) > self::AMOUNT_TOLERANCE) {
                         $loanInstallmentFlowIssues[] = [
                             'installment_id' => $sourceId,
@@ -928,15 +936,15 @@ class ReconciliationReportService
                     }
 
                     if ((bool) $installment->paid_by_guarantor) {
-                        $guarantorFundDebits = (float) Transaction::query()
-                            ->where('reference_type', $sourceType)
-                            ->where('reference_id', $sourceId)
-                            ->where('type', 'debit')
-                            ->where('member_id', $guarantorId)
-                            ->whereHas('account', fn ($q) => $q
-                                ->where('type', 'fund')
-                                ->where('member_id', $guarantorId))
-                            ->sum('amount');
+                        $guarantorFundDebits = -$this->signedAmountForReference(
+                            $sourceType,
+                            $sourceId,
+                            fn ($query) => $query
+                                ->where('member_id', $guarantorId)
+                                ->whereHas('account', fn ($q) => $q
+                                    ->where('type', 'fund')
+                                    ->where('member_id', $guarantorId)),
+                        );
 
                         if ($guarantorId <= 0 || abs($guarantorFundDebits - $amount) > self::AMOUNT_TOLERANCE) {
                             $loanInstallmentFlowIssues[] = [
@@ -950,15 +958,15 @@ class ReconciliationReportService
                         }
                     } else {
                         $expectedCashDebit = $amount + max(0.0, $lateFee);
-                        $borrowerCashDebits = (float) Transaction::query()
-                            ->where('reference_type', $sourceType)
-                            ->where('reference_id', $sourceId)
-                            ->where('type', 'debit')
-                            ->where('member_id', $borrowerId)
-                            ->whereHas('account', fn ($q) => $q
-                                ->where('type', 'cash')
-                                ->where('member_id', $borrowerId))
-                            ->sum('amount');
+                        $borrowerCashDebits = -$this->signedAmountForReference(
+                            $sourceType,
+                            $sourceId,
+                            fn ($query) => $query
+                                ->where('member_id', $borrowerId)
+                                ->whereHas('account', fn ($q) => $q
+                                    ->where('type', 'cash')
+                                    ->where('member_id', $borrowerId)),
+                        );
 
                         if (abs($borrowerCashDebits - $expectedCashDebit) > self::AMOUNT_TOLERANCE) {
                             $loanInstallmentFlowIssues[] = [
@@ -1759,11 +1767,11 @@ class ReconciliationReportService
                     $installmentMorph,
                     $installmentIds,
                     fn ($query) => $query
-                        ->where('type', 'credit')
                         ->where('member_id', $borrowerId)
                         ->whereHas('account', fn ($accountQuery) => $accountQuery
                             ->where('type', 'fund')
                             ->where('member_id', $borrowerId)),
+                    includeOperationalDebits: false,
                 );
 
                 if (abs($memberFundCredits - $repaymentSum) > self::AMOUNT_TOLERANCE) {
@@ -1782,10 +1790,10 @@ class ReconciliationReportService
                     $installmentMorph,
                     $installmentIds,
                     fn ($query) => $query
-                        ->where('type', 'credit')
                         ->whereHas('account', fn ($accountQuery) => $accountQuery
                             ->where('type', 'loan')
                             ->where('loan_id', $loan->id)),
+                    includeOperationalDebits: false,
                 );
 
                 if (abs($loanAccountCredits - $repaymentSum) > self::AMOUNT_TOLERANCE) {
@@ -1803,9 +1811,8 @@ class ReconciliationReportService
                         $repaymentIds,
                         $installmentMorph,
                         $installmentIds,
-                        fn ($query) => $query
-                            ->where('type', 'credit')
-                            ->where('account_id', $masterFundId),
+                        fn ($query) => $query->where('account_id', $masterFundId),
+                        includeOperationalDebits: false,
                     );
 
                     if (abs($masterFundCredits - $repaymentSum) > self::AMOUNT_TOLERANCE) {
@@ -1861,10 +1868,10 @@ class ReconciliationReportService
             LoanInstallment::class,
             $paidInstallments->pluck('id'),
             fn ($query) => $query
-                ->where('type', 'credit')
                 ->whereHas('account', fn ($accountQuery) => $accountQuery
                     ->where('type', 'loan')
                     ->where('loan_id', $loan->id)),
+            includeOperationalDebits: false,
         );
 
         if (abs($loanAccountCredits - $repaymentSum) > self::AMOUNT_TOLERANCE) {
@@ -1942,6 +1949,7 @@ class ReconciliationReportService
         string $installmentMorph,
         mixed $installmentIds,
         callable $constrain,
+        bool $includeOperationalDebits = true,
     ): float {
         $repaymentIds = collect($repaymentIds)->filter()->values();
         $installmentIds = collect($installmentIds)->filter()->values();
@@ -1950,10 +1958,7 @@ class ReconciliationReportService
             return 0.0;
         }
 
-        $query = Transaction::query();
-        $constrain($query);
-
-        $query->where(function ($referenceQuery) use ($repaymentMorph, $repaymentIds, $installmentMorph, $installmentIds): void {
+        $seedQuery = Transaction::query()->where(function ($referenceQuery) use ($repaymentMorph, $repaymentIds, $installmentMorph, $installmentIds): void {
             if ($repaymentIds->isNotEmpty()) {
                 $referenceQuery->where(function ($loanRepaymentQuery) use ($repaymentMorph, $repaymentIds): void {
                     $loanRepaymentQuery
@@ -1972,7 +1977,108 @@ class ReconciliationReportService
             }
         });
 
-        return (float) $query->sum('amount');
+        $ids = Transaction::expandIdsWithReversalDescendants(
+            $seedQuery->pluck('id')->all(),
+            $this->reversalChildIdsByParent(),
+        );
+
+        if ($ids === []) {
+            return 0.0;
+        }
+
+        $query = Transaction::query()->whereIn('id', $ids);
+        $constrain($query);
+
+        return (float) $query->sum(DB::raw($this->installmentFlowAmountSql($includeOperationalDebits)));
+    }
+
+    /**
+     * Credits minus debits for a single morph reference (installment or repayment).
+     *
+     * Credit legs ignore operational debits (guarantor top-up, borrower-fund applied)
+     * so the repayment-credit total still nets duplicate-EMI reversals.
+     *
+     * @param  callable(Builder<Transaction>): mixed  $constrain
+     */
+    private function signedAmountForReference(
+        string $referenceType,
+        int $referenceId,
+        callable $constrain,
+        bool $includeOperationalDebits = true,
+    ): float {
+        $ids = Transaction::idsForMorphIncludingReversals(
+            $referenceType,
+            [$referenceId],
+            $this->reversalChildIdsByParent(),
+        );
+
+        if ($ids === []) {
+            return 0.0;
+        }
+
+        $query = Transaction::query()->whereIn('id', $ids);
+        $constrain($query);
+
+        return (float) $query->sum(DB::raw($this->installmentFlowAmountSql($includeOperationalDebits)));
+    }
+
+    /**
+     * @return array<int, list<int>>
+     */
+    private function reversalChildIdsByParent(): array
+    {
+        if ($this->reversalChildIdsByParent !== null) {
+            return $this->reversalChildIdsByParent;
+        }
+
+        $map = [];
+        $morph = (new Transaction)->getMorphClass();
+
+        Transaction::query()
+            ->where('reference_type', $morph)
+            ->select(['id', 'reference_id'])
+            ->orderBy('id')
+            ->chunkById(1000, function ($rows) use (&$map): void {
+                foreach ($rows as $row) {
+                    $parent = (int) $row->reference_id;
+                    if ($parent > 0) {
+                        $map[$parent][] = (int) $row->id;
+                    }
+                }
+            });
+
+        return $this->reversalChildIdsByParent = $map;
+    }
+
+    /**
+     * Signed installment-flow amount: credits minus all debits, or credits minus reversal debits only.
+     */
+    private function installmentFlowAmountSql(bool $includeOperationalDebits): string
+    {
+        if ($includeOperationalDebits) {
+            return "CASE WHEN type = 'credit' THEN amount ELSE -amount END";
+        }
+
+        $reversalMatch = implode(' OR ', array_map(
+            fn (string $needle): string => 'description LIKE '.$this->sqlLikeContains($needle),
+            [
+                'Reverse duplicate EMI collection',
+                'عكس تحصيل قسط مكرر',
+                '(duplicate EMI reversal mirror)',
+                '(مرآة عكس قسط مكرر)',
+                'Reversal of #',
+                'عكس #',
+            ],
+        ));
+
+        return "CASE WHEN type = 'credit' THEN amount WHEN type = 'debit' AND ({$reversalMatch}) THEN -amount ELSE 0 END";
+    }
+
+    private function sqlLikeContains(string $needle): string
+    {
+        $escaped = str_replace(['\\', '%', '_', "'"], ['\\\\', '\\%', '\\_', "''"], $needle);
+
+        return "'%{$escaped}%'";
     }
 
     /**
