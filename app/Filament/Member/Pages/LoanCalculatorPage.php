@@ -16,9 +16,7 @@ use App\Services\MemberLoanCalculatorService;
 use App\Services\MemberLoanLifecycleSimulator;
 use App\Support\BusinessDay;
 use App\Support\ContributionAmountSettings;
-use App\Support\LoanExcessFundSettlementOption;
-use App\Support\LoanFundExcessDisposition;
-use App\Support\LoanFundingStrategy;
+use App\Support\LoanCalculatorFundingApproach;
 use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
@@ -53,11 +51,7 @@ class LoanCalculatorPage extends Page
 
     public int|float|string|null $loanAmount = null;
 
-    public string $fundingStrategy = '';
-
-    public string $excessFundDisposition = LoanFundExcessDisposition::KEEP_IN_FUND;
-
-    public string $excessFundSettlementOption = LoanExcessFundSettlementOption::KEEP_IN_FUND;
+    public string $fundingApproach = '';
 
     public int $graceCycles = 0;
 
@@ -76,25 +70,31 @@ class LoanCalculatorPage extends Page
 
     public int $simulationContributionAmount = 0;
 
+    public float|string|null $simulationCashDepositAmount = null;
+
+    public string $simulationAfterCloseDate = '';
+
+    public int $simulationScheduleFlashKey = 0;
+
+    public int $simulationPendingFlashKey = 0;
+
+    public int $simulationMaturityFlashKey = 0;
+
     public function mount(): void
     {
-        $this->fundingStrategy = LoanFundingStrategy::defaultForApplication();
-        $this->excessFundDisposition = LoanFundExcessDisposition::defaultForApplication();
-        $this->excessFundSettlementOption = LoanExcessFundSettlementOption::defaultForApplication();
+        $this->fundingApproach = LoanCalculatorFundingApproach::defaultForApplication();
         $this->graceCycles = LoanSettings::defaultApplicationGraceCycles();
         $this->startDate = BusinessDay::today()->toDateString();
         $this->projectedContributionAmount = $this->normalizeProjectedContribution(
             CurrentMember::get()?->monthly_contribution_amount,
         );
         $this->simulationContributionAmount = $this->projectedContributionAmount;
+        $this->simulationCashDepositAmount = (float) $this->simulationContributionAmount;
     }
 
-    public function updatedFundingStrategy(string $value): void
+    public function updatedFundingApproach(string $value): void
     {
-        if (! LoanFundingStrategy::isAvailableForApplication($value)) {
-            $this->fundingStrategy = LoanFundingStrategy::defaultForApplication();
-        }
-
+        $this->fundingApproach = LoanCalculatorFundingApproach::normalize($value);
         $this->resetSimulation();
     }
 
@@ -115,28 +115,38 @@ class LoanCalculatorPage extends Page
         $this->resetSimulation();
     }
 
-    public function updatedExcessFundSettlementOption(mixed $value): void
-    {
-        $this->resetSimulation();
-    }
-
-    public function updatedExcessFundDisposition(mixed $value): void
-    {
-        $this->excessFundDisposition = LoanFundExcessDisposition::normalize(
-            is_string($value) ? $value : null,
-        );
-        $this->resetSimulation();
-    }
-
     public function calculate(): void
     {
-        unset($this->calculations);
+        unset($this->calculations, $this->estimateBlockReason);
         $this->resetSimulation();
+
+        $reason = $this->estimateBlockReason;
+
+        if (is_string($reason) && $reason !== '') {
+            Notification::make()
+                ->title($reason)
+                ->warning()
+                ->send();
+        }
     }
 
     public function setCalculatorMode(string $mode): void
     {
         if (! in_array($mode, [self::MODE_ESTIMATE, self::MODE_SIMULATE], true)) {
+            return;
+        }
+
+        if ($mode === self::MODE_SIMULATE && ! $this->canEstimateOrSimulate()) {
+            $reason = $this->estimateBlockReason;
+            Notification::make()
+                ->title(is_string($reason) && $reason !== ''
+                    ? $reason
+                    : __('Calculate a loan estimate first'))
+                ->warning()
+                ->send();
+
+            $this->calculatorMode = self::MODE_ESTIMATE;
+
             return;
         }
 
@@ -150,6 +160,21 @@ class LoanCalculatorPage extends Page
 
     public function startSimulationFromEstimate(): void
     {
+        if (! $this->canEstimateOrSimulate()) {
+            $this->simulation = null;
+            $reason = $this->estimateBlockReason;
+            Notification::make()
+                ->title(is_string($reason) && $reason !== ''
+                    ? $reason
+                    : __('Calculate a loan estimate first'))
+                ->warning()
+                ->send();
+
+            $this->calculatorMode = self::MODE_ESTIMATE;
+
+            return;
+        }
+
         $calcs = $this->calculations;
 
         if ($calcs === []) {
@@ -173,12 +198,17 @@ class LoanCalculatorPage extends Page
             $calc,
             $loanAmount,
             $this->startDate,
-            $this->excessFundDisposition,
+            LoanCalculatorFundingApproach::toExcessDisposition($this->fundingApproach),
         );
         $this->simulationPaymentAmount = (float) ($calc['min_installment'] ?? 0);
         $this->simulationContributionAmount = $this->normalizeProjectedContribution(
             $this->simulationContributionAmount ?: $this->projectedContributionAmount,
         );
+        $this->simulationCashDepositAmount = (float) $this->simulationContributionAmount;
+        $this->simulationAfterCloseDate = '';
+        $this->simulationScheduleFlashKey++;
+        $this->simulationPendingFlashKey++;
+        $this->simulationMaturityFlashKey++;
     }
 
     public function applySimulationRegularPayment(): void
@@ -188,10 +218,13 @@ class LoanCalculatorPage extends Page
         }
 
         try {
+            $before = $this->simulationStatSnapshot();
             $this->simulation = app(MemberLoanLifecycleSimulator::class)->applyRegularPayment(
                 $this->simulation,
                 (float) ($this->simulation['min_installment'] ?? 0),
             );
+            $this->syncSimulationAfterCloseDate();
+            $this->bumpSimulationStatFlashes($before);
         } catch (Throwable $e) {
             Notification::make()
                 ->title($e->getMessage())
@@ -209,11 +242,14 @@ class LoanCalculatorPage extends Page
         try {
             // Mid-life simulator partials always roll up. Estimate roll-up/skip only shapes
             // the disbursement snapshot (excess fund at start), not later lump payments.
+            $before = $this->simulationStatSnapshot();
             $this->simulation = app(MemberLoanLifecycleSimulator::class)->applyPartialEarlySettlement(
                 $this->simulation,
                 (float) ($this->simulationPaymentAmount ?? 0),
                 MemberLoanLifecycleSimulator::PARTIAL_ROLL_UP,
             );
+            $this->syncSimulationAfterCloseDate();
+            $this->bumpSimulationStatFlashes($before);
         } catch (Throwable $e) {
             Notification::make()
                 ->title($e->getMessage())
@@ -229,9 +265,12 @@ class LoanCalculatorPage extends Page
         }
 
         try {
+            $before = $this->simulationStatSnapshot();
             $this->simulation = app(MemberLoanLifecycleSimulator::class)->applyFullEarlySettlement(
                 $this->simulation,
             );
+            $this->syncSimulationAfterCloseDate();
+            $this->bumpSimulationStatFlashes($before);
         } catch (Throwable $e) {
             Notification::make()
                 ->title($e->getMessage())
@@ -250,7 +289,30 @@ class LoanCalculatorPage extends Page
             $this->simulation = app(MemberLoanLifecycleSimulator::class)->applyContribution(
                 $this->simulation,
                 (float) $this->simulationContributionAmount,
+                $this->simulationAfterCloseDate !== '' ? $this->simulationAfterCloseDate : null,
             );
+            $this->syncSimulationAfterCloseDate();
+        } catch (Throwable $e) {
+            Notification::make()
+                ->title($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    public function applySimulationCashDeposit(): void
+    {
+        if (! is_array($this->simulation)) {
+            return;
+        }
+
+        try {
+            $this->simulation = app(MemberLoanLifecycleSimulator::class)->applyCashDeposit(
+                $this->simulation,
+                (float) ($this->simulationCashDepositAmount ?? 0),
+                $this->simulationAfterCloseDate !== '' ? $this->simulationAfterCloseDate : null,
+            );
+            $this->syncSimulationAfterCloseDate();
         } catch (Throwable $e) {
             Notification::make()
                 ->title($e->getMessage())
@@ -270,11 +332,77 @@ class LoanCalculatorPage extends Page
 
     public function resetSimulation(): void
     {
+        unset($this->calculations, $this->estimateBlockReason, $this->projection);
         $this->simulation = null;
+        $this->simulationAfterCloseDate = '';
+        $this->simulationScheduleFlashKey = 0;
+        $this->simulationPendingFlashKey = 0;
+        $this->simulationMaturityFlashKey = 0;
 
         if ($this->calculatorMode === self::MODE_SIMULATE) {
             $this->calculatorMode = self::MODE_ESTIMATE;
         }
+    }
+
+    /**
+     * @return array{schedule_count: int, pending_count: int, expected_maturity_date: string}
+     */
+    private function simulationStatSnapshot(): array
+    {
+        return [
+            'schedule_count' => (int) ($this->simulation['schedule_count'] ?? 0),
+            'pending_count' => (int) ($this->simulation['pending_count'] ?? 0),
+            'expected_maturity_date' => (string) ($this->simulation['expected_maturity_date'] ?? ''),
+        ];
+    }
+
+    /**
+     * @param  array{schedule_count?: int, pending_count?: int, expected_maturity_date?: string}  $before
+     */
+    private function bumpSimulationStatFlashes(array $before): void
+    {
+        if (! is_array($this->simulation)) {
+            return;
+        }
+
+        $after = $this->simulationStatSnapshot();
+
+        if ((int) ($before['schedule_count'] ?? 0) !== $after['schedule_count']) {
+            $this->simulationScheduleFlashKey++;
+        }
+
+        if ((int) ($before['pending_count'] ?? 0) !== $after['pending_count']) {
+            $this->simulationPendingFlashKey++;
+        }
+
+        if ((string) ($before['expected_maturity_date'] ?? '') !== $after['expected_maturity_date']) {
+            $this->simulationMaturityFlashKey++;
+        }
+    }
+
+    private function syncSimulationAfterCloseDate(): void
+    {
+        if (! is_array($this->simulation)) {
+            $this->simulationAfterCloseDate = '';
+
+            return;
+        }
+
+        $min = app(MemberLoanLifecycleSimulator::class)->afterCloseMinDate($this->simulation);
+
+        if ($min === null) {
+            return;
+        }
+
+        if ($this->simulationAfterCloseDate === '' || $this->simulationAfterCloseDate < $min) {
+            $this->simulationAfterCloseDate = $min;
+        }
+    }
+
+    public function updatedSimulationAfterCloseDate(mixed $value): void
+    {
+        $this->simulationAfterCloseDate = is_string($value) ? $value : '';
+        $this->syncSimulationAfterCloseDate();
     }
 
     public static function canAccess(): bool
@@ -317,19 +445,43 @@ class LoanCalculatorPage extends Page
         $member = CurrentMember::get();
         $amount = (float) ($this->loanAmount ?? 0);
 
-        if ($member === null || $amount <= 0) {
+        if ($member === null || $amount <= 0 || ! $this->canEstimateOrSimulate()) {
             return [];
         }
 
         return app(MemberLoanCalculatorService::class)->calculationsForAmount(
             $amount,
             $member,
-            $this->fundingStrategy,
-            $this->excessFundSettlementOption,
+            LoanCalculatorFundingApproach::toFundingStrategy($this->fundingApproach),
+            LoanCalculatorFundingApproach::toSettlementOption($this->fundingApproach),
             $this->graceCycles,
             $this->startDate,
             $this->projectedContributionAmount,
         );
+    }
+
+    #[Computed]
+    public function estimateBlockReason(): ?string
+    {
+        $member = CurrentMember::get();
+        $amount = (float) ($this->loanAmount ?? 0);
+
+        if ($member === null || $amount <= 0) {
+            return null;
+        }
+
+        return app(MemberLoanCalculatorService::class)->estimateBlockReason(
+            $amount,
+            $member,
+            LoanCalculatorFundingApproach::toFundingStrategy($this->fundingApproach),
+            $this->startDate,
+            $this->projectedContributionAmount,
+        );
+    }
+
+    public function canEstimateOrSimulate(): bool
+    {
+        return $this->estimateBlockReason === null;
     }
 
     /**
@@ -406,46 +558,31 @@ class LoanCalculatorPage extends Page
      * @return array<string, string>
      */
     #[Computed]
-    public function fundingStrategyOptions(): array
+    public function fundingApproachOptions(): array
     {
-        return LoanFundingStrategy::availableOptions();
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    #[Computed]
-    public function excessDispositionOptions(): array
-    {
-        return LoanFundExcessDisposition::availableOptions();
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    #[Computed]
-    public function settlementOptionOptions(): array
-    {
-        return LoanExcessFundSettlementOption::options();
+        return LoanCalculatorFundingApproach::options();
     }
 
     #[Computed]
-    public function showsExcessDisposition(): bool
+    public function showsEarlySettlementEstimate(): bool
     {
-        return LoanFundingStrategy::normalize($this->fundingStrategy) === LoanFundingStrategy::SPLIT_PERCENTAGE
-            && count($this->excessDispositionOptions) > 1;
+        return in_array(LoanCalculatorFundingApproach::normalize($this->fundingApproach), [
+            LoanCalculatorFundingApproach::ROLL_UP,
+            LoanCalculatorFundingApproach::SKIP_FUTURE,
+        ], true);
     }
 
     #[Computed]
-    public function showsSettlementOptions(): bool
+    public function showsCashTransferEstimate(): bool
     {
-        return LoanFundingStrategy::normalize($this->fundingStrategy) === LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT;
+        return LoanCalculatorFundingApproach::normalize($this->fundingApproach)
+            === LoanCalculatorFundingApproach::CASH_OUT;
     }
 
     #[Computed]
     public function usesConfiguredSplit(): bool
     {
-        return LoanFundingStrategy::usesConfiguredSplit($this->fundingStrategy);
+        return LoanCalculatorFundingApproach::usesConfiguredSplit($this->fundingApproach);
     }
 
     #[Computed]

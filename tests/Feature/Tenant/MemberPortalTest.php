@@ -8,6 +8,7 @@ use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
 use App\Filament\Support\DatabaseNotificationsRefresh;
+use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
@@ -231,17 +232,20 @@ test('loan calculator page renders for member', function () {
     $this->actingAs($this->memberUserA, 'tenant');
     Filament::setCurrentPanel('member');
 
-    Livewire::test(LoanCalculatorPage::class)
+    $component = Livewire::test(LoanCalculatorPage::class)
         ->assertSuccessful()
         ->assertSee(__('Loan calculator'))
         ->assertSee(__('How this estimate works'))
+        ->assertSee(__('Loan amount'))
+        ->assertSeeHtml('ff-member-panel--collapsible')
+        ->assertSeeHtml('<details')
         ->assertSee(__('Fund balance'))
         ->assertSee(__('Loan eligibility'))
         ->assertSee(__('Settlement threshold'))
         ->assertSee(__('Eligibility threshold'))
         ->assertSee(__('Calculate'), false)
         ->assertSee(__('Grace cycles before first repayment'), false)
-        ->assertSee(__('Assumed start date'), false)
+        ->assertSee(__('Projected start date'), false)
         ->assertSee(__('Projected monthly contribution'), false)
         ->assertSeeHtml('wire:model.live="startDate"')
         ->assertSeeHtml('wire:model.live="projectedContributionAmount"')
@@ -266,6 +270,33 @@ test('loan calculator shows fund balance and eligibility without raw html', func
         ->assertDontSee('&lt;span class=&quot;ff-member-amount', false);
 });
 
+test('loan calculator tier chips expose lower and upper amounts', function () {
+    LoanTier::query()->forceDelete();
+    LoanTier::create([
+        'tier_number' => 1,
+        'label' => 'Standard',
+        'min_amount' => 1000,
+        'max_amount' => 50000,
+        'min_monthly_installment' => 500,
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
+
+    Livewire::test(LoanCalculatorPage::class)
+        ->assertSee(__('Loan tiers'))
+        ->assertSeeHtml('ff-member-loan-calc-tiers-wrap')
+        ->assertSeeHtml('ff-member-loan-calc-tiers')
+        ->assertSeeHtml('ff-member-loan-calc-tier')
+        ->assertSeeHtml('wire:click="$set(\'loanAmount\', 1000)"')
+        ->assertSeeHtml('wire:click="$set(\'loanAmount\', 50000)"')
+        ->set('loanAmount', 50000)
+        ->assertSet('loanAmount', 50000)
+        ->set('loanAmount', 1000)
+        ->assertSet('loanAmount', 1000);
+});
+
 test('loan calculator shows repayment estimate when tier matches', function () {
     Setting::set('contribution', 'cycle_start_day', '6');
     BusinessDaySettings::saveFromForm('2025-01-15');
@@ -283,12 +314,14 @@ test('loan calculator shows repayment estimate when tier matches', function () {
         'min_monthly_installment' => 500,
         'is_active' => true,
     ]);
+    $this->memberA->fundAccount->update(['balance' => 10_000]);
 
     $this->actingAs($this->memberUserA, 'tenant');
     Filament::setCurrentPanel('member');
 
     $component = Livewire::test(LoanCalculatorPage::class)
         ->set('graceCycles', 1)
+        ->set('fundingApproach', \App\Support\LoanCalculatorFundingApproach::MEMBER_FUND_TOPUP)
         ->set('loanAmount', 10000)
         ->call('calculate')
         ->assertSee(__('months'), false)
@@ -301,8 +334,9 @@ test('loan calculator shows repayment estimate when tier matches', function () {
         ->assertSee(__('After this loan'), false)
         ->assertSee(__('Your fund now'), false)
         ->assertSee(__('Projected fund at start'), false)
-        ->assertSee(__('Assumed start date'), false)
+        ->assertSee(__('Projected start date'), false)
         ->assertSee(__('Estimated schedule'), false)
+        ->assertSeeHtml('ff-member-loan-calc-schedule')
         ->assertSee(__('Grace'), false)
         ->assertSee(__('This cycle’s contribution is skipped because this cycle is grace.'), false);
 
@@ -344,7 +378,7 @@ test('loan calculator funding strategy options are translated in Arabic locale',
         ->toContain('تقسيم الصندوق مع تسوية مبكرة');
 });
 
-test('loan calculator exposes all available funding strategies and settlement choices', function () {
+test('loan calculator exposes a combined funding approach list', function () {
     LoanSettings::save([
         'allow_funding_strategy_member_topup' => true,
         'allow_funding_strategy_split_percentage' => true,
@@ -358,15 +392,15 @@ test('loan calculator exposes all available funding strategies and settlement ch
     Livewire::test(LoanCalculatorPage::class)
         ->assertSuccessful()
         ->assertSee(__('Funding approach'), false)
-        ->assertSet('fundingStrategy', LoanFundingStrategy::defaultForApplication())
-        ->set('fundingStrategy', LoanFundingStrategy::SPLIT_PERCENTAGE)
-        ->assertSee(__('Remaining fund balance above your loan share'), false)
-        ->set('fundingStrategy', LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT)
+        ->assertSee(__('Keep remaining balance in my fund account'), false)
+        ->assertSee(__('Transfer excess to my cash account at disbursement'), false)
         ->assertSee(__('Apply remaining fund as early settlement (roll up schedule)'), false)
-        ->assertSee(__('Apply remaining fund as early settlement (skip installments)'), false);
+        ->assertSee(__('Apply remaining fund as early settlement (skip installments)'), false)
+        ->set('fundingApproach', \App\Support\LoanCalculatorFundingApproach::SKIP_FUTURE)
+        ->assertSet('fundingApproach', \App\Support\LoanCalculatorFundingApproach::SKIP_FUTURE);
 });
 
-test('loan calculator skipped installments show no EMI instead of an amount', function () {
+test('loan calculator skip approach shows regular payments from excess on the schedule', function () {
     Setting::set('contribution', 'cycle_start_day', '6');
     BusinessDaySettings::saveFromForm('2025-01-15');
     LoanSettings::save([
@@ -392,22 +426,20 @@ test('loan calculator skipped installments show no EMI instead of an amount', fu
 
     $component = Livewire::test(LoanCalculatorPage::class)
         ->set('graceCycles', 1)
-        ->set('fundingStrategy', LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT)
-        ->set('excessFundSettlementOption', LoanExcessFundSettlementOption::SKIP_FUTURE)
+        ->set('fundingApproach', LoanCalculatorFundingApproach::SKIP_FUTURE)
         ->set('loanAmount', 10000)
         ->call('calculate')
-        ->assertSee(__('Skipped'), false)
-        ->assertSee(__('No EMI'), false)
+        ->assertSee(__('Regular payment'), false)
         ->assertSeeHtml('ff-member-loan-calc-schedule-header')
         ->assertSeeHtml('ff-member-loan-calc-schedule-row');
 
-    $skipped = array_values(array_filter(
+    $paid = array_values(array_filter(
         $component->instance()->calculations[0]['schedule']['rows'],
-        fn (array $row): bool => ($row['kind'] ?? '') === 'skipped',
+        fn (array $row): bool => ($row['kind'] ?? '') === 'paid',
     ));
 
-    expect($skipped)->not->toBeEmpty()
-        ->and(array_unique(array_column($skipped, 'amount')))->toBe([0.0]);
+    expect($paid)->not->toBeEmpty()
+        ->and(min(array_column($paid, 'amount')))->toBeGreaterThan(0);
 
     BusinessDaySettings::saveFromForm(null);
 });
@@ -438,7 +470,7 @@ test('loan calculator lifecycle simulator supports regular payments and full ear
 
     $component = Livewire::test(LoanCalculatorPage::class)
         ->set('graceCycles', 0)
-        ->set('fundingStrategy', LoanFundingStrategy::SPLIT_PERCENTAGE)
+        ->set('fundingApproach', \App\Support\LoanCalculatorFundingApproach::KEEP_IN_FUND)
         ->set('loanAmount', 100000)
         ->call('calculate')
         ->assertSee(__('Estimate'), false)
@@ -457,15 +489,26 @@ test('loan calculator lifecycle simulator supports regular payments and full ear
 
     $component
         ->assertSeeHtml('ff-member-loan-sim')
+        ->assertSeeHtml('ff-member-panel--collapsible')
         ->assertSee(__('Apply payments'), false)
         ->assertSee(__('Partial settlement amount'), false)
+        ->assertSee(__('Amount needed for full maturity: :amount', [
+            'amount' => MoneyDisplay::format(60000.0, Setting::get('general', 'currency', 'USD')) ?? '—',
+        ]), false)
         ->assertSee(__('Full settlement amount'), false)
         ->assertSee(__('Updating schedule'), false)
+        ->assertSeeHtml('ff-member-loan-sim-stat-card')
+        ->assertSeeHtml('ff-member-loan-sim-stat-card--cycles')
+        ->assertSeeHtml('ff-member-loan-sim-stat-card--pending')
+        ->assertSeeHtml('ff-member-loan-sim-stat-card--maturity')
         ->assertSee(__('Projected loan maturity date'), false)
         ->assertSee(__('total cycle(s)'), false)
         ->assertSee(__('pending installment(s)'), false)
+        ->assertSee(__('Reset simulation'), false)
+        ->assertDontSeeHtml('text-2xl font-bold text-primary-600')
         ->assertSee(__('Simulation history'), false)
-        ->assertSeeHtml('text-2xl font-bold text-primary-600');
+        ->assertSeeHtml('ff-member-amount--success')
+        ->assertSeeHtml('ff-member-amount--danger');
 
     expect($component->instance()->simulation['schedule_rows'])->toHaveCount(25)
         ->and($component->instance()->simulation['schedule_count'])->toBe(24)
@@ -475,10 +518,15 @@ test('loan calculator lifecycle simulator supports regular payments and full ear
         ->set('simulationPaymentAmount', 60000)
         ->call('applySimulationPartialEarlySettlement')
         ->assertSee(__('Paid (normal maturity)'), false)
-        ->assertSee(__('After close'), false);
+        ->assertSee(__('Partial settlement'), false)
+        ->assertDontSee(__('Paid at normal maturity'), false)
+        ->assertSee(__('After close'), false)
+        ->assertSee(__('Date'), false)
+        ->assertSeeHtml('id="loan-sim-after-close-date"');
 
     expect($component->instance()->simulation['status'])->toBe('paid')
-        ->and($component->instance()->simulation['fund_balance'])->toBe(10000.0);
+        ->and($component->instance()->simulation['fund_balance'])->toBe(10000.0)
+        ->and($component->instance()->simulationAfterCloseDate)->toBe($component->instance()->simulation['expected_maturity_date']);
 
     $component->call('startSimulationFromEstimate')
         ->call('applySimulationRegularPayment')
@@ -523,10 +571,7 @@ test('loan calculator simulator partial early settlement rolls up even when esti
 
     $component = Livewire::test(LoanCalculatorPage::class)
         ->set('graceCycles', 0)
-        ->set('fundingStrategy', LoanFundingStrategy::SPLIT_PERCENTAGE)
-        ->set('excessFundDisposition', LoanFundExcessDisposition::KEEP_IN_FUND)
-        // Leftover from a prior early-settlement strategy must not force skip mid-life.
-        ->set('excessFundSettlementOption', LoanExcessFundSettlementOption::SKIP_FUTURE)
+        ->set('fundingApproach', \App\Support\LoanCalculatorFundingApproach::KEEP_IN_FUND)
         ->set('loanAmount', 100000)
         ->call('calculate')
         ->call('setCalculatorMode', 'simulate')
@@ -544,6 +589,45 @@ test('loan calculator simulator partial early settlement rolls up even when esti
         ->and($component->instance()->simulation['schedule_count'])->toBe(21);
 
     BusinessDaySettings::saveFromForm(null);
+});
+
+test('loan calculator blocks estimate and simulate when member portion exceeds projected fund', function () {
+    LoanSettings::save([
+        'settlement_threshold_pct' => 0.10,
+        'eligibility_threshold_pct' => 0.20,
+        'member_funding_split_pct' => 50,
+        'allow_funding_strategy_split_percentage' => true,
+        'max_allowed_grace_cycles' => 2,
+    ]);
+    LoanTier::query()->forceDelete();
+    LoanTier::create([
+        'tier_number' => 4,
+        'label' => 'Tier 4',
+        'min_amount' => 91000,
+        'max_amount' => 120000,
+        'min_monthly_installment' => 2500,
+        'is_active' => true,
+    ]);
+    $this->memberA->fundAccount->update(['balance' => 10_000]);
+
+    $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
+
+    $component = Livewire::test(LoanCalculatorPage::class)
+        ->set('graceCycles', 0)
+        ->set('fundingApproach', \App\Support\LoanCalculatorFundingApproach::KEEP_IN_FUND)
+        ->set('loanAmount', 100000)
+        ->call('calculate')
+        ->assertSee(__('Cannot estimate or simulate this loan'), false)
+        ->assertSee(__('Your member portion (:portion) exceeds the projected fund at start (:fund).', [
+            'portion' => number_format(50_000.0, 2),
+            'fund' => number_format(10_000.0, 2),
+        ]), false)
+        ->call('setCalculatorMode', 'simulate')
+        ->assertSet('calculatorMode', 'estimate');
+
+    expect($component->instance()->calculations)->toBeEmpty()
+        ->and($component->instance()->simulation)->toBeNull();
 });
 
 test('member panel has database notifications enabled', function () {

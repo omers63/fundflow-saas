@@ -58,6 +58,16 @@ final class MemberLoanCalculatorService
             return [];
         }
 
+        if ($this->estimateBlockReason(
+            $loanAmount,
+            $member,
+            $fundingStrategy,
+            $startDate,
+            $projectedContributionAmount,
+        ) !== null) {
+            return [];
+        }
+
         $projection = $this->fundProjection($member, $startDate, $projectedContributionAmount);
         $fundBalance = $projection['projected_fund'];
         $settlementPct = LoanSettings::settlementThreshold();
@@ -129,6 +139,7 @@ final class MemberLoanCalculatorService
                 'eligibility_base' => $eligibilityBase,
                 'excess_fund' => $excessFund,
                 'early_settlement_amount' => $earlySettlementAmount,
+                'early_settlement_mode' => $settlementMode,
                 'installments_covered' => $installmentsCovered,
                 'remaining_payment_months' => $remainingPaymentMonths,
                 'duration_months' => $durationMonths,
@@ -142,11 +153,46 @@ final class MemberLoanCalculatorService
                     $settlementMode,
                     $installmentsCovered,
                     $projection,
+                    $earlySettlementAmount,
                 ),
             ];
         }
 
         return $results;
+    }
+
+    /**
+     * Reason the calculator must not estimate or simulate this amount, or null when allowed.
+     */
+    public function estimateBlockReason(
+        float $loanAmount,
+        Member $member,
+        ?string $fundingStrategy = null,
+        ?string $startDate = null,
+        int|float|string|null $projectedContributionAmount = null,
+    ): ?string {
+        if ($loanAmount <= 0.00001) {
+            return null;
+        }
+
+        $projection = $this->fundProjection($member, $startDate, $projectedContributionAmount);
+        $projectedFund = round((float) $projection['projected_fund'], 2);
+
+        if ($projectedFund < -0.00001) {
+            return __('Projected fund at start must not be negative.');
+        }
+
+        $portions = LoanSettings::resolveFundingPortions($loanAmount, $projectedFund, $fundingStrategy);
+        $memberPortion = round((float) $portions['member_portion'], 2);
+
+        if ($memberPortion > $projectedFund + 0.00001) {
+            return __('Your member portion (:portion) exceeds the projected fund at start (:fund).', [
+                'portion' => number_format($memberPortion, 2),
+                'fund' => number_format($projectedFund, 2),
+            ]);
+        }
+
+        return null;
     }
 
     /**
@@ -191,6 +237,7 @@ final class MemberLoanCalculatorService
         ?string $settlementMode,
         int $installmentsCovered,
         array $projection,
+        float $earlySettlementAmount = 0.0,
     ): array {
         $grace = LoanSettings::clampGraceCycles($graceCycles);
         $period = Carbon::create(
@@ -229,7 +276,13 @@ final class MemberLoanCalculatorService
             }
         }
 
-        $emiRows = $this->applyEarlySettlementToEmiRows($emiRows, $settlementMode, $installmentsCovered);
+        $emiRows = $this->applyEarlySettlementToEmiRows(
+            $emiRows,
+            $settlementMode,
+            $installmentsCovered,
+            $minInstallment,
+            $earlySettlementAmount,
+        );
         $rows = [...$prefixRows, ...$emiRows];
         $payable = array_values(array_filter($rows, fn (array $row): bool => $row['kind'] === 'emi'));
         $firstPayable = $payable[0] ?? null;
@@ -393,26 +446,53 @@ final class MemberLoanCalculatorService
      * @param  list<array{kind: string, number: int|null, cycle_month: int, cycle_year: int, cycle_label: string, due_date: string|null, due_label: string|null, amount: float, is_final: bool}>  $emiRows
      * @return list<array{kind: string, number: int|null, cycle_month: int, cycle_year: int, cycle_label: string, due_date: string|null, due_label: string|null, amount: float, is_final: bool}>
      */
-    private function applyEarlySettlementToEmiRows(array $emiRows, ?string $settlementMode, int $installmentsCovered): array
-    {
+    private function applyEarlySettlementToEmiRows(
+        array $emiRows,
+        ?string $settlementMode,
+        int $installmentsCovered,
+        float $minInstallment = 0.0,
+        float $earlySettlementAmount = 0.0,
+    ): array {
         $count = count($emiRows);
         $covered = min($count, max(0, $installmentsCovered));
 
-        if ($covered <= 0 || $settlementMode === null) {
+        if ($settlementMode === null) {
             return $emiRows;
         }
 
         if ($settlementMode === 'skip_future') {
+            // Reality: excess moves to cash, then regular payments apply (schedule length unchanged).
             for ($i = 0; $i < $covered; $i++) {
-                $emiRows[$i]['kind'] = 'skipped';
-                $emiRows[$i]['amount'] = 0.0;
+                $emiRows[$i]['kind'] = 'paid';
                 $emiRows[$i]['is_final'] = false;
+                if ($minInstallment > 0.00001) {
+                    $emiRows[$i]['amount'] = round($minInstallment, 2);
+                }
+            }
+
+            $appliedFull = $minInstallment > 0.00001
+                ? round($covered * $minInstallment, 2)
+                : 0.0;
+            $remainder = round(max(0.0, $earlySettlementAmount - $appliedFull), 2);
+
+            // Partial leftover reduces the next payable cycle (same as a short regular payment).
+            if ($remainder > 0.00001) {
+                for ($i = $covered; $i < $count; $i++) {
+                    if (($emiRows[$i]['kind'] ?? '') !== 'emi') {
+                        continue;
+                    }
+
+                    $due = round((float) ($emiRows[$i]['amount'] ?? 0), 2);
+                    $emiRows[$i]['amount'] = round(max(0.0, $due - $remainder), 2);
+
+                    break;
+                }
             }
 
             return $emiRows;
         }
 
-        if ($settlementMode !== 'roll_up') {
+        if ($covered <= 0 || $settlementMode !== 'roll_up') {
             return $emiRows;
         }
 

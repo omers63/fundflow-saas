@@ -73,13 +73,58 @@ test('exact maturity sets fund to top-up and marks schedule paid', function () {
         ->and($state['pending_count'])->toBe(0);
 });
 
-test('overpay past maturity leaves fund above top-up', function () {
+test('overpay past maturity sends surplus to cash and dates paid at last installment', function () {
     $state = $this->simulator->startFromEstimate($this->diagramCalc, 100_000, '2025-01-15');
+    $lastDue = collect($state['schedule_rows'])->last()['due_date'];
     $state = $this->simulator->applyRegularPayment($state, 65000.0);
 
+    $payment = collect($state['history'])->firstWhere('type', 'regular_payment');
+    $paid = collect($state['history'])->firstWhere('type', 'paid');
+
     expect($state['status'])->toBe(MemberLoanLifecycleSimulator::STATUS_PAID)
-        ->and($state['fund_balance'])->toBe(15000.0)
-        ->and($state['fund_balance'])->toBeGreaterThan($state['top_up']);
+        ->and($state['fund_balance'])->toBe(10000.0)
+        ->and($state['cash_balance'])->toBe(5000.0)
+        ->and($payment['label'])->toBe(__('Regular payment (:applied to schedule, :cash to cash)', [
+            'applied' => number_format(60000.0, 2),
+            'cash' => number_format(5000.0, 2),
+        ]))
+        ->and($payment['at'])->toBe($lastDue)
+        ->and($paid['at'])->toBe($lastDue);
+});
+
+test('regular payment on a reduced last installment splits surplus to cash', function () {
+    $state = $this->simulator->startFromEstimate($this->diagramCalc, 100_000, '2025-01-15');
+    // Leave one reduced installment: 24×2500 − 1000 shortfall path via partials totaling 57500
+    // remaining 2500 would be full EMI; instead leave 1500 remaining.
+    $state = $this->simulator->applyPartialEarlySettlement(
+        $state,
+        58500.0,
+        MemberLoanLifecycleSimulator::PARTIAL_ROLL_UP,
+    );
+
+    $pending = collect($state['schedule_rows'])->where('kind', 'pending')->values();
+    expect($state['remaining_maturity'])->toBe(1500.0)
+        ->and($pending)->toHaveCount(1)
+        ->and($pending[0]['amount'])->toBe(1500.0);
+
+    $lastDue = $pending[0]['due_date'];
+    $state = $this->simulator->applyRegularPayment($state, 2500.0);
+
+    $payment = collect($state['history'])->firstWhere(
+        fn (array $event): bool => ($event['type'] ?? '') === 'regular_payment'
+            && str_contains((string) ($event['label'] ?? ''), number_format(1500.0, 2)),
+    );
+    $paid = collect($state['history'])->firstWhere('type', 'paid');
+
+    expect($state['status'])->toBe(MemberLoanLifecycleSimulator::STATUS_PAID)
+        ->and($state['cash_balance'])->toBe(1000.0)
+        ->and($payment)->not->toBeNull()
+        ->and($payment['label'])->toBe(__('Regular payment (:applied to schedule, :cash to cash)', [
+            'applied' => number_format(1500.0, 2),
+            'cash' => number_format(1000.0, 2),
+        ]))
+        ->and($payment['at'])->toBe($lastDue)
+        ->and($paid['at'])->toBe($lastDue);
 });
 
 test('full early settlement after regular payment restores pre-loan fund', function () {
@@ -201,19 +246,86 @@ test('partial roll-up puts the lump on the first pending cycle and drops covered
         ->and($state['history'][array_key_last($state['history'])]['at'])->toBe('2027-02-05');
 });
 
-test('post-paid contributions use any amount until eligibility', function () {
+test('post-paid contributions debit cash and credit fund until eligibility', function () {
     $state = $this->simulator->startFromEstimate($this->diagramCalc, 100_000, '2025-01-15');
     $state = $this->simulator->applyRegularPayment($state, 60000.0);
+    $state = $this->simulator->applyCashDeposit($state, 14500.0);
+
+    expect($state['cash_balance'])->toBe(14500.0);
+
     $state = $this->simulator->applyContribution($state, 500.0);
     $state = $this->simulator->applyContribution($state, 2000.0);
 
     expect($state['fund_balance'])->toBe(12500.0)
-        ->and($state['eligible_for_new_loan'])->toBeFalse();
+        ->and($state['cash_balance'])->toBe(12000.0)
+        ->and($state['eligible_for_new_loan'])->toBeFalse()
+        ->and(collect($state['history'])->last()['label'])->toBe(__('Post-loan contribution (:cash from cash)', [
+            'cash' => number_format(2000.0, 2),
+        ]));
 
     $state = $this->simulator->applyContribution($state, 12000.0);
 
     expect($state['fund_balance'])->toBe(24500.0)
+        ->and($state['cash_balance'])->toBe(0.0)
         ->and($state['eligible_for_new_loan'])->toBeTrue();
+});
+
+test('post-loan contribution requires sufficient simulated cash', function () {
+    $state = $this->simulator->startFromEstimate($this->diagramCalc, 100_000, '2025-01-15');
+    $state = $this->simulator->applyRegularPayment($state, 60000.0);
+
+    expect(fn () => $this->simulator->applyContribution($state, 500.0))
+        ->toThrow(InvalidArgumentException::class, __('Insufficient cash balance.'));
+});
+
+test('cash deposit after close increases simulated cash without changing fund', function () {
+    $state = $this->simulator->startFromEstimate($this->diagramCalc, 100_000, '2025-01-15');
+    $state = $this->simulator->applyRegularPayment($state, 60000.0);
+    $fundBefore = (float) $state['fund_balance'];
+
+    $state = $this->simulator->applyCashDeposit($state, 3000.0);
+    $deposit = collect($state['history'])->last();
+
+    expect($state['cash_balance'])->toBe(3000.0)
+        ->and($state['fund_balance'])->toBe($fundBefore)
+        ->and($deposit['type'])->toBe('cash_deposit')
+        ->and($deposit['label'])->toBe(__('Cash deposit'))
+        ->and($deposit['amount'])->toBe(3000.0)
+        ->and($deposit['cash_balance'])->toBe(3000.0)
+        ->and($deposit['fund_balance'])->toBe($fundBefore)
+        ->and($deposit['at'])->toBe($state['expected_maturity_date']);
+});
+
+test('after-close deposit and contribution use selected date and reject dates before maturity', function () {
+    $state = $this->simulator->startFromEstimate($this->diagramCalc, 100_000, '2025-01-15');
+    $state = $this->simulator->applyRegularPayment($state, 60000.0);
+    $maturity = (string) $state['expected_maturity_date'];
+    $before = Carbon\Carbon::parse($maturity)->subDay()->toDateString();
+    $later = Carbon\Carbon::parse($maturity)->addDays(10)->toDateString();
+
+    expect(fn () => $this->simulator->applyCashDeposit($state, 1000.0, $before))
+        ->toThrow(InvalidArgumentException::class, __('Date cannot be before loan maturity (:date).', [
+            'date' => $maturity,
+        ]));
+
+    $state = $this->simulator->applyCashDeposit($state, 1000.0, $later);
+    $deposit = collect($state['history'])->last();
+    $state = $this->simulator->applyContribution($state, 500.0, $later);
+    $contribution = collect($state['history'])->last();
+
+    expect($deposit['at'])->toBe($later)
+        ->and($contribution['at'])->toBe($later)
+        ->and($contribution['type'])->toBe('contribution');
+});
+
+test('history events record ending cash balance', function () {
+    $state = $this->simulator->startFromEstimate($this->diagramCalc, 100_000, '2025-01-15');
+    $state = $this->simulator->applyRegularPayment($state, 62500.0);
+    $payment = collect($state['history'])->firstWhere('type', 'regular_payment');
+
+    expect($payment['cash_balance'])->toBe(2500.0)
+        ->and($payment['fund_balance'])->toBe(10000.0)
+        ->and($payment['remaining_maturity'])->toBe(0.0);
 });
 
 test('cash-out excess at disbursement moves remaining fund to cash and records history', function () {
@@ -242,7 +354,59 @@ test('cash-out excess at disbursement moves remaining fund to cash and records h
     $transfer = collect($state['history'])->firstWhere('type', 'excess_to_cash');
 
     expect($transfer['amount'])->toBe(15000.0)
-        ->and($transfer['label'])->toBe(__('Excess fund transferred to cash'));
+        ->and($transfer['label'])->toBe(__('Excess fund transferred to cash'))
+        ->and($transfer['cash_balance'])->toBe(15000.0);
+});
+
+test('partial roll-up of the full remaining maturity closes as rolled-up not normal maturity paid', function () {
+    $state = $this->simulator->startFromEstimate($this->diagramCalc, 100_000, '2025-01-15');
+    $firstDue = collect($state['schedule_rows'])->firstWhere('kind', 'pending')['due_date'];
+    $remaining = (float) $state['remaining_maturity'];
+
+    $state = $this->simulator->applyPartialEarlySettlement(
+        $state,
+        $remaining,
+        MemberLoanLifecycleSimulator::PARTIAL_ROLL_UP,
+    );
+
+    $rolled = collect($state['schedule_rows'])->where('kind', 'rolled_up')->values();
+    $paidNotes = collect($state['schedule_rows'])
+        ->where('kind', 'paid')
+        ->pluck('note')
+        ->filter(fn ($note) => $note === __('Paid at normal maturity'));
+    $historyTypes = array_column($state['history'], 'type');
+
+    expect($state['status'])->toBe(MemberLoanLifecycleSimulator::STATUS_PAID)
+        ->and($state['remaining_maturity'])->toBe(0.0)
+        ->and($state['pending_count'])->toBe(0)
+        ->and($rolled)->toHaveCount(1)
+        ->and($rolled[0]['amount'])->toBe($remaining)
+        ->and($rolled[0]['due_date'])->toBe($firstDue)
+        ->and($paidNotes)->toBeEmpty()
+        ->and($historyTypes)->toContain('partial_roll_up')
+        ->and($historyTypes)->not->toContain('paid');
+});
+
+test('partial roll-up overpay records schedule and cash split in history', function () {
+    $state = $this->simulator->startFromEstimate($this->diagramCalc, 100_000, '2025-01-15');
+    $remaining = (float) $state['remaining_maturity'];
+
+    $state = $this->simulator->applyPartialEarlySettlement(
+        $state,
+        $remaining + 2500.0,
+        MemberLoanLifecycleSimulator::PARTIAL_ROLL_UP,
+    );
+
+    $event = collect($state['history'])->firstWhere('type', 'partial_roll_up');
+
+    expect($state['status'])->toBe(MemberLoanLifecycleSimulator::STATUS_PAID)
+        ->and($state['cash_balance'])->toBe(2500.0)
+        ->and($event)->not->toBeNull()
+        ->and($event['amount'])->toBe($remaining + 2500.0)
+        ->and($event['label'])->toBe(__('Partial roll-up (:applied / :cash cash)', [
+            'applied' => number_format($remaining, 2),
+            'cash' => number_format(2500.0, 2),
+        ]));
 });
 
 test('partial settlement below one installment adjusts the next pending cycle without rolling up', function () {

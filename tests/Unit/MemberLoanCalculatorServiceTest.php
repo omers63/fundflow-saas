@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -280,6 +281,46 @@ test('roll-up and skip early settlement mark installments on the estimated sched
         ->and(array_unique(array_column($skippedEmi, 'amount')))->toBe([0.0]);
 });
 
+test('skip early settlement applies partial excess to the next cycle without shortening the schedule', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    LoanSettings::save([
+        'settlement_threshold_pct' => 0.20,
+        'member_funding_split_pct' => 50,
+        'allow_funding_strategy_split_with_early_settlement' => true,
+        'max_allowed_grace_cycles' => 0,
+    ]);
+    $this->member->fundAccount->update(['balance' => 5600]);
+
+    $skipped = $this->service->calculationsForAmount(
+        10_000,
+        $this->member->fresh(),
+        LoanFundingStrategy::SPLIT_WITH_EARLY_SETTLEMENT,
+        LoanExcessFundSettlementOption::SKIP_FUTURE,
+        graceCycles: 0,
+    )[0];
+
+    // Excess 600 → 1 full EMI (500) skipped, remainder 100 reduces the next cycle.
+    $rows = $skipped['schedule']['rows'];
+    $kinds = array_column($rows, 'kind');
+    $firstEmi = collect($rows)->firstWhere('kind', 'emi');
+
+    expect($skipped['excess_fund'])->toBe(600.0)
+        ->and($skipped['installments_covered'])->toBe(1)
+        ->and($skipped['duration_months'])->toBe($skipped['installments'])
+        ->and(array_count_values($kinds)['skipped'] ?? 0)->toBe(1)
+        ->and($firstEmi)->not->toBeNull()
+        ->and($firstEmi['amount'])->toBe(round(
+            Loan::scheduleInstallmentAmount(
+                1,
+                $skipped['installments'],
+                500.0,
+                $skipped['total_repay'],
+            ) - 100.0,
+            2,
+        ));
+});
+
 test('future start date projects fund and treats the start cycle as paid', function () {
     Setting::set('contribution', 'cycle_start_day', '6');
     BusinessDaySettings::saveFromForm('2025-01-15');
@@ -319,4 +360,36 @@ test('future start date projects fund and treats the start cycle as paid', funct
 
     expect($custom['contribution_amount'])->toBe(2000.0)
         ->and($custom['projected_fund'])->toBe(11000.0);
+});
+
+test('calculations are blocked when projected fund at start is negative', function () {
+    $this->member->fundAccount->update(['balance' => -500]);
+
+    expect($this->service->estimateBlockReason(10_000, $this->member->fresh()))
+        ->toBe(__('Projected fund at start must not be negative.'))
+        ->and($this->service->calculationsForAmount(10_000, $this->member->fresh()))->toBe([]);
+});
+
+test('calculations are blocked when member portion exceeds projected fund', function () {
+    LoanSettings::save([
+        'member_funding_split_pct' => 50,
+        'allow_funding_strategy_split_percentage' => true,
+    ]);
+    $this->member->fundAccount->update(['balance' => 10_000]);
+
+    $reason = $this->service->estimateBlockReason(
+        100_000,
+        $this->member->fresh(),
+        LoanFundingStrategy::SPLIT_PERCENTAGE,
+    );
+
+    expect($reason)->toBe(__('Your member portion (:portion) exceeds the projected fund at start (:fund).', [
+        'portion' => number_format(50_000.0, 2),
+        'fund' => number_format(10_000.0, 2),
+    ]))
+        ->and($this->service->calculationsForAmount(
+            100_000,
+            $this->member->fresh(),
+            LoanFundingStrategy::SPLIT_PERCENTAGE,
+        ))->toBe([]);
 });

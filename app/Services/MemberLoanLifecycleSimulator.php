@@ -66,8 +66,17 @@ final class MemberLoanLifecycleSimulator
         $fundAfterMemberPortion = round($preLoanFund - $memberPortion, 2);
         $positiveFundAfterMember = max(0.0, $fundAfterMemberPortion);
         $excessFund = round(max(0.0, (float) ($calc['excess_fund'] ?? $positiveFundAfterMember)), 2);
-        $cashOutExcess = LoanFundExcessDisposition::toCashOutFlag($excessDisposition)
-            && $excessFund > 0.00001;
+        $earlySettlement = round((float) ($calc['early_settlement_amount'] ?? 0), 2);
+        $earlySettlementMode = is_string($calc['early_settlement_mode'] ?? null)
+            ? (string) $calc['early_settlement_mode']
+            : null;
+        // Approach 4 (skip / regular-from-excess): move excess to cash, then apply as regular payments.
+        $cashOutForSkipPayments = $earlySettlementMode === self::PARTIAL_SKIP
+            && $earlySettlement > 0.00001;
+        $cashOutExcess = (
+            LoanFundExcessDisposition::toCashOutFlag($excessDisposition)
+            || $cashOutForSkipPayments
+        ) && $excessFund > 0.00001;
         $excessToCash = $cashOutExcess ? min($excessFund, $positiveFundAfterMember) : 0.0;
         $fundAfterDisbursement = round($fundAfterMemberPortion - $masterPortion - $excessToCash, 2);
         $cashBalance = round($excessToCash, 2);
@@ -88,6 +97,7 @@ final class MemberLoanLifecycleSimulator
                 $loanAmount,
                 $preLoanFund,
                 $fundAfterDisbursement,
+                0.0,
                 $masterPortion,
                 $maturity,
                 0.0,
@@ -104,6 +114,7 @@ final class MemberLoanLifecycleSimulator
                 $excessToCash,
                 round($fundAfterMemberPortion - $masterPortion, 2),
                 $fundAfterDisbursement,
+                $cashBalance,
                 $masterPortion,
                 $maturity,
                 0.0,
@@ -132,13 +143,53 @@ final class MemberLoanLifecycleSimulator
             'total_repaid' => 0.0,
             'remaining_maturity' => $maturity,
             'remaining_months' => $remainingMonths,
-            'next_due_date' => $nextDue->toDateString(),
-            'expected_maturity_date' => $this->expectedMaturityDate($nextDue, $maturity, $minInstallment),
+            'next_due_date' => $this->nextPendingDueDate([
+                'schedule_rows' => $schedule,
+                'next_due_date' => $nextDue->toDateString(),
+            ]),
+            'expected_maturity_date' => $this->lastPendingDueDate([
+                'schedule_rows' => $schedule,
+                'next_due_date' => $nextDue->toDateString(),
+            ]) ?? $this->expectedMaturityDate($nextDue, $maturity, $minInstallment),
             'full_settlement_amount' => 0.0,
             'eligible_for_new_loan' => false,
             'schedule_rows' => $schedule,
             'history' => $history,
         ];
+
+        if ($earlySettlement > 0.00001) {
+            $fundBefore = (float) $state['fund_balance'];
+            $outstandingBefore = (float) $state['outstanding_fund_portion'];
+            $remainingBefore = (float) $state['remaining_maturity'];
+            $cashBefore = (float) $state['cash_balance'];
+
+            if ($earlySettlementMode === self::PARTIAL_SKIP) {
+                // Cash funded the regular payments; spend it as they apply.
+                $state['cash_balance'] = round(max(0.0, $cashBefore - $earlySettlement), 2);
+            }
+
+            $state = $this->applyAmountTowardMaturity($state, $earlySettlement);
+            $state['history'][] = $this->historyEvent(
+                $earlySettlementMode === self::PARTIAL_SKIP ? 'regular_payment' : 'excess_early_settlement',
+                $earlySettlementMode === self::PARTIAL_SKIP
+                    ? __('Regular payments from excess cash')
+                    : __('Excess fund applied as early settlement'),
+                $earlySettlement,
+                $fundBefore,
+                (float) $state['fund_balance'],
+                (float) $state['cash_balance'],
+                (float) $state['outstanding_fund_portion'],
+                (float) $state['remaining_maturity'],
+                (float) $state['total_repaid'],
+                $outstandingBefore,
+                $remainingBefore,
+                $start->toDateString(),
+            );
+
+            if ($state['remaining_maturity'] <= 0.00001) {
+                return $this->markPaid($state, $this->lastPendingDueDate($state) ?? $start->toDateString());
+            }
+        }
 
         return $this->withDerived($state);
     }
@@ -169,24 +220,35 @@ final class MemberLoanLifecycleSimulator
         $outstandingBefore = (float) $state['outstanding_fund_portion'];
         $remainingBefore = (float) $state['remaining_maturity'];
         $eventAt = $this->nextPendingDueDate($state);
+        $appliedToSchedule = round(min($amount, $remainingBefore), 2);
+        $toCash = round(max(0.0, $amount - $appliedToSchedule), 2);
+        $paidAt = $this->lastPendingDueDate($state) ?? $eventAt;
         $state = $this->applyAmountTowardMaturity($state, $amount);
+
+        $paymentLabel = $toCash > 0.00001
+            ? __('Regular payment (:applied to schedule, :cash to cash)', [
+                'applied' => number_format($appliedToSchedule, 2),
+                'cash' => number_format($toCash, 2),
+            ])
+            : __('Regular payment');
 
         $state['history'][] = $this->historyEvent(
             'regular_payment',
-            __('Regular payment'),
+            $paymentLabel,
             $amount,
             $fundBefore,
             (float) $state['fund_balance'],
+            (float) $state['cash_balance'],
             (float) $state['outstanding_fund_portion'],
             (float) $state['remaining_maturity'],
             (float) $state['total_repaid'],
             $outstandingBefore,
             $remainingBefore,
-            $eventAt,
+            $toCash > 0.00001 ? $paidAt : $eventAt,
         );
 
         if ($state['remaining_maturity'] <= 0.00001) {
-            return $this->markPaid($state);
+            return $this->markPaid($state, $paidAt);
         }
 
         return $this->afterRegularPaymentSettlement($state, $amount);
@@ -220,16 +282,30 @@ final class MemberLoanLifecycleSimulator
         $outstandingBefore = (float) $state['outstanding_fund_portion'];
         $remainingBefore = (float) $state['remaining_maturity'];
         $eventAt = $this->nextPendingDueDate($state);
+        $appliedToSchedule = round(min($amount, $remainingBefore), 2);
+        $toCash = round(max(0.0, $amount - $appliedToSchedule), 2);
         $state = $this->applyAmountTowardMaturity($state, $amount);
+
+        $settlementLabel = match (true) {
+            $option === self::PARTIAL_ROLL_UP && $toCash > 0.00001 => __('Partial roll-up (:applied / :cash cash)', [
+                'applied' => number_format($appliedToSchedule, 2),
+                'cash' => number_format($toCash, 2),
+            ]),
+            $option === self::PARTIAL_SKIP && $toCash > 0.00001 => __('Partial skip (:applied / :cash cash)', [
+                'applied' => number_format($appliedToSchedule, 2),
+                'cash' => number_format($toCash, 2),
+            ]),
+            $option === self::PARTIAL_ROLL_UP => __('Partial early settlement (roll up)'),
+            default => __('Partial early settlement (skip installments)'),
+        };
 
         $state['history'][] = $this->historyEvent(
             $option === self::PARTIAL_ROLL_UP ? 'partial_roll_up' : 'partial_skip',
-            $option === self::PARTIAL_ROLL_UP
-                ? __('Partial early settlement (roll up)')
-                : __('Partial early settlement (skip installments)'),
+            $settlementLabel,
             $amount,
             $fundBefore,
             (float) $state['fund_balance'],
+            (float) $state['cash_balance'],
             (float) $state['outstanding_fund_portion'],
             (float) $state['remaining_maturity'],
             (float) $state['total_repaid'],
@@ -239,7 +315,15 @@ final class MemberLoanLifecycleSimulator
         );
 
         if ($state['remaining_maturity'] <= 0.00001) {
-            return $this->markPaid($state);
+            if ($option === self::PARTIAL_ROLL_UP) {
+                return $this->closeAsPaidViaPartialRollUp(
+                    $state,
+                    $appliedToSchedule,
+                    $eventAt,
+                );
+            }
+
+            return $this->markPaid($state, $this->lastPendingDueDate($state) ?? $eventAt);
         }
 
         if ($option === self::PARTIAL_SKIP) {
@@ -283,6 +367,7 @@ final class MemberLoanLifecycleSimulator
             $required,
             $fundBefore,
             (float) $state['fund_balance'],
+            (float) $state['cash_balance'],
             0.0,
             0.0,
             (float) $state['total_repaid'],
@@ -298,7 +383,7 @@ final class MemberLoanLifecycleSimulator
      * @param  array<string, mixed>  $state
      * @return array<string, mixed>
      */
-    public function applyContribution(array $state, float $amount): array
+    public function applyContribution(array $state, float $amount, ?string $at = null): array
     {
         $state = $this->normalize($state);
 
@@ -312,20 +397,93 @@ final class MemberLoanLifecycleSimulator
             throw new InvalidArgumentException(__('Contribution amount must be greater than zero.'));
         }
 
+        $eventAt = $this->resolveAfterCloseDate($state, $at);
+        $cashBefore = (float) $state['cash_balance'];
+
+        if ($cashBefore + 0.00001 < $amount) {
+            throw new InvalidArgumentException(__('Insufficient cash balance.'));
+        }
+
         $fundBefore = (float) $state['fund_balance'];
-        $state['fund_balance'] = round((float) $state['fund_balance'] + $amount, 2);
+        $state['cash_balance'] = round($cashBefore - $amount, 2);
+        $state['fund_balance'] = round($fundBefore + $amount, 2);
         $state['history'][] = $this->historyEvent(
             'contribution',
-            __('Post-loan contribution'),
+            __('Post-loan contribution (:cash from cash)', [
+                'cash' => number_format($amount, 2),
+            ]),
             $amount,
             $fundBefore,
             (float) $state['fund_balance'],
+            (float) $state['cash_balance'],
             (float) $state['outstanding_fund_portion'],
             (float) $state['remaining_maturity'],
             (float) $state['total_repaid'],
+            null,
+            null,
+            $eventAt,
         );
 
         return $this->withDerived($state);
+    }
+
+    /**
+     * Simulated bank deposit into cash after the loan is closed (does not change fund).
+     *
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    public function applyCashDeposit(array $state, float $amount, ?string $at = null): array
+    {
+        $state = $this->normalize($state);
+
+        if (! in_array($state['status'], [self::STATUS_PAID, self::STATUS_FULLY_SETTLED], true)) {
+            throw new InvalidArgumentException(__('Cash deposits in the simulator apply after the loan is closed.'));
+        }
+
+        $amount = round($amount, 2);
+
+        if ($amount <= 0.00001) {
+            throw new InvalidArgumentException(__('Deposit amount must be greater than zero.'));
+        }
+
+        $eventAt = $this->resolveAfterCloseDate($state, $at);
+        $fundBefore = (float) $state['fund_balance'];
+        $state['cash_balance'] = round((float) $state['cash_balance'] + $amount, 2);
+        $state['history'][] = $this->historyEvent(
+            'cash_deposit',
+            __('Cash deposit'),
+            $amount,
+            $fundBefore,
+            $fundBefore,
+            (float) $state['cash_balance'],
+            (float) $state['outstanding_fund_portion'],
+            (float) $state['remaining_maturity'],
+            (float) $state['total_repaid'],
+            null,
+            null,
+            $eventAt,
+        );
+
+        return $this->withDerived($state);
+    }
+
+    /**
+     * Earliest date allowed for post-close deposits / contributions (loan maturity / close date).
+     *
+     * @param  array<string, mixed>  $state
+     */
+    public function afterCloseMinDate(array $state): ?string
+    {
+        $state = $this->normalize($state);
+
+        if (! in_array($state['status'], [self::STATUS_PAID, self::STATUS_FULLY_SETTLED], true)) {
+            return null;
+        }
+
+        $closedOn = (string) ($state['expected_maturity_date'] ?? '');
+
+        return $closedOn !== '' ? $closedOn : null;
     }
 
     /**
@@ -503,7 +661,10 @@ final class MemberLoanLifecycleSimulator
         $state['outstanding_fund_portion'] = round((float) $state['outstanding_fund_portion'] - $toFundPortion, 2);
         // Repayments credit member fund (same as live EMI collection), so the simulated
         // balance climbs from its post-disbursement (often negative) position.
-        $state['fund_balance'] = round((float) $state['fund_balance'] + $applied + $overpay, 2);
+        $state['fund_balance'] = round((float) $state['fund_balance'] + $applied, 2);
+        if ($overpay > 0.00001) {
+            $state['cash_balance'] = round((float) ($state['cash_balance'] ?? 0) + $overpay, 2);
+        }
         $state['total_repaid'] = round((float) $state['total_repaid'] + $amount, 2);
         $state['remaining_maturity'] = round(max(0.0, (float) $state['maturity_amount'] - (float) $state['total_repaid']), 2);
 
@@ -770,18 +931,65 @@ final class MemberLoanLifecycleSimulator
     }
 
     /**
+     * Paying the full remaining maturity via partial roll-up closes the loan on the next
+     * cycle with the lump amount (not as regular “Paid at normal maturity” rows).
+     *
      * @param  array<string, mixed>  $state
      * @return array<string, mixed>
      */
-    private function markPaid(array $state): array
+    private function closeAsPaidViaPartialRollUp(array $state, float $amount, ?string $at = null): array
     {
-        $fundBefore = (float) $state['fund_balance'];
+        $rows = is_array($state['schedule_rows'] ?? null) ? $state['schedule_rows'] : [];
+        $pendingIndexes = $this->pendingIndexes($rows);
+        $anchorDue = $at;
+
+        if ($pendingIndexes !== []) {
+            $anchorIndex = $pendingIndexes[0];
+            $anchorDue = is_string($rows[$anchorIndex]['due_date'] ?? null)
+                && $rows[$anchorIndex]['due_date'] !== ''
+                ? (string) $rows[$anchorIndex]['due_date']
+                : $at;
+            $rows[$anchorIndex]['kind'] = 'rolled_up';
+            $rows[$anchorIndex]['amount'] = round($amount, 2);
+            $rows[$anchorIndex]['note'] = __('Rolled up');
+            $rows[$anchorIndex]['days_until_due'] = null;
+
+            $dropIndexes = array_fill_keys(array_slice($pendingIndexes, 1), true);
+            if ($dropIndexes !== []) {
+                $rows = array_values(array_filter(
+                    $rows,
+                    fn (array $row, int $index): bool => ! isset($dropIndexes[$index]),
+                    ARRAY_FILTER_USE_BOTH,
+                ));
+            }
+        }
+
+        $state['schedule_rows'] = $rows;
         $state['status'] = self::STATUS_PAID;
         $state['outstanding_fund_portion'] = 0.0;
         $state['remaining_maturity'] = 0.0;
         $state['remaining_months'] = 0;
         $state['next_due_date'] = null;
-        $state['expected_maturity_date'] = null;
+        $state['expected_maturity_date'] = $anchorDue;
+        $state['fund_balance'] = round(max((float) $state['fund_balance'], (float) $state['top_up']), 2);
+
+        return $this->withDerived($state);
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array<string, mixed>
+     */
+    private function markPaid(array $state, ?string $at = null): array
+    {
+        $fundBefore = (float) $state['fund_balance'];
+        $paidAt = $at ?? $this->lastPendingDueDate($state);
+        $state['status'] = self::STATUS_PAID;
+        $state['outstanding_fund_portion'] = 0.0;
+        $state['remaining_maturity'] = 0.0;
+        $state['remaining_months'] = 0;
+        $state['next_due_date'] = null;
+        $state['expected_maturity_date'] = $paidAt;
         $state['fund_balance'] = round(max((float) $state['fund_balance'], (float) $state['top_up']), 2);
         $state['schedule_rows'] = $this->markOpenRows(
             is_array($state['schedule_rows'] ?? null) ? $state['schedule_rows'] : [],
@@ -794,9 +1002,13 @@ final class MemberLoanLifecycleSimulator
             0.0,
             $fundBefore,
             (float) $state['fund_balance'],
+            (float) $state['cash_balance'],
             0.0,
             0.0,
             (float) $state['total_repaid'],
+            null,
+            null,
+            $paidAt,
         );
 
         return $this->withDerived($state);
@@ -877,13 +1089,19 @@ final class MemberLoanLifecycleSimulator
                 continue;
             }
 
-            if (in_array($kind, ['emi', 'pending', 'rolled_up', 'skipped', 'dropped'], true)) {
+            if (in_array($kind, ['emi', 'pending', 'rolled_up', 'skipped', 'dropped', 'paid'], true)) {
                 $mapped = match ($kind) {
                     'emi' => 'pending',
                     'rolled_up' => 'paid',
                     default => $kind,
                 };
-                $installments[] = $this->importScheduleRow($row, $mapped);
+                $rowImport = $this->importScheduleRow($row, $mapped);
+                if ($kind === 'rolled_up') {
+                    $rowImport['note'] = __('Rolled up');
+                } elseif ($kind === 'paid') {
+                    $rowImport['note'] = __('Regular payment');
+                }
+                $installments[] = $rowImport;
             }
         }
 
@@ -922,7 +1140,7 @@ final class MemberLoanLifecycleSimulator
                 'grace' => __('Grace'),
                 'contribution_due' => __('Contribution due'),
                 'contribution_paid' => __('Contribution paid'),
-                'paid' => __('Rolled up'),
+                'paid' => __('Regular payment'),
                 'skipped' => __('Skipped'),
                 'dropped' => __('Removed by roll-up'),
                 default => null,
@@ -940,6 +1158,7 @@ final class MemberLoanLifecycleSimulator
         float $amount,
         float $fundBefore,
         float $fundAfter,
+        float $cashAfter,
         float $outstandingFundPortion,
         float $remainingMaturity,
         float $totalRepaid,
@@ -961,6 +1180,7 @@ final class MemberLoanLifecycleSimulator
             'fund_before' => round($fundBefore, 2),
             'fund_balance' => round($fundAfter, 2),
             'fund_delta' => round($fundAfter - $fundBefore, 2),
+            'cash_balance' => round($cashAfter, 2),
             'outstanding_fund_portion' => round($outstandingFundPortion, 2),
             'outstanding_before' => round($outstandingBefore ?? $outstandingFundPortion, 2),
             'remaining_maturity' => round($remainingMaturity, 2),
@@ -987,6 +1207,28 @@ final class MemberLoanLifecycleSimulator
         $next = (string) ($state['next_due_date'] ?? '');
 
         return $next !== '' ? $next : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function lastPendingDueDate(array $state): ?string
+    {
+        $last = null;
+
+        foreach (is_array($state['schedule_rows'] ?? null) ? $state['schedule_rows'] : [] as $row) {
+            if (! is_array($row) || ($row['kind'] ?? '') !== 'pending') {
+                continue;
+            }
+
+            $due = (string) ($row['due_date'] ?? '');
+
+            if ($due !== '') {
+                $last = $due;
+            }
+        }
+
+        return $last;
     }
 
     /**
@@ -1022,6 +1264,34 @@ final class MemberLoanLifecycleSimulator
         if ($state['status'] !== self::STATUS_ACTIVE) {
             throw new InvalidArgumentException($message);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function resolveAfterCloseDate(array $state, ?string $at): string
+    {
+        $min = $this->afterCloseMinDate($state);
+
+        if ($min === null) {
+            throw new InvalidArgumentException(__('Contributions in the simulator apply after the loan is closed.'));
+        }
+
+        $minDate = Carbon::parse($min)->startOfDay();
+
+        if ($at === null || trim($at) === '') {
+            return $minDate->toDateString();
+        }
+
+        $date = Carbon::parse($at)->startOfDay();
+
+        if ($date->lt($minDate)) {
+            throw new InvalidArgumentException(__('Date cannot be before loan maturity (:date).', [
+                'date' => $minDate->toDateString(),
+            ]));
+        }
+
+        return $date->toDateString();
     }
 
     /**

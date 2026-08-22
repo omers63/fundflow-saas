@@ -54,7 +54,7 @@
             </div>
         </div>
 
-        <x-member::panel :title="__('How this estimate works')">
+        <x-member::panel :title="__('How this estimate works')" collapsible :open="false">
             <p class="text-sm text-gray-600 dark:text-gray-300">
                 {{ __('Enter a loan amount to see your fund share, the master fund share, monthly installments, and the two thresholds that apply.') }}
             </p>
@@ -84,69 +84,32 @@
             </div>
         </x-member::panel>
 
-        <x-member::panel :title="__('Loan amount')">
+        <x-member::panel :title="__('Loan amount')" collapsible>
             <div class="space-y-4">
                 <div>
                     <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                         {{ __('Funding approach') }}
                     </label>
-                    @if (count($this->fundingStrategyOptions) > 1)
-                        <select
-                            wire:model.live="fundingStrategy"
-                            class="block w-full rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                        >
-                            @foreach ($this->fundingStrategyOptions as $value => $label)
-                                <option value="{{ $value }}">{{ $label }}</option>
+                    @if (count($this->fundingApproachOptions) > 1)
+                        <div class="space-y-2">
+                            @foreach ($this->fundingApproachOptions as $value => $label)
+                                <label class="flex cursor-pointer items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                    <input
+                                        type="radio"
+                                        wire:model.live="fundingApproach"
+                                        value="{{ $value }}"
+                                        class="mt-1 border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
+                                    />
+                                    <span>{{ $label }}</span>
+                                </label>
                             @endforeach
-                        </select>
+                        </div>
                     @else
                         <p class="text-sm text-gray-700 dark:text-gray-300">
-                            {{ $this->fundingStrategyOptions[$this->fundingStrategy] ?? '—' }}
+                            {{ $this->fundingApproachOptions[$this->fundingApproach] ?? '—' }}
                         </p>
                     @endif
                 </div>
-
-                @if ($this->showsExcessDisposition)
-                    <div>
-                        <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            {{ __('Remaining fund balance above your loan share') }}
-                        </label>
-                        <div class="space-y-2">
-                            @foreach ($this->excessDispositionOptions as $value => $label)
-                                <label class="flex cursor-pointer items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                    <input
-                                        type="radio"
-                                        wire:model.live="excessFundDisposition"
-                                        value="{{ $value }}"
-                                        class="mt-1 border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
-                                    />
-                                    <span>{{ $label }}</span>
-                                </label>
-                            @endforeach
-                        </div>
-                    </div>
-                @endif
-
-                @if ($this->showsSettlementOptions)
-                    <div>
-                        <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            {{ __('Remaining fund balance above your loan share') }}
-                        </label>
-                        <div class="space-y-2">
-                            @foreach ($this->settlementOptionOptions as $value => $label)
-                                <label class="flex cursor-pointer items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                    <input
-                                        type="radio"
-                                        wire:model.live="excessFundSettlementOption"
-                                        value="{{ $value }}"
-                                        class="mt-1 border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
-                                    />
-                                    <span>{{ $label }}</span>
-                                </label>
-                            @endforeach
-                        </div>
-                    </div>
-                @endif
 
                 @if ($this->usesConfiguredSplit)
                     <p class="text-xs text-gray-500 dark:text-gray-400">
@@ -160,7 +123,7 @@
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                         <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300" for="loan-calculator-start-date">
-                            {{ __('Assumed start date') }}
+                            {{ __('Projected start date') }}
                         </label>
                         <input
                             id="loan-calculator-start-date"
@@ -193,87 +156,188 @@
                     </div>
                 </div>
 
-                <div class="rounded-lg border border-teal-200/80 bg-teal-50/60 px-3 py-3 dark:border-teal-800/40 dark:bg-teal-950/30">
-                    <div class="flex flex-wrap items-end justify-between gap-2">
-                        <div>
-                            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                @php
+                    $previewCalc = ($this->calculations[0] ?? null);
+                    $previewExcess = is_array($previewCalc) ? (float) ($previewCalc['excess_fund'] ?? 0) : 0.0;
+                    $previewEarlySettlement = is_array($previewCalc) ? (float) ($previewCalc['early_settlement_amount'] ?? 0) : 0.0;
+                    $previewInstallmentsCovered = is_array($previewCalc) ? (int) ($previewCalc['installments_covered'] ?? 0) : 0;
+                    $showPreviewExcess = $this->usesConfiguredSplit && $previewExcess > 0.00001;
+                    $showPreviewDisposition = $showPreviewExcess && (
+                        ($this->showsEarlySettlementEstimate && $previewEarlySettlement > 0.00001)
+                        || $this->showsCashTransferEstimate
+                    );
+                    $previewFundColumns = match (true) {
+                        $showPreviewDisposition => 'sm:grid-cols-3',
+                        $showPreviewExcess => 'sm:grid-cols-2',
+                        default => 'sm:grid-cols-1',
+                    };
+                @endphp
+                <div class="rounded-xl border border-gray-200/80 bg-white/80 p-3 ring-1 ring-gray-100 dark:border-gray-700 dark:bg-gray-900/20 dark:ring-gray-800">
+                    <div class="grid grid-cols-1 gap-3 {{ $previewFundColumns }}">
+                        <div class="rounded-lg bg-emerald-50/80 p-3 ring-1 ring-emerald-200/80 dark:bg-emerald-950/30 dark:ring-emerald-800/60">
+                            <p class="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
                                 {{ __('Projected fund at start') }}
                             </p>
-                            <p class="mt-1 text-lg font-bold tabular-nums text-gray-900 dark:text-white">
+                            <p class="mt-1 text-lg font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
                                 <x-member::amount :value="$projection['projected_fund']" :currency="$currency" />
                             </p>
+                            <p class="mt-1 text-xs text-emerald-700/80 dark:text-emerald-300/80">
+                                @if ((int) $projection['cycles_added'] > 0)
+                                    {{ __('Current fund :current + :count × :amount', [
+                                        'current' => \App\Filament\Support\MoneyDisplay::format($projection['current_fund'], $currency) ?? '—',
+                                        'count' => $projection['cycles_added'],
+                                        'amount' => \App\Filament\Support\MoneyDisplay::format($projection['contribution_amount'], $currency) ?? '—',
+                                    ]) }}
+                                @else
+                                    {{ __('Using your current fund balance.') }}
+                                @endif
+                            </p>
                         </div>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">
-                            @if ((int) $projection['cycles_added'] > 0)
-                                {{ __('Current fund :current + :count × :amount', [
-                                    'current' => \App\Filament\Support\MoneyDisplay::format($projection['current_fund'], $currency) ?? '—',
-                                    'count' => $projection['cycles_added'],
-                                    'amount' => \App\Filament\Support\MoneyDisplay::format($projection['contribution_amount'], $currency) ?? '—',
-                                ]) }}
-                            @else
-                                {{ __('Using your current fund balance.') }}
-                            @endif
-                        </p>
-                    </div>
-                </div>
 
-                <div>
-                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300" for="loan-calculator-grace">
-                        {{ __('Grace cycles before first repayment') }}
-                    </label>
-                    <select
-                        id="loan-calculator-grace"
-                        wire:model.live="graceCycles"
-                        class="block w-full max-w-xs rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                    >
-                        @foreach ($this->graceCycleOptions as $value => $label)
-                            <option value="{{ $value }}">{{ $label }}</option>
-                        @endforeach
-                    </select>
-                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {{ __('Grace skips EMI and the contribution for those cycles. If the start-cycle contribution is already paid or included in the projection, grace starts on the next unpaid cycle.') }}
-                    </p>
-                </div>
+                        @if ($showPreviewExcess)
+                            <div class="rounded-lg bg-amber-50/80 p-3 ring-1 ring-amber-200/80 dark:bg-amber-950/30 dark:ring-amber-800/60">
+                                <p class="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                                    {{ __('Excess fund above share') }}
+                                </p>
+                                <p class="mt-1 text-lg font-bold tabular-nums text-amber-900 dark:text-amber-100">
+                                    <x-member::amount :value="$previewExcess" :currency="$currency" />
+                                </p>
+                            </div>
+                        @endif
 
-                <div>
-                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        {{ __('Loan amount') }}
-                        (<span dir="ltr">{!! \App\Filament\Support\MoneyDisplay::symbolHtml($currency)->toHtml() !!}</span>)
-                    </label>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <input
-                            type="text"
-                            inputmode="decimal"
-                            autocomplete="off"
-                            wire:model="loanAmount"
-                            wire:keydown.enter.prevent="calculate"
-                            placeholder="{{ __('e.g. 20000') }}"
-                            class="block w-full max-w-xs rounded-lg border-gray-300 px-4 py-2.5 text-base shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                        />
-                        <x-filament::button type="button" color="primary" size="sm" icon="heroicon-o-calculator" wire:click="calculate">
-                            {{ __('Calculate') }}
-                        </x-filament::button>
+                        @if ($showPreviewDisposition)
+                            <div class="rounded-lg bg-sky-50/80 p-3 ring-1 ring-sky-200/80 dark:bg-sky-950/30 dark:ring-sky-800/60">
+                                @if ($this->showsEarlySettlementEstimate && $previewEarlySettlement > 0.00001)
+                                    <p class="text-xs uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                                        {{ __('Estimated early settlement') }}
+                                    </p>
+                                    <p class="mt-1 text-lg font-bold tabular-nums text-sky-900 dark:text-sky-100">
+                                        <x-member::amount :value="$previewEarlySettlement" :currency="$currency" />
+                                    </p>
+                                    <p class="mt-0.5 text-xs text-sky-700/80 dark:text-sky-300/80">
+                                        {{ __('~:count installment(s)', ['count' => $previewInstallmentsCovered]) }}
+                                    </p>
+                                @else
+                                    <p class="text-xs uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                                        {{ __('Estimated cash transfer') }}
+                                    </p>
+                                    <p class="mt-1 text-lg font-bold tabular-nums text-sky-900 dark:text-sky-100">
+                                        <x-member::amount :value="$previewExcess" :currency="$currency" />
+                                    </p>
+                                @endif
+                            </div>
+                        @endif
                     </div>
                 </div>
 
                 @if ($this->activeTiers->isNotEmpty())
-                    <div class="flex flex-wrap gap-2">
-                        @foreach ($this->activeTiers as $tier)
-                            <button
-                                type="button"
-                                wire:click="$set('loanAmount', {{ (float) $tier->min_amount }})"
-                                @class([
-                                    'inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                                    'bg-primary-100 text-primary-800 ring-1 ring-primary-300 dark:bg-primary-900/50 dark:text-primary-200 dark:ring-primary-700' => abs($loanAmount - (float) $tier->min_amount) < 0.01,
-                                    'bg-gray-100 text-gray-700 hover:bg-primary-100 hover:text-primary-700 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-primary-900 dark:hover:text-primary-300' => abs($loanAmount - (float) $tier->min_amount) >= 0.01,
-                                ])
-                            >
-                                {{ $tier->label }}
-                                ({!! \App\Filament\Support\MoneyDisplay::html((float) $tier->min_amount, $currency, precision: 0)?->toHtml() !!})
-                            </button>
-                        @endforeach
-                    </div>
+                    <details class="ff-member-loan-calc-tiers-wrap group rounded-xl ring-1 ring-gray-200 dark:ring-gray-700" open>
+                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 marker:content-none [&::-webkit-details-marker]:hidden">
+                            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                {{ __('Loan tiers') }}
+                            </span>
+                            <x-heroicon-o-chevron-down class="h-4 w-4 shrink-0 text-gray-400 transition group-open:rotate-180 dark:text-gray-500" />
+                        </summary>
+                        <div class="border-t border-gray-100 px-2.5 pb-2.5 pt-2 dark:border-gray-700">
+                            <div class="ff-member-loan-calc-tiers">
+                                @foreach ($this->activeTiers as $tier)
+                                    @php
+                                        $tierMin = round((float) $tier->min_amount, 2);
+                                        $tierMax = round((float) $tier->max_amount, 2);
+                                        $tierBoundsEqual = abs($tierMin - $tierMax) < 0.01;
+                                        $minSelected = abs($loanAmount - $tierMin) < 0.01;
+                                        $maxSelected = ! $tierBoundsEqual && abs($loanAmount - $tierMax) < 0.01;
+                                        $tierInRange = $loanAmount > 0.00001
+                                            && $loanAmount + 0.00001 >= $tierMin
+                                            && $loanAmount - 0.00001 <= $tierMax;
+                                    @endphp
+                                    <div
+                                        @class([
+                                            'ff-member-loan-calc-tier flex h-full min-w-0 flex-col gap-1.5 rounded-xl px-2 py-2 ring-1',
+                                            'bg-primary-50/70 ring-primary-300 dark:bg-primary-950/30 dark:ring-primary-700' => $tierInRange,
+                                            'bg-gray-50 ring-gray-200 dark:bg-gray-800/60 dark:ring-gray-700' => ! $tierInRange,
+                                        ])
+                                    >
+                                        <span class="truncate text-center text-xs font-semibold text-gray-700 dark:text-gray-200">
+                                            {{ $tier->label }}
+                                        </span>
+                                        <div
+                                            class="flex min-h-8 w-full min-w-0 flex-1 overflow-hidden rounded-lg ring-1 ring-gray-200 dark:ring-gray-600"
+                                            role="group"
+                                            aria-label="{{ __('Loan amounts for :tier', ['tier' => $tier->label]) }}"
+                                        >
+                                            <button
+                                                type="button"
+                                                wire:click="$set('loanAmount', {{ $tierMin }})"
+                                                @class([
+                                                    'min-w-0 flex-1 px-1 py-1.5 text-center text-[11px] font-semibold leading-tight tabular-nums transition-colors sm:text-xs',
+                                                    'bg-primary-600 text-white' => $minSelected,
+                                                    'bg-white text-gray-700 hover:bg-primary-50 hover:text-primary-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-primary-950 dark:hover:text-primary-200' => ! $minSelected,
+                                                ])
+                                            >
+                                                <span class="block truncate">{!! \App\Filament\Support\MoneyDisplay::html($tierMin, $currency, precision: 0)?->toHtml() !!}</span>
+                                            </button>
+                                            @unless ($tierBoundsEqual)
+                                                <button
+                                                    type="button"
+                                                    wire:click="$set('loanAmount', {{ $tierMax }})"
+                                                    @class([
+                                                        'min-w-0 flex-1 border-s border-gray-200 px-1 py-1.5 text-center text-[11px] font-semibold leading-tight tabular-nums transition-colors dark:border-gray-600 sm:text-xs',
+                                                        'bg-primary-600 text-white' => $maxSelected,
+                                                        'bg-white text-gray-700 hover:bg-primary-50 hover:text-primary-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-primary-950 dark:hover:text-primary-200' => ! $maxSelected,
+                                                    ])
+                                                >
+                                                    <span class="block truncate">{!! \App\Filament\Support\MoneyDisplay::html($tierMax, $currency, precision: 0)?->toHtml() !!}</span>
+                                                </button>
+                                            @endunless
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    </details>
                 @endif
+
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-end">
+                    <div>
+                        <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300" for="loan-calculator-grace">
+                            {{ __('Grace cycles before first repayment') }}
+                        </label>
+                        <select
+                            id="loan-calculator-grace"
+                            wire:model.live="graceCycles"
+                            class="block w-full rounded-lg border-gray-300 px-3 py-2.5 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                        >
+                            @foreach ($this->graceCycleOptions as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {{ __('Loan amount') }}
+                            (<span dir="ltr">{!! \App\Filament\Support\MoneyDisplay::symbolHtml($currency)->toHtml() !!}</span>)
+                        </label>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <input
+                                type="text"
+                                inputmode="decimal"
+                                autocomplete="off"
+                                wire:model="loanAmount"
+                                wire:keydown.enter.prevent="calculate"
+                                placeholder="{{ __('e.g. 20000') }}"
+                                class="block min-w-0 flex-1 rounded-lg border-gray-300 px-4 py-2.5 text-base shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                            />
+                            <x-filament::button type="button" color="primary" size="sm" icon="heroicon-o-calculator" wire:click="calculate">
+                                {{ __('Calculate') }}
+                            </x-filament::button>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('Grace skips EMI and the contribution for those cycles. If the start-cycle contribution is already paid or included in the projection, grace starts on the next unpaid cycle.') }}
+                </p>
             </div>
         </x-member::panel>
 
@@ -305,7 +369,15 @@
         @endif
 
         @if ($loanAmount > 0)
-            @if (count($this->calculations) > 0 && $this->calculatorMode === 'simulate')
+            @if (filled($this->estimateBlockReason))
+                <div class="rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-amber-200 dark:bg-gray-800 dark:ring-amber-800/50 sm:p-8">
+                    <x-heroicon-o-exclamation-triangle class="mx-auto mb-3 h-10 w-10 text-amber-400" />
+                    <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ __('Cannot estimate or simulate this loan') }}</p>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        {{ $this->estimateBlockReason }}
+                    </p>
+                </div>
+            @elseif (count($this->calculations) > 0 && $this->calculatorMode === 'simulate')
                 @include('filament.member.pages.partials.loan-lifecycle-simulator', [
                     'currency' => $currency,
                     'calculations' => $this->calculations,
@@ -444,51 +516,14 @@
                             </div>
                         </div>
 
-                        @if ($this->usesConfiguredSplit && $calc['excess_fund'] > 0)
-                            <div class="border-t border-gray-100 px-4 py-4 dark:border-gray-700 sm:px-5">
-                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                    <div>
-                                        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                            {{ __('Excess fund above share') }}
-                                        </p>
-                                        <p class="mt-1 font-semibold text-gray-900 dark:text-white">
-                                            <x-member::amount :value="$calc['excess_fund']" :currency="$currency" />
-                                        </p>
-                                    </div>
-                                    @if ($this->showsSettlementOptions && $calc['early_settlement_amount'] > 0)
-                                        <div>
-                                            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                                {{ __('Estimated early settlement') }}
-                                            </p>
-                                            <p class="mt-1 font-semibold text-sky-700 dark:text-sky-300">
-                                                <x-member::amount :value="$calc['early_settlement_amount']" :currency="$currency" />
-                                            </p>
-                                            <p class="text-xs text-gray-400">
-                                                {{ __('~:count installment(s)', ['count' => $calc['installments_covered']]) }}
-                                            </p>
-                                        </div>
-                                    @elseif ($this->showsExcessDisposition && $this->excessFundDisposition === \App\Support\LoanFundExcessDisposition::CASH_OUT)
-                                        <div>
-                                            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                                {{ __('Estimated cash transfer') }}
-                                            </p>
-                                            <p class="mt-1 font-semibold text-sky-700 dark:text-sky-300">
-                                                <x-member::amount :value="$calc['excess_fund']" :currency="$currency" />
-                                            </p>
-                                        </div>
-                                    @endif
-                                </div>
-                            </div>
-                        @endif
-
                         @php
                             $schedule = $calc['schedule'] ?? ['rows' => []];
                             $rowKind = fn (array $row): string => (string) ($row['kind'] ?? '');
                         @endphp
                         @if (count($schedule['rows'] ?? []) > 0)
-                            <div class="border-t border-gray-100 px-4 py-4 dark:border-gray-700 sm:px-5">
-                                <div class="mb-3 flex flex-wrap items-end justify-between gap-2">
-                                    <div>
+                            <details class="group border-t border-gray-100 dark:border-gray-700" open>
+                                <summary class="flex cursor-pointer list-none items-end justify-between gap-3 px-4 py-4 marker:content-none sm:px-5 [&::-webkit-details-marker]:hidden">
+                                    <div class="min-w-0">
                                         <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                                             {{ __('Estimated schedule') }}
                                         </p>
@@ -510,76 +545,83 @@
                                             </p>
                                         @endif
                                     </div>
-                                    <x-member::chip variant="purple">
-                                        {{ __('Grace') }}:
-                                        {{ $this->graceCycleOptions[(int) ($schedule['grace_cycles'] ?? 0)] ?? __('None') }}
-                                    </x-member::chip>
-                                </div>
-                                <div class="ff-member-loan-calc-schedule max-h-80 overflow-y-auto rounded-lg ring-1 ring-gray-200 dark:ring-gray-700">
-                                    <div class="ff-member-loan-calc-schedule-header border-b border-gray-100 bg-gray-50 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400">
-                                        <span>{{ __('EMI') }}</span>
-                                        <span>{{ __('Cycle') }}</span>
-                                        <span>{{ __('Due date') }}</span>
-                                        <span>{{ __('Amount') }}</span>
+                                    <div class="flex shrink-0 items-center gap-2">
+                                        <x-member::chip variant="purple">
+                                            {{ __('Grace') }}:
+                                            {{ $this->graceCycleOptions[(int) ($schedule['grace_cycles'] ?? 0)] ?? __('None') }}
+                                        </x-member::chip>
+                                        <x-heroicon-o-chevron-down class="h-4 w-4 shrink-0 text-gray-400 transition group-open:rotate-180 dark:text-gray-500" />
                                     </div>
-                                    @foreach ($schedule['rows'] as $row)
-                                        @php $kind = $rowKind($row); @endphp
-                                        <div
-                                            @class([
-                                                'ff-member-loan-calc-schedule-row border-b border-gray-100 px-3 py-2 last:border-b-0 dark:border-gray-700 sm:px-0',
-                                                'ff-member-loan-calc-schedule-row--grace bg-violet-50/70 dark:bg-violet-950/20' => $kind === 'grace',
-                                                'ff-member-loan-calc-schedule-row--contribution bg-amber-50/70 dark:bg-amber-950/20' => $kind === 'contribution_due',
-                                                'ff-member-loan-calc-schedule-row--paid bg-emerald-50/50 dark:bg-emerald-950/20' => in_array($kind, ['contribution_paid', 'rolled_up'], true),
-                                                'ff-member-loan-calc-schedule-row--skipped bg-slate-50 dark:bg-slate-900/40' => in_array($kind, ['skipped', 'dropped'], true),
-                                            ])
-                                        >
-                                            <div class="text-xs font-semibold tabular-nums text-gray-700 dark:text-gray-200">
-                                                {{ $row['number'] ?? '—' }}
-                                            </div>
-                                            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                                                @if ($kind === 'grace')
-                                                    <x-member::chip variant="purple">{{ __('Grace') }}</x-member::chip>
-                                                @elseif ($kind === 'contribution_due')
-                                                    <x-member::chip variant="amber">{{ __('Contribution due') }}</x-member::chip>
-                                                @elseif ($kind === 'contribution_paid')
-                                                    <x-member::chip variant="green">{{ __('Paid') }}</x-member::chip>
-                                                @elseif ($kind === 'rolled_up')
-                                                    <x-member::chip variant="blue">{{ __('Rolled up') }}</x-member::chip>
-                                                @elseif ($kind === 'skipped')
-                                                    <x-member::chip variant="gray">{{ __('Skipped') }}</x-member::chip>
-                                                @elseif ($kind === 'dropped')
-                                                    <x-member::chip variant="gray">{{ __('Removed') }}</x-member::chip>
-                                                @endif
-                                                <p class="text-sm text-gray-800 dark:text-gray-100">{{ $row['cycle_label'] }}</p>
-                                            </div>
-                                            <p class="min-w-0 text-sm text-gray-500 dark:text-gray-400">
-                                                @if ($kind === 'grace')
-                                                    —
-                                                @else
-                                                    {{ $row['due_label'] ?? '—' }}
-                                                @endif
-                                            </p>
-                                            <p @class([
-                                                'text-sm font-semibold tabular-nums sm:text-end',
-                                                'text-gray-400 dark:text-gray-500' => in_array($kind, ['skipped', 'dropped'], true),
-                                                'text-gray-900 dark:text-white' => ! in_array($kind, ['skipped', 'dropped'], true),
-                                            ])>
-                                                @if ($kind === 'grace' || $kind === 'skipped')
-                                                    {{ __('No EMI') }}
-                                                @elseif ($kind === 'contribution_due')
-                                                    {{ __('Contribution due') }}
-                                                @elseif ($kind === 'contribution_paid')
-                                                    {{ __('Contribution paid') }}
-                                                @elseif ($kind === 'dropped')
-                                                    {{ __('Removed by roll-up') }}
-                                                @else
-                                                    <x-member::amount :value="$row['amount']" :currency="$currency" />
-                                                @endif
-                                            </p>
+                                </summary>
+                                <div class="px-4 pb-4 sm:px-5">
+                                    <div class="ff-member-loan-calc-schedule max-h-80 overflow-y-auto rounded-lg ring-1 ring-gray-200 dark:ring-gray-700">
+                                        <div class="ff-member-loan-calc-schedule-header border-b border-gray-100 bg-gray-50 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400">
+                                            <span>{{ __('EMI') }}</span>
+                                            <span>{{ __('Cycle') }}</span>
+                                            <span>{{ __('Due date') }}</span>
+                                            <span>{{ __('Amount') }}</span>
                                         </div>
-                                    @endforeach
+                                        @foreach ($schedule['rows'] as $row)
+                                            @php $kind = $rowKind($row); @endphp
+                                            <div
+                                                @class([
+                                                    'ff-member-loan-calc-schedule-row border-b border-gray-100 px-3 py-2 last:border-b-0 dark:border-gray-700 sm:px-0',
+                                                    'ff-member-loan-calc-schedule-row--grace bg-violet-50/70 dark:bg-violet-950/20' => $kind === 'grace',
+                                                    'ff-member-loan-calc-schedule-row--contribution bg-amber-50/70 dark:bg-amber-950/20' => $kind === 'contribution_due',
+                                                    'ff-member-loan-calc-schedule-row--paid bg-emerald-50/50 dark:bg-emerald-950/20' => in_array($kind, ['contribution_paid', 'rolled_up', 'paid'], true),
+                                                    'ff-member-loan-calc-schedule-row--skipped bg-slate-50 dark:bg-slate-900/40' => in_array($kind, ['skipped', 'dropped'], true),
+                                                ])
+                                            >
+                                                <div class="text-xs font-semibold tabular-nums text-gray-700 dark:text-gray-200">
+                                                    {{ $row['number'] ?? '—' }}
+                                                </div>
+                                                <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                                    @if ($kind === 'grace')
+                                                        <x-member::chip variant="purple">{{ __('Grace') }}</x-member::chip>
+                                                    @elseif ($kind === 'contribution_due')
+                                                        <x-member::chip variant="amber">{{ __('Contribution due') }}</x-member::chip>
+                                                    @elseif ($kind === 'contribution_paid')
+                                                        <x-member::chip variant="green">{{ __('Paid') }}</x-member::chip>
+                                                    @elseif ($kind === 'paid')
+                                                        <x-member::chip variant="green">{{ __('Regular payment') }}</x-member::chip>
+                                                    @elseif ($kind === 'rolled_up')
+                                                        <x-member::chip variant="blue">{{ __('Rolled up') }}</x-member::chip>
+                                                    @elseif ($kind === 'skipped')
+                                                        <x-member::chip variant="gray">{{ __('Skipped') }}</x-member::chip>
+                                                    @elseif ($kind === 'dropped')
+                                                        <x-member::chip variant="gray">{{ __('Removed') }}</x-member::chip>
+                                                    @endif
+                                                    <p class="text-sm text-gray-800 dark:text-gray-100">{{ $row['cycle_label'] }}</p>
+                                                </div>
+                                                <p class="min-w-0 text-sm text-gray-500 dark:text-gray-400">
+                                                    @if ($kind === 'grace')
+                                                        —
+                                                    @else
+                                                        {{ $row['due_label'] ?? '—' }}
+                                                    @endif
+                                                </p>
+                                                <p @class([
+                                                    'text-sm font-semibold tabular-nums sm:text-end',
+                                                    'text-gray-400 dark:text-gray-500' => in_array($kind, ['skipped', 'dropped'], true),
+                                                    'text-gray-900 dark:text-white' => ! in_array($kind, ['skipped', 'dropped'], true),
+                                                ])>
+                                                    @if ($kind === 'grace' || $kind === 'skipped')
+                                                        {{ __('No EMI') }}
+                                                    @elseif ($kind === 'contribution_due')
+                                                        {{ __('Contribution due') }}
+                                                    @elseif ($kind === 'contribution_paid')
+                                                        {{ __('Contribution paid') }}
+                                                    @elseif ($kind === 'dropped')
+                                                        {{ __('Removed by roll-up') }}
+                                                    @else
+                                                        <x-member::amount :value="$row['amount']" :currency="$currency" />
+                                                    @endif
+                                                </p>
+                                            </div>
+                                        @endforeach
+                                    </div>
                                 </div>
-                            </div>
+                            </details>
                         @endif
                     </div>
                 @endforeach
