@@ -85,7 +85,7 @@
                 }, 400);
             };
 
-            var delay = standalone ? 700 : 1100;
+            var delay = standalone ? 2000 : 2500;
             if (document.readyState === 'complete') {
                 window.setTimeout(hide, delay);
             } else {

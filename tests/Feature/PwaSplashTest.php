@@ -39,7 +39,8 @@ it('renders the icon-plus-wordmark splash for a Samman pack', function () {
         ->and($splash)->toContain('id="ff-app-splash"')
         ->and($splash)->toContain('/branding/samman/icons/icon-512x512.png')
         ->and($splash)->toContain('/branding/samman/marks/wordmark.png')
-        ->and($splash)->toContain('#F7F5ED');
+        ->and($splash)->toContain('#F7F5ED')
+        ->and($splash)->toContain('standalone ? 2000 : 2500');
 });
 
 it('serves the active brand pack icons from the web manifest', function () {
