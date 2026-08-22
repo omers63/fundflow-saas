@@ -137,7 +137,7 @@
                             {{ __('Regular payment uses one installment. Enter an amount only for partial early settlement. Full early settlement closes the loan and restores the pre-loan fund balance.') }}
                         </p>
 
-                        <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                        <div class="ff-member-loan-sim-pay-actions mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
                             <div class="flex flex-col gap-3">
                                 <div>
                                     <p class="text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('Regular payment') }}</p>
@@ -369,8 +369,8 @@
                     <x-heroicon-o-chevron-down class="h-4 w-4 shrink-0 text-gray-400 transition group-open:rotate-180 dark:text-gray-500" />
                 </summary>
                 <div class="px-4 pb-4 sm:px-5">
-                    <div class="max-h-72 overflow-auto rounded-lg ring-1 ring-gray-200 dark:ring-gray-700">
-                        <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
+                    <div class="ff-member-loan-sim-history">
+                        <table class="ff-member-loan-sim-history__table min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
                             <thead class="sticky top-0 bg-gray-50 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800/80 dark:text-gray-400">
                                 <tr>
                                     <th scope="col" class="px-3 py-2 text-center">{{ __('Date') }}</th>
@@ -385,13 +385,19 @@
                             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                 @forelse (array_reverse($sim['history'] ?? []) as $event)
                                     <tr class="bg-white dark:bg-gray-800/40">
-                                        <td class="px-3 py-2 align-top text-center tabular-nums text-gray-600 dark:text-gray-300">
+                                        <td
+                                            data-label="{{ __('Date') }}"
+                                            class="px-3 py-2 align-top text-center tabular-nums text-gray-600 dark:text-gray-300"
+                                        >
                                             {{ $event['at_label'] ?? ($event['at'] ?? '—') }}
                                         </td>
-                                        <td class="px-3 py-2 align-top text-center font-medium text-gray-800 dark:text-gray-100">
+                                        <td
+                                            data-label="{{ __('Event') }}"
+                                            class="ff-member-loan-sim-history__event px-3 py-2 align-top text-center font-medium text-gray-800 dark:text-gray-100"
+                                        >
                                             {{ $event['label'] ?? '—' }}
                                         </td>
-                                        <td class="px-3 py-2 align-top text-center tabular-nums">
+                                        <td data-label="{{ __('Amount') }}" class="px-3 py-2 align-top text-center tabular-nums">
                                             @php $historyAmount = (float) ($event['amount'] ?? 0); @endphp
                                             @if (abs($historyAmount) > 0.00001)
                                                 <x-member::amount :value="$historyAmount" :currency="$currency" signed />
@@ -399,22 +405,22 @@
                                                 —
                                             @endif
                                         </td>
-                                        <td class="px-3 py-2 align-top text-center tabular-nums">
+                                        <td data-label="{{ __('Fund') }}" class="px-3 py-2 align-top text-center tabular-nums">
                                             <x-member::amount :value="$event['fund_balance'] ?? 0" :currency="$currency" signed />
                                         </td>
-                                        <td class="px-3 py-2 align-top text-center tabular-nums">
+                                        <td data-label="{{ __('Cash') }}" class="px-3 py-2 align-top text-center tabular-nums">
                                             <x-member::amount :value="$event['cash_balance'] ?? 0" :currency="$currency" signed />
                                         </td>
-                                        <td class="px-3 py-2 align-top text-center tabular-nums">
+                                        <td data-label="{{ __('Outstanding fund portion') }}" class="px-3 py-2 align-top text-center tabular-nums">
                                             <x-member::amount :value="$event['outstanding_fund_portion'] ?? 0" :currency="$currency" signed />
                                         </td>
-                                        <td class="px-3 py-2 align-top text-center tabular-nums">
+                                        <td data-label="{{ __('Remaining maturity') }}" class="px-3 py-2 align-top text-center tabular-nums">
                                             <x-member::amount :value="$event['remaining_maturity'] ?? 0" :currency="$currency" signed />
                                         </td>
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="px-3 py-4 text-center text-gray-500 dark:text-gray-400">
+                                        <td colspan="7" class="ff-member-loan-sim-history__empty px-3 py-4 text-center text-gray-500 dark:text-gray-400">
                                             {{ __('No simulation events yet.') }}
                                         </td>
                                     </tr>
@@ -460,7 +466,7 @@
                         $showAfterCloseContribution = ! ($sim['eligible_for_new_loan'] ?? false);
                     @endphp
                     <div class="space-y-3">
-                        <div class="min-w-0 max-w-xs">
+                        <div class="min-w-0 w-full sm:max-w-xs">
                             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="loan-sim-after-close-date">
                                 {{ __('Date') }}
                             </label>
@@ -482,17 +488,17 @@
                                     <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="loan-sim-contribution">
                                         {{ __('Contribution amount') }}
                                     </label>
-                                    <div class="flex h-10 items-stretch gap-2">
+                                    <div class="ff-member-loan-sim-after-close-field">
                                         <select
                                             id="loan-sim-contribution"
                                             wire:model="simulationContributionAmount"
-                                            class="block h-10 min-w-0 flex-1 rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                            class="block h-10 min-w-0 w-full flex-1 rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                                         >
                                             @foreach ($this->projectedContributionOptions as $value => $label)
                                                 <option value="{{ $value }}">{{ $label }}</option>
                                             @endforeach
                                         </select>
-                                        <x-filament::button type="button" color="primary" size="sm" class="shrink-0" wire:click="applySimulationContribution">
+                                        <x-filament::button type="button" color="primary" size="sm" wire:click="applySimulationContribution">
                                             {{ __('Apply contribution cycle') }}
                                         </x-filament::button>
                                     </div>
@@ -502,16 +508,16 @@
                                 <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="loan-sim-cash-deposit">
                                     {{ __('Cash deposit amount') }}
                                 </label>
-                                <div class="flex h-10 items-stretch gap-2">
+                                <div class="ff-member-loan-sim-after-close-field">
                                     <input
                                         id="loan-sim-cash-deposit"
                                         type="number"
                                         min="0"
                                         step="0.01"
                                         wire:model="simulationCashDepositAmount"
-                                        class="block h-10 min-w-0 flex-1 rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                        class="block h-10 min-w-0 w-full flex-1 rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                                     />
-                                    <x-filament::button type="button" color="success" size="sm" class="shrink-0" wire:click="applySimulationCashDeposit">
+                                    <x-filament::button type="button" color="success" size="sm" wire:click="applySimulationCashDeposit">
                                         {{ __('Apply cash deposit') }}
                                     </x-filament::button>
                                 </div>

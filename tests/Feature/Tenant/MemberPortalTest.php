@@ -19,8 +19,7 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Support\BusinessDaySettings;
-use App\Support\LoanExcessFundSettlementOption;
-use App\Support\LoanFundExcessDisposition;
+use App\Support\LoanCalculatorFundingApproach;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
 use App\Support\PublicPageSettings;
@@ -321,7 +320,7 @@ test('loan calculator shows repayment estimate when tier matches', function () {
 
     $component = Livewire::test(LoanCalculatorPage::class)
         ->set('graceCycles', 1)
-        ->set('fundingApproach', \App\Support\LoanCalculatorFundingApproach::MEMBER_FUND_TOPUP)
+        ->set('fundingApproach', LoanCalculatorFundingApproach::MEMBER_FUND_TOPUP)
         ->set('loanAmount', 10000)
         ->call('calculate')
         ->assertSee(__('months'), false)
@@ -396,8 +395,8 @@ test('loan calculator exposes a combined funding approach list', function () {
         ->assertSee(__('Transfer excess to my cash account at disbursement'), false)
         ->assertSee(__('Apply remaining fund as early settlement (roll up schedule)'), false)
         ->assertSee(__('Apply remaining fund as early settlement (skip installments)'), false)
-        ->set('fundingApproach', \App\Support\LoanCalculatorFundingApproach::SKIP_FUTURE)
-        ->assertSet('fundingApproach', \App\Support\LoanCalculatorFundingApproach::SKIP_FUTURE);
+        ->set('fundingApproach', LoanCalculatorFundingApproach::SKIP_FUTURE)
+        ->assertSet('fundingApproach', LoanCalculatorFundingApproach::SKIP_FUTURE);
 });
 
 test('loan calculator skip approach shows regular payments from excess on the schedule', function () {
@@ -470,7 +469,7 @@ test('loan calculator lifecycle simulator supports regular payments and full ear
 
     $component = Livewire::test(LoanCalculatorPage::class)
         ->set('graceCycles', 0)
-        ->set('fundingApproach', \App\Support\LoanCalculatorFundingApproach::KEEP_IN_FUND)
+        ->set('fundingApproach', LoanCalculatorFundingApproach::KEEP_IN_FUND)
         ->set('loanAmount', 100000)
         ->call('calculate')
         ->assertSee(__('Estimate'), false)
@@ -507,6 +506,9 @@ test('loan calculator lifecycle simulator supports regular payments and full ear
         ->assertSee(__('Reset simulation'), false)
         ->assertDontSeeHtml('text-2xl font-bold text-primary-600')
         ->assertSee(__('Simulation history'), false)
+        ->assertSeeHtml('ff-member-loan-sim-history')
+        ->assertSeeHtml('data-label')
+        ->assertSeeHtml('ff-member-loan-sim-pay-actions')
         ->assertSeeHtml('ff-member-amount--success')
         ->assertSeeHtml('ff-member-amount--danger');
 
@@ -571,7 +573,7 @@ test('loan calculator simulator partial early settlement rolls up even when esti
 
     $component = Livewire::test(LoanCalculatorPage::class)
         ->set('graceCycles', 0)
-        ->set('fundingApproach', \App\Support\LoanCalculatorFundingApproach::KEEP_IN_FUND)
+        ->set('fundingApproach', LoanCalculatorFundingApproach::KEEP_IN_FUND)
         ->set('loanAmount', 100000)
         ->call('calculate')
         ->call('setCalculatorMode', 'simulate')
@@ -615,7 +617,7 @@ test('loan calculator blocks estimate and simulate when member portion exceeds p
 
     $component = Livewire::test(LoanCalculatorPage::class)
         ->set('graceCycles', 0)
-        ->set('fundingApproach', \App\Support\LoanCalculatorFundingApproach::KEEP_IN_FUND)
+        ->set('fundingApproach', LoanCalculatorFundingApproach::KEEP_IN_FUND)
         ->set('loanAmount', 100000)
         ->call('calculate')
         ->assertSee(__('Cannot estimate or simulate this loan'), false)

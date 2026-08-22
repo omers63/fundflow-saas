@@ -319,7 +319,7 @@
                             {{ __('Loan amount') }}
                             (<span dir="ltr">{!! \App\Filament\Support\MoneyDisplay::symbolHtml($currency)->toHtml() !!}</span>)
                         </label>
-                        <div class="flex flex-wrap items-center gap-2">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                             <input
                                 type="text"
                                 inputmode="decimal"
@@ -327,9 +327,9 @@
                                 wire:model="loanAmount"
                                 wire:keydown.enter.prevent="calculate"
                                 placeholder="{{ __('e.g. 20000') }}"
-                                class="block min-w-0 flex-1 rounded-lg border-gray-300 px-4 py-2.5 text-base shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                class="block w-full min-w-0 flex-1 rounded-lg border-gray-300 px-4 py-2.5 text-base shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                             />
-                            <x-filament::button type="button" color="primary" size="sm" icon="heroicon-o-calculator" wire:click="calculate">
+                            <x-filament::button type="button" color="primary" size="sm" icon="heroicon-o-calculator" class="w-full sm:w-auto" wire:click="calculate">
                                 {{ __('Calculate') }}
                             </x-filament::button>
                         </div>
@@ -342,12 +342,12 @@
         </x-member::panel>
 
         @if ($loanAmount > 0 && count($this->calculations) > 0)
-            <div class="mt-4 flex flex-wrap gap-2 sm:mt-5" role="tablist" aria-label="{{ __('Calculator mode') }}">
+            <div class="mt-4 grid grid-cols-2 gap-2 sm:mt-5 sm:flex sm:flex-wrap" role="tablist" aria-label="{{ __('Calculator mode') }}">
                 <button
                     type="button"
                     wire:click="setCalculatorMode('estimate')"
                     @class([
-                        'inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold ring-1 transition-colors',
+                        'inline-flex w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold ring-1 transition-colors sm:w-auto',
                         'bg-primary-600 text-white ring-primary-600' => $this->calculatorMode === 'estimate',
                         'bg-white text-gray-700 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700 dark:hover:bg-gray-700' => $this->calculatorMode !== 'estimate',
                     ])
@@ -358,7 +358,7 @@
                     type="button"
                     wire:click="setCalculatorMode('simulate')"
                     @class([
-                        'inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold ring-1 transition-colors',
+                        'inline-flex w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold ring-1 transition-colors sm:w-auto',
                         'bg-primary-600 text-white ring-primary-600' => $this->calculatorMode === 'simulate',
                         'bg-white text-gray-700 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700 dark:hover:bg-gray-700' => $this->calculatorMode !== 'simulate',
                     ])
