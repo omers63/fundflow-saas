@@ -200,6 +200,9 @@ final class MemberLoanCalculatorService
      *     current_fund: float,
      *     contribution_amount: float,
      *     cycles_added: int,
+     *     loan_repayment_cycles: int,
+     *     loan_repayment_amount: float,
+     *     loan_repayment_installment: float|null,
      *     projected_fund: float,
      *     start_cycle_month: int,
      *     start_cycle_year: int,
@@ -308,6 +311,9 @@ final class MemberLoanCalculatorService
      *     current_fund: float,
      *     contribution_amount: float,
      *     cycles_added: int,
+     *     loan_repayment_cycles: int,
+     *     loan_repayment_amount: float,
+     *     loan_repayment_installment: float|null,
      *     projected_fund: float,
      *     start_cycle_month: int,
      *     start_cycle_year: int,
@@ -328,16 +334,24 @@ final class MemberLoanCalculatorService
         $from = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
         $to = Carbon::create($startYear, $startMonth, 1)->startOfMonth();
         $currentPosted = Contribution::activePeriodExists((int) $member->id, $openMonth, $openYear);
-        $cyclesAdded = $this->projectedContributionCycles($from, $to, $currentPosted);
-        $projectedFund = round($currentFund + ($cyclesAdded * $contributionAmount), 2);
+        $windowCycles = $this->projectedContributionCycles($from, $to, $currentPosted);
+        $remainingPayments = $this->remainingActiveLoanInstallmentAmounts($member);
+        $repaymentCycles = min($windowCycles, count($remainingPayments));
+        $appliedPayments = array_slice($remainingPayments, 0, $repaymentCycles);
+        $loanRepaymentAmount = round(array_sum($appliedPayments), 2);
+        $contributionCycles = $windowCycles - $repaymentCycles;
+        $projectedFund = round($currentFund + $loanRepaymentAmount + ($contributionCycles * $contributionAmount), 2);
         $startPosted = Contribution::activePeriodExists((int) $member->id, $startMonth, $startYear);
         $startCyclePaid = $startPosted
-            || ($to->greaterThan($from) && $contributionAmount > 0.00001);
+            || ($contributionCycles > 0 && $to->greaterThan($from) && $contributionAmount > 0.00001);
 
         return [
             'current_fund' => $currentFund,
             'contribution_amount' => $contributionAmount,
-            'cycles_added' => $cyclesAdded,
+            'cycles_added' => $contributionCycles,
+            'loan_repayment_cycles' => $repaymentCycles,
+            'loan_repayment_amount' => $loanRepaymentAmount,
+            'loan_repayment_installment' => $this->uniformInstallmentAmount($appliedPayments),
             'projected_fund' => $projectedFund,
             'start_cycle_month' => $startMonth,
             'start_cycle_year' => $startYear,
@@ -418,6 +432,54 @@ final class MemberLoanCalculatorService
         }
 
         return $cycles;
+    }
+
+    /**
+     * Unpaid EMIs on the member's in-repayment loan(s), oldest first.
+     *
+     * @return list<float>
+     */
+    private function remainingActiveLoanInstallmentAmounts(Member $member): array
+    {
+        $loans = Loan::query()
+            ->where('member_id', $member->id)
+            ->whereIn('status', ['active', 'transferred'])
+            ->with(['installments' => fn ($query) => $query
+                ->whereIn('status', ['pending', 'overdue'])
+                ->orderBy('due_date')
+                ->orderBy('installment_number')])
+            ->orderBy('id')
+            ->get();
+
+        $amounts = [];
+
+        foreach ($loans as $loan) {
+            foreach ($loan->installments as $installment) {
+                $amounts[] = round((float) $installment->amount, 2);
+            }
+        }
+
+        return $amounts;
+    }
+
+    /**
+     * @param  list<float>  $amounts
+     */
+    private function uniformInstallmentAmount(array $amounts): ?float
+    {
+        if ($amounts === []) {
+            return null;
+        }
+
+        $first = round($amounts[0], 2);
+
+        foreach ($amounts as $amount) {
+            if (abs(round($amount, 2) - $first) > 0.011) {
+                return null;
+            }
+        }
+
+        return $first;
     }
 
     private function resolvedStartDate(?string $startDate): Carbon

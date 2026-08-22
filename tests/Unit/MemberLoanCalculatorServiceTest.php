@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -272,13 +273,13 @@ test('roll-up and skip early settlement mark installments on the estimated sched
         ->and($skipped['remaining_payment_months'])->toBe($skipped['installments'] - 3)
         ->and($skipped['duration_months'])->toBe($skipped['installments'])
         ->and($skipped['schedule']['payable_count'])->toBe($skipped['remaining_payment_months'])
-        ->and(array_count_values($skippedKinds)['skipped'] ?? 0)->toBe(3)
+        ->and(array_count_values($skippedKinds)['paid'] ?? 0)->toBe(3)
         ->and(array_count_values($skippedKinds)['emi'] ?? 0)->toBe($skipped['remaining_payment_months'])
         ->and($skippedKinds)->not->toContain('dropped');
 
-    $skippedEmi = array_values(array_filter($skipped['schedule']['rows'], fn (array $row): bool => $row['kind'] === 'skipped'));
-    expect($skippedEmi)->not->toBeEmpty()
-        ->and(array_unique(array_column($skippedEmi, 'amount')))->toBe([0.0]);
+    $paidFromExcess = array_values(array_filter($skipped['schedule']['rows'], fn (array $row): bool => $row['kind'] === 'paid'));
+    expect($paidFromExcess)->not->toBeEmpty()
+        ->and(array_unique(array_column($paidFromExcess, 'amount')))->toBe([500.0]);
 });
 
 test('skip early settlement applies partial excess to the next cycle without shortening the schedule', function () {
@@ -300,7 +301,7 @@ test('skip early settlement applies partial excess to the next cycle without sho
         graceCycles: 0,
     )[0];
 
-    // Excess 600 → 1 full EMI (500) skipped, remainder 100 reduces the next cycle.
+    // Excess 600 → 1 full EMI (500) paid from excess cash, remainder 100 reduces the next cycle.
     $rows = $skipped['schedule']['rows'];
     $kinds = array_column($rows, 'kind');
     $firstEmi = collect($rows)->firstWhere('kind', 'emi');
@@ -308,7 +309,7 @@ test('skip early settlement applies partial excess to the next cycle without sho
     expect($skipped['excess_fund'])->toBe(600.0)
         ->and($skipped['installments_covered'])->toBe(1)
         ->and($skipped['duration_months'])->toBe($skipped['installments'])
-        ->and(array_count_values($kinds)['skipped'] ?? 0)->toBe(1)
+        ->and(array_count_values($kinds)['paid'] ?? 0)->toBe(1)
         ->and($firstEmi)->not->toBeNull()
         ->and($firstEmi['amount'])->toBe(round(
             Loan::scheduleInstallmentAmount(
@@ -359,7 +360,134 @@ test('future start date projects fund and treats the start cycle as paid', funct
     $custom = $this->service->fundProjection($this->member->fresh(), '2025-03-15', 2000);
 
     expect($custom['contribution_amount'])->toBe(2000.0)
-        ->and($custom['projected_fund'])->toBe(11000.0);
+        ->and($custom['projected_fund'])->toBe(11000.0)
+        ->and($custom['loan_repayment_cycles'])->toBe(0)
+        ->and($custom['loan_repayment_amount'])->toBe(0.0);
+});
+
+test('future start date settles an active loan with regular payments before adding contributions', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    $this->member->fundAccount->update(['balance' => -6000]);
+    $this->member->update(['monthly_contribution_amount' => 500]);
+
+    $loan = Loan::create([
+        'member_id' => $this->member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'member_portion' => 6000,
+        'master_portion' => 0,
+        'interest_rate' => 0,
+        'term_months' => 2,
+        'monthly_repayment' => 3000,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    foreach ([1, 2] as $number) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $number,
+            'amount' => 3000,
+            'due_date' => now()->addMonths($number),
+            'status' => 'pending',
+        ]);
+    }
+
+    $projection = $this->service->fundProjection($this->member->fresh(), '2025-10-15', 500);
+
+    expect($projection['cycles_added'])->toBe(8)
+        ->and($projection['loan_repayment_cycles'])->toBe(2)
+        ->and($projection['loan_repayment_amount'])->toBe(6000.0)
+        ->and($projection['loan_repayment_installment'])->toBe(3000.0)
+        ->and($projection['projected_fund'])->toBe(4000.0);
+});
+
+test('projected fund uses remaining installment amounts when the last EMI differs', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    $this->member->fundAccount->update(['balance' => -6000]);
+
+    $loan = Loan::create([
+        'member_id' => $this->member->id,
+        'amount' => 4500,
+        'amount_requested' => 4500,
+        'amount_approved' => 4500,
+        'amount_disbursed' => 4500,
+        'member_portion' => 4500,
+        'master_portion' => 0,
+        'interest_rate' => 0,
+        'term_months' => 2,
+        'monthly_repayment' => 3000,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 3000,
+        'due_date' => now()->addMonth(),
+        'status' => 'pending',
+    ]);
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 2,
+        'amount' => 1500,
+        'due_date' => now()->addMonths(2),
+        'status' => 'pending',
+    ]);
+
+    $projection = $this->service->fundProjection($this->member->fresh(), '2025-10-15', 500);
+
+    expect($projection['loan_repayment_cycles'])->toBe(2)
+        ->and($projection['loan_repayment_amount'])->toBe(4500.0)
+        ->and($projection['loan_repayment_installment'])->toBeNull()
+        ->and($projection['cycles_added'])->toBe(8)
+        ->and($projection['projected_fund'])->toBe(2500.0);
+});
+
+test('projected fund applies only the EMIs that fit before the start date', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    $this->member->fundAccount->update(['balance' => -6000]);
+
+    $loan = Loan::create([
+        'member_id' => $this->member->id,
+        'amount' => 12000,
+        'amount_requested' => 12000,
+        'amount_approved' => 12000,
+        'amount_disbursed' => 12000,
+        'member_portion' => 12000,
+        'master_portion' => 0,
+        'interest_rate' => 0,
+        'term_months' => 4,
+        'monthly_repayment' => 3000,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    foreach ([1, 2, 3, 4] as $number) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $number,
+            'amount' => 3000,
+            'due_date' => now()->addMonths($number),
+            'status' => 'pending',
+        ]);
+    }
+
+    $projection = $this->service->fundProjection($this->member->fresh(), '2025-03-15', 500);
+
+    expect($projection['loan_repayment_cycles'])->toBe(3)
+        ->and($projection['loan_repayment_amount'])->toBe(9000.0)
+        ->and($projection['cycles_added'])->toBe(0)
+        ->and($projection['projected_fund'])->toBe(3000.0);
 });
 
 test('calculations are blocked when projected fund at start is negative', function () {

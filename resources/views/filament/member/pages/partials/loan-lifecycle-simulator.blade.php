@@ -6,6 +6,7 @@
         \App\Services\MemberLoanLifecycleSimulator::STATUS_FULLY_SETTLED,
     ], true);
     $scheduleRows = is_array($sim['schedule_rows'] ?? null) ? $sim['schedule_rows'] : [];
+    $moneyHtml = fn (float|int|string|null $value): string => \App\Filament\Support\MoneyDisplay::html($value, $currency)?->toHtml() ?? e('—');
 @endphp
 
 <div class="ff-member-loan-sim space-y-6">
@@ -99,9 +100,9 @@
                         </p>
                         @if (((float) ($sim['excess_to_cash'] ?? 0)) > 0.00001)
                             <p class="mt-0.5 text-xs text-sky-700/80 dark:text-sky-300/80">
-                                {{ __('Includes excess transferred at disbursement (:amount)', [
-                                    'amount' => \App\Filament\Support\MoneyDisplay::format((float) $sim['excess_to_cash'], $currency) ?? '—',
-                                ]) }}
+                                {!! __('Includes excess transferred at disbursement (:amount)', [
+                                    'amount' => $moneyHtml((float) $sim['excess_to_cash']),
+                                ]) !!}
                             </p>
                         @endif
                     </div>
@@ -142,9 +143,9 @@
                                 <div>
                                     <p class="text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('Regular payment') }}</p>
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        {{ __('Always pays the installment amount (:amount).', [
-                                            'amount' => \App\Filament\Support\MoneyDisplay::format((float) ($sim['min_installment'] ?? 0), $currency) ?? '—',
-                                        ]) }}
+                                        {!! __('Always pays the installment amount (:amount).', [
+                                            'amount' => $moneyHtml((float) ($sim['min_installment'] ?? 0)),
+                                        ]) !!}
                                     </p>
                                 </div>
                                 <div class="mt-auto">
@@ -168,9 +169,9 @@
                                         class="block w-full rounded-lg border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                                     />
                                     <p class="mt-1 text-xs font-medium text-gray-700 dark:text-gray-200">
-                                        {{ __('Amount needed for full maturity: :amount', [
-                                            'amount' => \App\Filament\Support\MoneyDisplay::format((float) ($sim['remaining_maturity'] ?? 0), $currency) ?? '—',
-                                        ]) }}
+                                        {!! __('Amount needed for full maturity: :amount', [
+                                            'amount' => $moneyHtml((float) ($sim['remaining_maturity'] ?? 0)),
+                                        ]) !!}
                                     </p>
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                         {{ __('Used for partial early settlement only.') }}
@@ -187,9 +188,9 @@
                                 <div>
                                     <p class="text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('Full settlement amount') }}</p>
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        {{ __('Pay :amount to close now.', [
-                                            'amount' => \App\Filament\Support\MoneyDisplay::format((float) ($sim['full_settlement_amount'] ?? 0), $currency) ?? '—',
-                                        ]) }}
+                                        {!! __('Pay :amount to close now.', [
+                                            'amount' => $moneyHtml((float) ($sim['full_settlement_amount'] ?? 0)),
+                                        ]) !!}
                                     </p>
                                 </div>
                                 <div class="mt-auto">
@@ -411,11 +412,21 @@
                                         <td data-label="{{ __('Cash') }}" class="px-3 py-2 align-top text-center tabular-nums">
                                             <x-member::amount :value="$event['cash_balance'] ?? 0" :currency="$currency" signed />
                                         </td>
-                                        <td data-label="{{ __('Outstanding fund portion') }}" class="px-3 py-2 align-top text-center tabular-nums">
-                                            <x-member::amount :value="$event['outstanding_fund_portion'] ?? 0" :currency="$currency" signed />
+                                        <td data-label="{{ __('Outstanding fund portion') }}" class="ff-member-loan-sim-history__owed px-3 py-2 align-top text-center tabular-nums">
+                                            @php $outstandingFundPortion = (float) ($event['outstanding_fund_portion'] ?? 0); @endphp
+                                            <x-member::amount
+                                                :value="$outstandingFundPortion"
+                                                :currency="$currency"
+                                                @class(['ff-member-amount--danger' => $outstandingFundPortion > 0.00001])
+                                            />
                                         </td>
-                                        <td data-label="{{ __('Remaining maturity') }}" class="px-3 py-2 align-top text-center tabular-nums">
-                                            <x-member::amount :value="$event['remaining_maturity'] ?? 0" :currency="$currency" signed />
+                                        <td data-label="{{ __('Remaining maturity') }}" class="ff-member-loan-sim-history__owed px-3 py-2 align-top text-center tabular-nums">
+                                            @php $remainingMaturity = (float) ($event['remaining_maturity'] ?? 0); @endphp
+                                            <x-member::amount
+                                                :value="$remainingMaturity"
+                                                :currency="$currency"
+                                                @class(['ff-member-amount--danger' => $remainingMaturity > 0.00001])
+                                            />
                                         </td>
                                     </tr>
                                 @empty
@@ -454,10 +465,10 @@
                         </div>
                     </div>
                     <p class="text-sm text-gray-600 dark:text-gray-300">
-                        {{ __('Need fund ≥ :amount (:percent% of tier ceiling). Deposit cash first, then apply any allowable contribution amount from cash.', [
-                            'amount' => \App\Filament\Support\MoneyDisplay::format((float) $sim['eligibility_amt'], $currency) ?? '—',
+                        {!! __('Need fund ≥ :amount (:percent% of tier ceiling). Deposit cash first, then apply any allowable contribution amount from cash.', [
+                            'amount' => $moneyHtml((float) $sim['eligibility_amt']),
                             'percent' => $this->eligibilityPct > 0 ? round($this->eligibilityPct * 100) : '—',
-                        ]) }}
+                        ]) !!}
                     </p>
                     @php
                         $afterCloseMinDate = filled($sim['expected_maturity_date'] ?? null)

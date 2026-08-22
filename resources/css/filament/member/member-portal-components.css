@@ -1818,6 +1818,22 @@
     margin-block-end: 0;
 }
 
+.ff-member-loan-calculator .ff-member-amount--danger,
+.ff-member-loan-calculator .ff-member-amount--danger .ff-member-amount__digits {
+    color: var(--ff-danger, #e24b4a);
+}
+
+.dark .fi-body.fi-panel-member .ff-member-loan-calculator .ff-member-amount--danger,
+.dark .fi-body.fi-panel-member .ff-member-loan-calculator .ff-member-amount--danger .ff-member-amount__digits {
+    color: #f87171;
+}
+
+.ff-member-loan-calc-projected-fund__formula .ff-member-amount {
+    display: inline;
+    font-size: inherit;
+    font-weight: 600;
+}
+
 .ff-member-loan-calc-tiers {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

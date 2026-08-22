@@ -8,11 +8,11 @@ use App\Filament\Member\Resources\MyContributions\MyContributionResource;
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
 use App\Filament\Member\Resources\MyMessages\MyMessageResource;
 use App\Filament\Support\DatabaseNotificationsRefresh;
-use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\DirectMessage;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -491,9 +491,7 @@ test('loan calculator lifecycle simulator supports regular payments and full ear
         ->assertSeeHtml('ff-member-panel--collapsible')
         ->assertSee(__('Apply payments'), false)
         ->assertSee(__('Partial settlement amount'), false)
-        ->assertSee(__('Amount needed for full maturity: :amount', [
-            'amount' => MoneyDisplay::format(60000.0, Setting::get('general', 'currency', 'USD')) ?? '—',
-        ]), false)
+        ->assertSee(__('Amount needed for full maturity: :amount', ['amount' => '']), false)
         ->assertSee(__('Full settlement amount'), false)
         ->assertSee(__('Updating schedule'), false)
         ->assertSeeHtml('ff-member-loan-sim-stat-card')
@@ -511,6 +509,13 @@ test('loan calculator lifecycle simulator supports regular payments and full ear
         ->assertSeeHtml('ff-member-loan-sim-pay-actions')
         ->assertSeeHtml('ff-member-amount--success')
         ->assertSeeHtml('ff-member-amount--danger');
+
+    preg_match_all('/ff-member-loan-sim-history__owed[\s\S]*?<\/td>/', $component->html(), $owedCells);
+
+    expect($owedCells[0] ?? [])->not->toBeEmpty();
+    foreach ($owedCells[0] as $cell) {
+        expect($cell)->toContain('ff-member-amount--danger');
+    }
 
     expect($component->instance()->simulation['schedule_rows'])->toHaveCount(25)
         ->and($component->instance()->simulation['schedule_count'])->toBe(24)
@@ -630,6 +635,94 @@ test('loan calculator blocks estimate and simulate when member portion exceeds p
 
     expect($component->instance()->calculations)->toBeEmpty()
         ->and($component->instance()->simulation)->toBeNull();
+});
+
+test('loan calculator projects fund after settling the active loan with regular payments', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    $this->memberA->fundAccount->update(['balance' => -6000]);
+    $this->memberA->update(['monthly_contribution_amount' => 500]);
+
+    $loan = Loan::create([
+        'member_id' => $this->memberA->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'member_portion' => 6000,
+        'master_portion' => 0,
+        'interest_rate' => 0,
+        'term_months' => 2,
+        'monthly_repayment' => 3000,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    foreach ([1, 2] as $number) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $number,
+            'amount' => 3000,
+            'due_date' => now()->addMonths($number),
+            'status' => 'pending',
+        ]);
+    }
+
+    $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
+
+    $component = Livewire::test(LoanCalculatorPage::class)
+        ->set('startDate', '2025-10-15')
+        ->set('projectedContributionAmount', 500)
+        ->assertSee(__('Projected fund at start'), false)
+        ->assertSeeHtml('ff-member-loan-calc-projected-fund__formula');
+
+    $projection = $component->instance()->projection;
+    $html = $component->html();
+    preg_match(
+        '/ff-member-loan-calc-projected-fund__formula[\s\S]*?<\/p>/',
+        $html,
+        $formula,
+    );
+
+    expect($projection['projected_fund'])->toBe(4000.0)
+        ->and($projection['loan_repayment_cycles'])->toBe(2)
+        ->and($projection['cycles_added'])->toBe(8)
+        ->and($formula[0] ?? '')->toContain('ff-member-amount--danger');
+
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('loan calculator shows a negative projected fund in red', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    $this->memberA->fundAccount->update(['balance' => -6000]);
+
+    $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
+
+    $html = Livewire::test(LoanCalculatorPage::class)
+        ->set('startDate', '2025-01-15')
+        ->html();
+
+    preg_match(
+        '/ff-member-loan-calc-status[\s\S]*?ff-member-stat-card__hint/',
+        $html,
+        $fundCard,
+    );
+    preg_match(
+        '/ff-member-loan-calc-projected-fund[\s\S]*?ff-member-loan-calc-projected-fund__formula/',
+        $html,
+        $projectedCard,
+    );
+
+    expect($fundCard[0] ?? '')->toContain('ff-member-amount--danger')
+        ->and($projectedCard[0] ?? '')
+        ->toContain('ff-member-amount--danger')
+        ->not->toContain('text-emerald-900');
+
+    BusinessDaySettings::saveFromForm(null);
 });
 
 test('member panel has database notifications enabled', function () {

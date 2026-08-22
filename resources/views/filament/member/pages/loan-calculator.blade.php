@@ -9,7 +9,8 @@
         $projectedFund = (float) ($projection['projected_fund'] ?? $fundBalance);
         $settlementPercent = round($this->settlementPct * 100);
         $eligibilityPercent = round($this->eligibilityPct * 100);
-        $maxLoanFormatted = \App\Filament\Support\MoneyDisplay::format((float) ($eligibility['max_loan_amount'] ?? 0), $currency) ?? '—';
+        $maxLoanFormatted = \App\Filament\Support\MoneyDisplay::html((float) ($eligibility['max_loan_amount'] ?? 0), $currency, precision: 0)?->toHtml() ?? e('—');
+        $moneyHtml = fn (float|int|string|null $value, int $precision = 2): string => \App\Filament\Support\MoneyDisplay::html($value, $currency, precision: $precision)?->toHtml() ?? e('—');
     @endphp
 
     <div class="ff-member-loan-calculator space-y-4 sm:space-y-5">
@@ -44,7 +45,7 @@
                 </div>
                 @if ($eligible)
                     <p class="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-                        {{ __('Up to :amount', ['amount' => $maxLoanFormatted]) }}
+                        {!! __('Up to :amount', ['amount' => $maxLoanFormatted]) !!}
                     </p>
                 @elseif (filled($eligibility['reason'] ?? null))
                     <p class="mt-2 text-sm leading-5 text-gray-700 dark:text-gray-300">
@@ -151,7 +152,7 @@
                             @endforeach
                         </select>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            {{ __('Used to project your fund balance from now until the start date. Defaults to your current contribution amount.') }}
+                            {{ __('Used for cycles after any active loan is settled with regular payments. Defaults to your current contribution amount.') }}
                         </p>
                     </div>
                 </div>
@@ -174,20 +175,55 @@
                 @endphp
                 <div class="rounded-xl border border-gray-200/80 bg-white/80 p-3 ring-1 ring-gray-100 dark:border-gray-700 dark:bg-gray-900/20 dark:ring-gray-800">
                     <div class="grid grid-cols-1 gap-3 {{ $previewFundColumns }}">
-                        <div class="rounded-lg bg-emerald-50/80 p-3 ring-1 ring-emerald-200/80 dark:bg-emerald-950/30 dark:ring-emerald-800/60">
+                        <div class="ff-member-loan-calc-projected-fund rounded-lg bg-emerald-50/80 p-3 ring-1 ring-emerald-200/80 dark:bg-emerald-950/30 dark:ring-emerald-800/60">
+                            @php
+                                $projectedFundAtStart = (float) ($projection['projected_fund'] ?? 0);
+                                $loanRepaymentCycles = (int) ($projection['loan_repayment_cycles'] ?? 0);
+                                $contributionCycles = (int) ($projection['cycles_added'] ?? 0);
+                                $loanInstallment = $projection['loan_repayment_installment'] ?? null;
+                            @endphp
                             <p class="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
                                 {{ __('Projected fund at start') }}
                             </p>
-                            <p class="mt-1 text-lg font-bold tabular-nums text-emerald-900 dark:text-emerald-100">
-                                <x-member::amount :value="$projection['projected_fund']" :currency="$currency" />
+                            <p @class([
+                                'mt-1 text-lg font-bold tabular-nums',
+                                'text-emerald-900 dark:text-emerald-100' => $projectedFundAtStart >= 0,
+                            ])>
+                                <x-member::amount :value="$projectedFundAtStart" :currency="$currency" />
                             </p>
-                            <p class="mt-1 text-xs text-emerald-700/80 dark:text-emerald-300/80">
-                                @if ((int) $projection['cycles_added'] > 0)
-                                    {{ __('Current fund :current + :count × :amount', [
-                                        'current' => \App\Filament\Support\MoneyDisplay::format($projection['current_fund'], $currency) ?? '—',
-                                        'count' => $projection['cycles_added'],
-                                        'amount' => \App\Filament\Support\MoneyDisplay::format($projection['contribution_amount'], $currency) ?? '—',
-                                    ]) }}
+                            <p class="ff-member-loan-calc-projected-fund__formula mt-1 text-xs text-emerald-700/80 dark:text-emerald-300/80">
+                                @if ($loanRepaymentCycles > 0 && $contributionCycles > 0 && $loanInstallment !== null)
+                                    {!! __('Current fund :current + :loan_count × :installment + :contrib_count × :amount', [
+                                        'current' => $moneyHtml($projection['current_fund'] ?? 0),
+                                        'loan_count' => e((string) $loanRepaymentCycles),
+                                        'installment' => $moneyHtml($loanInstallment),
+                                        'contrib_count' => e((string) $contributionCycles),
+                                        'amount' => $moneyHtml($projection['contribution_amount'] ?? 0),
+                                    ]) !!}
+                                @elseif ($loanRepaymentCycles > 0 && $contributionCycles > 0)
+                                    {!! __('Current fund :current + :settlement (loan repayments) + :count × :amount', [
+                                        'current' => $moneyHtml($projection['current_fund'] ?? 0),
+                                        'settlement' => $moneyHtml($projection['loan_repayment_amount'] ?? 0),
+                                        'count' => e((string) $contributionCycles),
+                                        'amount' => $moneyHtml($projection['contribution_amount'] ?? 0),
+                                    ]) !!}
+                                @elseif ($loanRepaymentCycles > 0 && $loanInstallment !== null)
+                                    {!! __('Current fund :current + :loan_count × :installment', [
+                                        'current' => $moneyHtml($projection['current_fund'] ?? 0),
+                                        'loan_count' => e((string) $loanRepaymentCycles),
+                                        'installment' => $moneyHtml($loanInstallment),
+                                    ]) !!}
+                                @elseif ($loanRepaymentCycles > 0)
+                                    {!! __('Current fund :current + :settlement (loan repayments)', [
+                                        'current' => $moneyHtml($projection['current_fund'] ?? 0),
+                                        'settlement' => $moneyHtml($projection['loan_repayment_amount'] ?? 0),
+                                    ]) !!}
+                                @elseif ($contributionCycles > 0)
+                                    {!! __('Current fund :current + :count × :amount', [
+                                        'current' => $moneyHtml($projection['current_fund'] ?? 0),
+                                        'count' => e((string) $contributionCycles),
+                                        'amount' => $moneyHtml($projection['contribution_amount'] ?? 0),
+                                    ]) !!}
                                 @else
                                     {{ __('Using your current fund balance.') }}
                                 @endif
@@ -490,10 +526,10 @@
                                         <x-member::amount :value="$calc['eligibility_amt']" :currency="$currency" />
                                     </p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400">
-                                        {{ __(':percent% of tier ceiling (:ceiling)', [
+                                        {!! __(':percent% of tier ceiling (:ceiling)', [
                                             'percent' => $eligibilityPercent,
-                                            'ceiling' => \App\Filament\Support\MoneyDisplay::format($calc['eligibility_base'], $currency, precision: 0) ?? '—',
-                                        ]) }}
+                                            'ceiling' => $moneyHtml($calc['eligibility_base'], 0),
+                                        ]) !!}
                                     </p>
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                         {{ __('After repayment you will need this fund balance before you can apply again.') }}
@@ -501,7 +537,7 @@
                                 </div>
                                 <div class="min-w-0">
                                     <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                        {{ (int) ($projection['cycles_added'] ?? 0) > 0 ? __('Projected fund at start') : __('Your fund now') }}
+                                        {{ ((int) ($projection['loan_repayment_cycles'] ?? 0) + (int) ($projection['cycles_added'] ?? 0)) > 0 ? __('Projected fund at start') : __('Your fund now') }}
                                     </p>
                                     <p class="mt-1 font-semibold text-gray-900 dark:text-white">
                                         <x-member::amount :value="$projectedFund" :currency="$currency" />
@@ -634,9 +670,9 @@
                     <x-heroicon-o-exclamation-triangle class="mx-auto mb-3 h-10 w-10 text-amber-400" />
                     <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ __('No matching loan tier') }}</p>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        {{ __(':amount does not fall within any active loan tier range.', [
-                            'amount' => \App\Filament\Support\MoneyDisplay::format($loanAmount, $currency) ?? '—',
-                        ]) }}
+                        {!! __(':amount does not fall within any active loan tier range.', [
+                            'amount' => $moneyHtml($loanAmount),
+                        ]) !!}
                     </p>
                     @if ($this->activeTiers->isNotEmpty())
                         <div class="mt-4 flex flex-wrap justify-center gap-2">
