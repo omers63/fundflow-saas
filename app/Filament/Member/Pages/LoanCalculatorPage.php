@@ -16,6 +16,7 @@ use App\Services\MemberLoanCalculatorService;
 use App\Services\MemberLoanLifecycleSimulator;
 use App\Support\BusinessDay;
 use App\Support\ContributionAmountSettings;
+use App\Support\LoanCalculatorCurrentLoanSettlement;
 use App\Support\LoanCalculatorFundingApproach;
 use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
@@ -58,6 +59,8 @@ class LoanCalculatorPage extends Page
     public string $startDate = '';
 
     public int $projectedContributionAmount = 0;
+
+    public string $currentLoanSettlement = LoanCalculatorCurrentLoanSettlement::REGULAR_PAYMENTS;
 
     public string $calculatorMode = self::MODE_ESTIMATE;
 
@@ -107,6 +110,12 @@ class LoanCalculatorPage extends Page
     public function updatedProjectedContributionAmount(mixed $value): void
     {
         $this->projectedContributionAmount = $this->normalizeProjectedContribution($value);
+        $this->resetSimulation();
+    }
+
+    public function updatedCurrentLoanSettlement(string $value): void
+    {
+        $this->currentLoanSettlement = LoanCalculatorCurrentLoanSettlement::normalize($value);
         $this->resetSimulation();
     }
 
@@ -457,6 +466,7 @@ class LoanCalculatorPage extends Page
             $this->graceCycles,
             $this->startDate,
             $this->projectedContributionAmount,
+            $this->currentLoanSettlement,
         );
     }
 
@@ -476,6 +486,7 @@ class LoanCalculatorPage extends Page
             LoanCalculatorFundingApproach::toFundingStrategy($this->fundingApproach),
             $this->startDate,
             $this->projectedContributionAmount,
+            $this->currentLoanSettlement,
         );
     }
 
@@ -563,6 +574,21 @@ class LoanCalculatorPage extends Page
         return LoanCalculatorFundingApproach::options();
     }
 
+    /**
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function currentLoanSettlementOptions(): array
+    {
+        return LoanCalculatorCurrentLoanSettlement::options();
+    }
+
+    #[Computed]
+    public function hasCurrentLoanToSettle(): bool
+    {
+        return CurrentMember::get()?->hasActiveLoanRepaymentObligation() ?? false;
+    }
+
     #[Computed]
     public function showsEarlySettlementEstimate(): bool
     {
@@ -637,7 +663,9 @@ class LoanCalculatorPage extends Page
      *     loan_repayment_cycles: int,
      *     loan_repayment_amount: float,
      *     loan_repayment_installment: float|null,
+     *     loan_settlement_mode: string,
      *     projected_fund: float,
+     *     cash_needed: float,
      *     start_cycle_month: int,
      *     start_cycle_year: int,
      *     start_cycle_label: string,
@@ -657,7 +685,9 @@ class LoanCalculatorPage extends Page
                 'loan_repayment_cycles' => 0,
                 'loan_repayment_amount' => 0.0,
                 'loan_repayment_installment' => null,
+                'loan_settlement_mode' => LoanCalculatorCurrentLoanSettlement::REGULAR_PAYMENTS,
                 'projected_fund' => 0.0,
+                'cash_needed' => 0.0,
                 'start_cycle_month' => 0,
                 'start_cycle_year' => 0,
                 'start_cycle_label' => '—',
@@ -669,6 +699,7 @@ class LoanCalculatorPage extends Page
             $member,
             $this->startDate,
             $this->projectedContributionAmount,
+            $this->currentLoanSettlement,
         );
     }
 

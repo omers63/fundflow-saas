@@ -9,6 +9,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Support\BusinessDay;
+use App\Support\LoanCalculatorCurrentLoanSettlement;
 use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanRepaymentWindowPolicy;
@@ -53,6 +54,7 @@ final class MemberLoanCalculatorService
         int $graceCycles = 0,
         ?string $startDate = null,
         int|float|string|null $projectedContributionAmount = null,
+        ?string $currentLoanSettlement = null,
     ): array {
         if ($loanAmount <= 0) {
             return [];
@@ -64,11 +66,17 @@ final class MemberLoanCalculatorService
             $fundingStrategy,
             $startDate,
             $projectedContributionAmount,
+            $currentLoanSettlement,
         ) !== null) {
             return [];
         }
 
-        $projection = $this->fundProjection($member, $startDate, $projectedContributionAmount);
+        $projection = $this->fundProjection(
+            $member,
+            $startDate,
+            $projectedContributionAmount,
+            $currentLoanSettlement,
+        );
         $fundBalance = $projection['projected_fund'];
         $settlementPct = LoanSettings::settlementThreshold();
         $eligibilityPct = LoanSettings::eligibilityThreshold();
@@ -170,12 +178,18 @@ final class MemberLoanCalculatorService
         ?string $fundingStrategy = null,
         ?string $startDate = null,
         int|float|string|null $projectedContributionAmount = null,
+        ?string $currentLoanSettlement = null,
     ): ?string {
         if ($loanAmount <= 0.00001) {
             return null;
         }
 
-        $projection = $this->fundProjection($member, $startDate, $projectedContributionAmount);
+        $projection = $this->fundProjection(
+            $member,
+            $startDate,
+            $projectedContributionAmount,
+            $currentLoanSettlement,
+        );
         $projectedFund = round((float) $projection['projected_fund'], 2);
 
         if ($projectedFund < -0.00001) {
@@ -203,7 +217,9 @@ final class MemberLoanCalculatorService
      *     loan_repayment_cycles: int,
      *     loan_repayment_amount: float,
      *     loan_repayment_installment: float|null,
+     *     loan_settlement_mode: string,
      *     projected_fund: float,
+     *     cash_needed: float,
      *     start_cycle_month: int,
      *     start_cycle_year: int,
      *     start_cycle_label: string,
@@ -314,7 +330,9 @@ final class MemberLoanCalculatorService
      *     loan_repayment_cycles: int,
      *     loan_repayment_amount: float,
      *     loan_repayment_installment: float|null,
+     *     loan_settlement_mode: string,
      *     projected_fund: float,
+     *     cash_needed: float,
      *     start_cycle_month: int,
      *     start_cycle_year: int,
      *     start_cycle_label: string,
@@ -325,6 +343,7 @@ final class MemberLoanCalculatorService
         Member $member,
         ?string $startDate = null,
         int|float|string|null $projectedContributionAmount = null,
+        ?string $currentLoanSettlement = null,
     ): array {
         $start = $this->resolvedStartDate($startDate);
         $currentFund = round($member->getFundBalance(), 2);
@@ -336,11 +355,27 @@ final class MemberLoanCalculatorService
         $currentPosted = Contribution::activePeriodExists((int) $member->id, $openMonth, $openYear);
         $windowCycles = $this->projectedContributionCycles($from, $to, $currentPosted);
         $remainingPayments = $this->remainingActiveLoanInstallmentAmounts($member);
-        $repaymentCycles = min($windowCycles, count($remainingPayments));
-        $appliedPayments = array_slice($remainingPayments, 0, $repaymentCycles);
-        $loanRepaymentAmount = round(array_sum($appliedPayments), 2);
-        $contributionCycles = $windowCycles - $repaymentCycles;
+        $settlementMode = LoanCalculatorCurrentLoanSettlement::normalize($currentLoanSettlement);
+
+        if ($remainingPayments !== [] && LoanCalculatorCurrentLoanSettlement::isFullEarlySettlement($settlementMode)) {
+            $loanRepaymentAmount = $this->fullEarlySettlementRestoreAmount($member, $currentFund);
+            $repaymentCycles = 0;
+            $contributionCycles = $windowCycles;
+            $appliedPayments = [];
+        } elseif ($remainingPayments !== [] && LoanCalculatorCurrentLoanSettlement::isPartialToMaturity($settlementMode)) {
+            $loanRepaymentAmount = round(array_sum($remainingPayments), 2);
+            $repaymentCycles = 0;
+            $contributionCycles = $windowCycles;
+            $appliedPayments = [];
+        } else {
+            $repaymentCycles = min($windowCycles, count($remainingPayments));
+            $appliedPayments = array_slice($remainingPayments, 0, $repaymentCycles);
+            $loanRepaymentAmount = round(array_sum($appliedPayments), 2);
+            $contributionCycles = $windowCycles - $repaymentCycles;
+        }
+
         $projectedFund = round($currentFund + $loanRepaymentAmount + ($contributionCycles * $contributionAmount), 2);
+        $cashNeeded = round(max(0.0, $loanRepaymentAmount) + ($contributionCycles * $contributionAmount), 2);
         $startPosted = Contribution::activePeriodExists((int) $member->id, $startMonth, $startYear);
         $startCyclePaid = $startPosted
             || ($contributionCycles > 0 && $to->greaterThan($from) && $contributionAmount > 0.00001);
@@ -352,7 +387,9 @@ final class MemberLoanCalculatorService
             'loan_repayment_cycles' => $repaymentCycles,
             'loan_repayment_amount' => $loanRepaymentAmount,
             'loan_repayment_installment' => $this->uniformInstallmentAmount($appliedPayments),
+            'loan_settlement_mode' => $settlementMode,
             'projected_fund' => $projectedFund,
+            'cash_needed' => $cashNeeded,
             'start_cycle_month' => $startMonth,
             'start_cycle_year' => $startYear,
             'start_cycle_label' => $this->cycles->periodLabel($startMonth, $startYear),
@@ -460,6 +497,47 @@ final class MemberLoanCalculatorService
         }
 
         return $amounts;
+    }
+
+    /**
+     * Amount to credit member fund so the current loan(s) restore the pre-loan balance.
+     */
+    private function fullEarlySettlementRestoreAmount(Member $member, float $currentFund): float
+    {
+        $loans = Loan::query()
+            ->where('member_id', $member->id)
+            ->whereIn('status', ['active', 'transferred'])
+            ->with(['installments' => fn ($query) => $query->where('status', 'paid')])
+            ->orderBy('id')
+            ->get();
+
+        if ($loans->isEmpty()) {
+            return 0.0;
+        }
+
+        $storedPreLoan = $loans->count() === 1
+            ? $loans->first()->member_fund_balance_at_disbursement
+            : null;
+
+        if ($storedPreLoan !== null) {
+            return round((float) $storedPreLoan - $currentFund, 2);
+        }
+
+        $delta = 0.0;
+
+        foreach ($loans as $loan) {
+            $paid = 0.0;
+
+            foreach ($loan->installments as $installment) {
+                $paid += round((float) $installment->amount, 2);
+            }
+
+            $delta += round((float) $loan->member_portion, 2)
+                + round((float) $loan->master_portion, 2)
+                - $paid;
+        }
+
+        return round($delta, 2);
     }
 
     /**

@@ -19,6 +19,7 @@ use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Support\BusinessDaySettings;
+use App\Support\LoanCalculatorCurrentLoanSettlement;
 use App\Support\LoanCalculatorFundingApproach;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
@@ -246,6 +247,7 @@ test('loan calculator page renders for member', function () {
         ->assertSee(__('Grace cycles before first repayment'), false)
         ->assertSee(__('Projected start date'), false)
         ->assertSee(__('Projected monthly contribution'), false)
+        ->assertDontSee(__('Settle current loan'), false)
         ->assertSeeHtml('wire:model.live="startDate"')
         ->assertSeeHtml('wire:model.live="projectedContributionAmount"')
         ->assertSet('projectedContributionAmount', 1000)
@@ -676,7 +678,15 @@ test('loan calculator projects fund after settling the active loan with regular 
         ->set('startDate', '2025-10-15')
         ->set('projectedContributionAmount', 500)
         ->assertSee(__('Projected fund at start'), false)
-        ->assertSeeHtml('ff-member-loan-calc-projected-fund__formula');
+        ->assertSee(__('Settle current loan'), false)
+        ->assertSee(__('Regular payments (one installment per cycle)'), false)
+        ->assertSee(__('Partial early settlement to full loan maturity'), false)
+        ->assertSee(__('Full early settlement (restore pre-loan fund)'), false)
+        ->assertSeeHtml('wire:model.live="currentLoanSettlement"')
+        ->assertSeeHtml('ff-member-loan-calc-projected-fund__formula')
+        ->assertSee(__('Total cash needed'), false)
+        ->assertSeeHtml('ff-member-loan-calc-projected-fund__split')
+        ->assertSeeHtml('ff-member-loan-calc-projected-fund__cash');
 
     $projection = $component->instance()->projection;
     $html = $component->html();
@@ -689,7 +699,37 @@ test('loan calculator projects fund after settling the active loan with regular 
     expect($projection['projected_fund'])->toBe(4000.0)
         ->and($projection['loan_repayment_cycles'])->toBe(2)
         ->and($projection['cycles_added'])->toBe(8)
+        ->and($projection['loan_settlement_mode'])->toBe(LoanCalculatorCurrentLoanSettlement::REGULAR_PAYMENTS)
+        ->and($projection['cash_needed'])->toBe(10000.0)
         ->and($formula[0] ?? '')->toContain('ff-member-amount--danger');
+
+    $component->set('currentLoanSettlement', LoanCalculatorCurrentLoanSettlement::PARTIAL_TO_MATURITY);
+
+    $earlyProjection = $component->instance()->projection;
+    $earlyHtml = $component->html();
+    preg_match(
+        '/ff-member-loan-calc-projected-fund__formula[\s\S]*?<\/p>/',
+        $earlyHtml,
+        $earlyFormula,
+    );
+
+    expect($earlyProjection['projected_fund'])->toBe(5000.0)
+        ->and($earlyProjection['loan_repayment_cycles'])->toBe(0)
+        ->and($earlyProjection['cycles_added'])->toBe(10)
+        ->and($earlyProjection['loan_repayment_amount'])->toBe(6000.0)
+        ->and($earlyProjection['cash_needed'])->toBe(11000.0)
+        ->and($earlyFormula[0] ?? '')->toContain('10 ×');
+
+    $component->set('currentLoanSettlement', LoanCalculatorCurrentLoanSettlement::FULL_EARLY_SETTLEMENT);
+
+    $fullProjection = $component->instance()->projection;
+
+    expect($fullProjection['projected_fund'])->toBe(5000.0)
+        ->and($fullProjection['loan_repayment_cycles'])->toBe(0)
+        ->and($fullProjection['cycles_added'])->toBe(10)
+        ->and($fullProjection['loan_repayment_amount'])->toBe(6000.0)
+        ->and($fullProjection['loan_settlement_mode'])->toBe(LoanCalculatorCurrentLoanSettlement::FULL_EARLY_SETTLEMENT)
+        ->and($fullProjection['cash_needed'])->toBe(11000.0);
 
     BusinessDaySettings::saveFromForm(null);
 });

@@ -12,6 +12,7 @@ use App\Models\Tenant\Setting;
 use App\Services\AccountingService;
 use App\Services\MemberLoanCalculatorService;
 use App\Support\BusinessDaySettings;
+use App\Support\LoanCalculatorCurrentLoanSettlement;
 use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanSettings;
@@ -335,6 +336,7 @@ test('future start date projects fund and treats the start cycle as paid', funct
 
     expect($projection['cycles_added'])->toBe(3)
         ->and($projection['projected_fund'])->toBe(8000.0)
+        ->and($projection['cash_needed'])->toBe(3000.0)
         ->and($projection['start_cycle_month'])->toBe(3)
         ->and($projection['start_cycle_paid'])->toBeTrue();
 
@@ -361,6 +363,7 @@ test('future start date projects fund and treats the start cycle as paid', funct
 
     expect($custom['contribution_amount'])->toBe(2000.0)
         ->and($custom['projected_fund'])->toBe(11000.0)
+        ->and($custom['cash_needed'])->toBe(6000.0)
         ->and($custom['loan_repayment_cycles'])->toBe(0)
         ->and($custom['loan_repayment_amount'])->toBe(0.0);
 });
@@ -403,7 +406,24 @@ test('future start date settles an active loan with regular payments before addi
         ->and($projection['loan_repayment_cycles'])->toBe(2)
         ->and($projection['loan_repayment_amount'])->toBe(6000.0)
         ->and($projection['loan_repayment_installment'])->toBe(3000.0)
-        ->and($projection['projected_fund'])->toBe(4000.0);
+        ->and($projection['loan_settlement_mode'])->toBe(LoanCalculatorCurrentLoanSettlement::REGULAR_PAYMENTS)
+        ->and($projection['projected_fund'])->toBe(4000.0)
+        ->and($projection['cash_needed'])->toBe(10000.0);
+
+    $early = $this->service->fundProjection(
+        $this->member->fresh(),
+        '2025-10-15',
+        500,
+        LoanCalculatorCurrentLoanSettlement::PARTIAL_TO_MATURITY,
+    );
+
+    expect($early['cycles_added'])->toBe(10)
+        ->and($early['loan_repayment_cycles'])->toBe(0)
+        ->and($early['loan_repayment_amount'])->toBe(6000.0)
+        ->and($early['loan_repayment_installment'])->toBeNull()
+        ->and($early['loan_settlement_mode'])->toBe(LoanCalculatorCurrentLoanSettlement::PARTIAL_TO_MATURITY)
+        ->and($early['projected_fund'])->toBe(5000.0)
+        ->and($early['cash_needed'])->toBe(11000.0);
 });
 
 test('projected fund uses remaining installment amounts when the last EMI differs', function () {
@@ -488,6 +508,146 @@ test('projected fund applies only the EMIs that fit before the start date', func
         ->and($projection['loan_repayment_amount'])->toBe(9000.0)
         ->and($projection['cycles_added'])->toBe(0)
         ->and($projection['projected_fund'])->toBe(3000.0);
+
+    $early = $this->service->fundProjection(
+        $this->member->fresh(),
+        '2025-03-15',
+        500,
+        LoanCalculatorCurrentLoanSettlement::PARTIAL_TO_MATURITY,
+    );
+
+    expect($early['loan_repayment_cycles'])->toBe(0)
+        ->and($early['loan_repayment_amount'])->toBe(12000.0)
+        ->and($early['cycles_added'])->toBe(3)
+        ->and($early['projected_fund'])->toBe(7500.0);
+});
+
+test('early settlement to maturity applies remaining installments even in the start cycle', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    $this->member->fundAccount->update(['balance' => -6000]);
+
+    $loan = Loan::create([
+        'member_id' => $this->member->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'member_portion' => 6000,
+        'master_portion' => 0,
+        'interest_rate' => 0,
+        'term_months' => 2,
+        'monthly_repayment' => 3000,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    foreach ([1, 2] as $number) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $number,
+            'amount' => 3000,
+            'due_date' => now()->addMonths($number),
+            'status' => 'pending',
+        ]);
+    }
+
+    $regular = $this->service->fundProjection($this->member->fresh(), '2025-01-15', 500);
+    $early = $this->service->fundProjection(
+        $this->member->fresh(),
+        '2025-01-15',
+        500,
+        LoanCalculatorCurrentLoanSettlement::PARTIAL_TO_MATURITY,
+    );
+
+    expect($regular['loan_repayment_amount'])->toBe(0.0)
+        ->and($regular['projected_fund'])->toBe(-6000.0)
+        ->and($this->service->estimateBlockReason(10_000, $this->member->fresh(), startDate: '2025-01-15', projectedContributionAmount: 500))
+        ->toBe(__('Projected fund at start must not be negative.'))
+        ->and($early['loan_repayment_amount'])->toBe(6000.0)
+        ->and($early['cycles_added'])->toBe(0)
+        ->and($early['projected_fund'])->toBe(0.0)
+        ->and($this->service->estimateBlockReason(
+            10_000,
+            $this->member->fresh(),
+            startDate: '2025-01-15',
+            projectedContributionAmount: 500,
+            currentLoanSettlement: LoanCalculatorCurrentLoanSettlement::PARTIAL_TO_MATURITY,
+        ))->toBeNull();
+});
+
+test('full early settlement restores pre-loan fund then adds contributions', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    $this->member->fundAccount->update(['balance' => -5000]);
+    $this->member->update(['monthly_contribution_amount' => 500]);
+
+    $loan = Loan::create([
+        'member_id' => $this->member->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'member_portion' => 5000,
+        'master_portion' => 5000,
+        'member_fund_balance_at_disbursement' => 5000,
+        'interest_rate' => 0,
+        'term_months' => 2,
+        'monthly_repayment' => 3500,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    foreach ([1, 2] as $number) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $number,
+            'amount' => 3500,
+            'due_date' => now()->addMonths($number),
+            'status' => 'pending',
+        ]);
+    }
+
+    $regular = $this->service->fundProjection($this->member->fresh(), '2025-10-15', 500);
+    $partial = $this->service->fundProjection(
+        $this->member->fresh(),
+        '2025-10-15',
+        500,
+        LoanCalculatorCurrentLoanSettlement::PARTIAL_TO_MATURITY,
+    );
+    $full = $this->service->fundProjection(
+        $this->member->fresh(),
+        '2025-10-15',
+        500,
+        LoanCalculatorCurrentLoanSettlement::FULL_EARLY_SETTLEMENT,
+    );
+
+    expect($regular['projected_fund'])->toBe(6000.0)
+        ->and($partial['projected_fund'])->toBe(7000.0)
+        ->and($full['loan_settlement_mode'])->toBe(LoanCalculatorCurrentLoanSettlement::FULL_EARLY_SETTLEMENT)
+        ->and($full['loan_repayment_cycles'])->toBe(0)
+        ->and($full['loan_repayment_amount'])->toBe(10000.0)
+        ->and($full['cycles_added'])->toBe(10)
+        ->and($full['projected_fund'])->toBe(10000.0)
+        ->and($regular['cash_needed'])->toBe(11000.0)
+        ->and($partial['cash_needed'])->toBe(12000.0)
+        ->and($full['cash_needed'])->toBe(15000.0);
+
+    $loan->installments()->where('installment_number', 1)->update(['status' => 'paid']);
+    $this->member->fundAccount->update(['balance' => -1500]);
+
+    $afterPayment = $this->service->fundProjection(
+        $this->member->fresh(),
+        '2025-10-15',
+        500,
+        LoanCalculatorCurrentLoanSettlement::FULL_EARLY_SETTLEMENT,
+    );
+
+    expect($afterPayment['loan_repayment_amount'])->toBe(6500.0)
+        ->and($afterPayment['projected_fund'])->toBe(10000.0)
+        ->and($afterPayment['cash_needed'])->toBe(11500.0);
 });
 
 test('calculations are blocked when projected fund at start is negative', function () {
