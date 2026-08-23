@@ -26,6 +26,7 @@ it('uses the fundflow pack as the default application brand', function () {
         ->and(AppBrand::available())->toContain('samman')
         ->and(AppBrand::available())->toContain('samman-unity')
         ->and(AppBrand::available())->toContain('samman-seal')
+        ->and(AppBrand::available())->toContain('samman2')
         ->and(AppBrand::name())->toBe('FundFlow')
         ->and(is_file(AppBrand::logoAbsolutePath()))->toBeTrue()
         ->and(is_file(AppBrand::iconAbsolutePath('pwa_192')))->toBeTrue()
@@ -94,6 +95,51 @@ it('ships a complete Samman concept pack with app and notification icons', funct
     'concept 2' => ['samman-unity', '#0E7C7B', 'Unity, growth, and trust', ['unity', 'growth', 'support', 'trust']],
     'concept 3' => ['samman-seal', '#1A2A1F', 'Balance, authenticity, and continuity', ['diamond', 'leaves', 'calligraphy', 'frame']],
 ]);
+
+it('ships a selectable samman2 pack with exact icon and splash sizes', function () {
+    expect(AppBrand::exists('samman2'))->toBeTrue();
+
+    config(['branding.active' => 'samman2']);
+    AppBrand::flush();
+
+    expect(AppBrand::slug())->toBe('samman2')
+        ->and(AppBrand::name())->toBe('Sheikh Sulaiman Samman Family Fund')
+        ->and(AppBrand::shortName())->toBe('Samman Fund')
+        ->and(AppBrand::themeColor())->toBe('#1A2A1F')
+        ->and(AppBrand::splashBackgroundColor())->toBe('#F6F1EB')
+        ->and(AppBrand::hasWordmark())->toBeFalse()
+        ->and(AppBrand::hasSplash())->toBeTrue()
+        ->and(AppBrand::publicContent()['hero_badge_en'])->toBe('Gold seal, family, and continuity')
+        ->and(is_file(AppBrand::logoAbsolutePath()))->toBeTrue()
+        ->and(is_file(AppBrand::absolutePath('logo.svg')))->toBeTrue()
+        ->and(is_file(AppBrand::absolutePath('favicon.svg')))->toBeTrue()
+        ->and(is_file(AppBrand::absolutePath('icons/maskable-192x192.png')))->toBeTrue()
+        ->and(is_file(AppBrand::absolutePath('icons/maskable-512x512.png')))->toBeTrue()
+        ->and(AppBrand::splashStartupImages())->toHaveCount(count(AppBrand::SPLASH_STARTUP_IMAGES))
+        ->and(AppBrand::splashStartupImages()[0]['url'])->toContain('/branding/samman2/splash/1290x2796.png')
+        ->and(AppBrand::webManifest()['icons'][7]['src'])->toBe('/branding/samman2/icons/icon-512x512.png')
+        ->and(AppBrand::webManifest()['icons'][7]['purpose'])->toBe('any maskable');
+
+    foreach (BrandAppearanceSettings::ICON_SLOTS as $slot => $meta) {
+        $path = AppBrand::iconAbsolutePath($slot);
+        expect(is_file($path))->toBeTrue();
+
+        $info = getimagesize($path);
+        [$width, $height] = array_map('intval', explode('x', $meta['sizes']));
+
+        expect($info[0])->toBe($width)
+            ->and($info[1])->toBe($height);
+    }
+
+    foreach (AppBrand::SPLASH_STARTUP_IMAGES as $spec) {
+        $path = AppBrand::absolutePath(sprintf('splash/%dx%d.png', $spec['width'], $spec['height']));
+        $info = getimagesize($path);
+
+        expect(is_file($path))->toBeTrue()
+            ->and($info[0])->toBe($spec['width'])
+            ->and($info[1])->toBe($spec['height']);
+    }
+});
 
 it('switches icon and theme defaults when APP_BRAND points at another pack', function () {
     $root = sys_get_temp_dir().'/ff-brands-'.uniqid();

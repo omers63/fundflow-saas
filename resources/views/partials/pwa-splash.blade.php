@@ -1,12 +1,15 @@
-@if (\App\Support\AppBrand::hasWordmark())
+@if (\App\Support\AppBrand::hasSplash() || \App\Support\AppBrand::hasWordmark())
     @php
         $splashBg = \App\Support\AppBrand::splashBackgroundColor();
         $iconUrl = \App\Support\AppBrand::iconUrl('pwa_512');
-        $wordmarkUrl = \App\Support\AppBrand::wordmarkUrl();
+        $hasWordmark = \App\Support\AppBrand::hasWordmark();
+        $wordmarkUrl = $hasWordmark ? \App\Support\AppBrand::wordmarkUrl() : '';
     @endphp
     <div id="ff-app-splash" hidden aria-hidden="true">
         <img class="ff-app-splash__icon" src="{{ $iconUrl }}" alt="" width="512" height="512">
-        <img class="ff-app-splash__wordmark" src="{{ $wordmarkUrl }}" alt="" width="720" height="240">
+        @if ($hasWordmark)
+            <img class="ff-app-splash__wordmark" src="{{ $wordmarkUrl }}" alt="" width="720" height="240">
+        @endif
     </div>
     <style>
         #ff-app-splash {
@@ -37,62 +40,68 @@
         #ff-app-splash .ff-app-splash__icon {
             width: min(42vw, 13.75rem);
             height: auto;
+            object-fit: contain;
         }
 
-        #ff-app-splash .ff-app-splash__wordmark {
-            width: min(82vw, 26rem);
-            height: auto;
-        }
-    </style>
-    <script>
-        (function () {
-            var el = document.getElementById('ff-app-splash');
-            if (!el) {
-                return;
+        @if ($hasWordmark)
+
+            #ff-app-splash .ff-app-splash__wordmark {
+                width: min(82vw, 26rem);
+                height: auto;
+                object-fit: contain;
             }
 
-            var standalone = (window.matchMedia && (
-                window.matchMedia('(display-mode: standalone)').matches
-                || window.matchMedia('(display-mode: fullscreen)').matches
-            ))
-                || window.navigator.standalone === true;
-            var mobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
-            var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            var shown = false;
+        @endif
+        </style>
+        <script>
+            (function () {
+                var el = document.getElementById('ff-app-splash');
+                if (!el) {
+                    return;
+                }
 
-            try {
-                shown = window.sessionStorage.getItem('ff-splash-shown') === '1';
-            } catch (e) { }
+                var standalone = (window.matchMedia && (
+                    window.matchMedia('(display-mode: standalone)').matches
+                    || window.matchMedia('(display-mode: fullscreen)').matches
+                ))
+                    || window.navigator.standalone === true;
+                var mobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+                var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                var shown = false;
 
-            if (reduce || shown || (!standalone && !mobile)) {
-                el.remove();
-                return;
-            }
+                try {
+                    shown = window.sessionStorage.getItem('ff-splash-shown') === '1';
+                } catch (e) { }
 
-            try {
-                window.sessionStorage.setItem('ff-splash-shown', '1');
-            } catch (e) { }
+                if (reduce || shown || (!standalone && !mobile)) {
+                    el.remove();
+                    return;
+                }
 
-            el.removeAttribute('hidden');
-            el.classList.add('is-visible');
+                try {
+                    window.sessionStorage.setItem('ff-splash-shown', '1');
+                } catch (e) { }
 
-            var hide = function () {
-                el.classList.add('is-hidden');
-                window.setTimeout(function () {
-                    if (el && el.parentNode) {
-                        el.remove();
-                    }
-                }, 400);
-            };
+                el.removeAttribute('hidden');
+                el.classList.add('is-visible');
 
-            var delay = standalone ? 2000 : 2500;
-            if (document.readyState === 'complete') {
-                window.setTimeout(hide, delay);
-            } else {
-                window.addEventListener('load', function () {
+                var hide = function () {
+                    el.classList.add('is-hidden');
+                    window.setTimeout(function () {
+                        if (el && el.parentNode) {
+                            el.remove();
+                        }
+                    }, 400);
+                };
+
+                var delay = standalone ? 2000 : 2500;
+                if (document.readyState === 'complete') {
                     window.setTimeout(hide, delay);
-                });
-            }
-        })();
-    </script>
+                } else {
+                    window.addEventListener('load', function () {
+                        window.setTimeout(hide, delay);
+                    });
+                }
+            })();
+        </script>
 @endif

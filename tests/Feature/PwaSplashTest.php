@@ -43,6 +43,23 @@ it('renders the icon-plus-wordmark splash for a Samman pack', function () {
         ->and($splash)->toContain('standalone ? 2000 : 2500');
 });
 
+it('renders an icon-only splash overlay for the samman2 pack', function () {
+    config(['branding.active' => 'samman2']);
+    AppBrand::flush();
+
+    $head = view('partials.pwa-head')->render();
+    $splash = view('partials.pwa-splash')->render();
+
+    expect($head)->toContain('rel="apple-touch-startup-image"')
+        ->and($head)->toContain('/branding/samman2/splash/1290x2796.png')
+        ->and($head)->toContain('/branding/samman2/icons/apple-touch-icon.png')
+        ->and($splash)->toContain('id="ff-app-splash"')
+        ->and($splash)->toContain('/branding/samman2/icons/icon-512x512.png')
+        ->and($splash)->not->toContain('ff-app-splash__wordmark')
+        ->and($splash)->toContain('#F6F1EB')
+        ->and($splash)->toContain('object-fit: contain');
+});
+
 it('serves the active brand pack icons from the web manifest', function () {
     $domain = config('tenancy.central_domain');
 

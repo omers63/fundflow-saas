@@ -1,0 +1,36 @@
+{
+    "name": "Sheikh Sulaiman Samman Family Fund",
+    "short_name": "Samman Fund",
+    "description_en": "A family fund bound in a gold seal of heritage and continuity",
+    "description_ar": "صندوق عائلي يجمعه ختم ذهبي من الإرث والاستمرار",
+    "assets": {
+        "logo": "logo.png",
+        "logo_svg": "logo.svg",
+        "favicon_svg": "favicon.svg",
+        "splash": "splash/splash.png",
+        "icons": {
+            "favicon_16": "icons/favicon-16x16.png",
+            "favicon_32": "icons/favicon-32x32.png",
+            "apple_touch": "icons/apple-touch-icon.png",
+            "pwa_72": "icons/icon-72x72.png",
+            "pwa_96": "icons/icon-96x96.png",
+            "pwa_128": "icons/icon-128x128.png",
+            "pwa_144": "icons/icon-144x144.png",
+            "pwa_152": "icons/icon-152x152.png",
+            "pwa_192": "icons/icon-192x192.png",
+            "pwa_384": "icons/icon-384x384.png",
+            "pwa_512": "icons/icon-512x512.png",
+            "notification_icon": "icons/notification-icon-192x192.png",
+            "notification_badge": "icons/notification-badge-96x96.png",
+            "maskable_192": "icons/maskable-192x192.png",
+            "maskable_512": "icons/maskable-512x512.png"
+        },
+        "marks": {
+            "emblem": "marks/emblem.png"
+        }
+    },
+    "communication": {
+        "footer_en": "This message was sent by the Sheikh Sulaiman Samman Family Fund.",
+        "footer_ar": "أُرسلت هذه الرسالة من صندوق عائلة الشيخ سليمان سمان."
+    }
+}
