@@ -10,6 +10,7 @@ use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Support\BusinessDay;
 use App\Support\LoanCalculatorCurrentLoanSettlement;
+use App\Support\LoanCalculatorOutstandingThresholds;
 use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanRepaymentWindowPolicy;
@@ -55,6 +56,7 @@ final class MemberLoanCalculatorService
         ?string $startDate = null,
         int|float|string|null $projectedContributionAmount = null,
         ?string $currentLoanSettlement = null,
+        ?LoanCalculatorOutstandingThresholds $outstandingThresholds = null,
     ): array {
         if ($loanAmount <= 0) {
             return [];
@@ -67,6 +69,7 @@ final class MemberLoanCalculatorService
             $startDate,
             $projectedContributionAmount,
             $currentLoanSettlement,
+            $outstandingThresholds,
         ) !== null) {
             return [];
         }
@@ -76,6 +79,8 @@ final class MemberLoanCalculatorService
             $startDate,
             $projectedContributionAmount,
             $currentLoanSettlement,
+            $loanAmount,
+            $outstandingThresholds,
         );
         $fundBalance = $projection['projected_fund'];
         $settlementPct = LoanSettings::settlementThreshold();
@@ -179,6 +184,7 @@ final class MemberLoanCalculatorService
         ?string $startDate = null,
         int|float|string|null $projectedContributionAmount = null,
         ?string $currentLoanSettlement = null,
+        ?LoanCalculatorOutstandingThresholds $outstandingThresholds = null,
     ): ?string {
         if ($loanAmount <= 0.00001) {
             return null;
@@ -189,6 +195,8 @@ final class MemberLoanCalculatorService
             $startDate,
             $projectedContributionAmount,
             $currentLoanSettlement,
+            $loanAmount,
+            $outstandingThresholds,
         );
         $projectedFund = round((float) $projection['projected_fund'], 2);
 
@@ -223,7 +231,16 @@ final class MemberLoanCalculatorService
      *     start_cycle_month: int,
      *     start_cycle_year: int,
      *     start_cycle_label: string,
-     *     start_cycle_paid: bool
+     *     start_cycle_paid: bool,
+     *     requested_start_date?: string,
+     *     effective_start_date?: string,
+     *     start_date_adjusted?: bool,
+     *     start_date_adjusted_reasons?: list<string>,
+     *     settlement_required?: float,
+     *     eligibility_required?: float,
+     *     cannot_meet_thresholds?: bool,
+     *     include_settlement_threshold?: bool,
+     *     include_eligibility_threshold?: bool
      * }  $projection
      * @return array{
      *     grace_cycles: int,
@@ -336,7 +353,16 @@ final class MemberLoanCalculatorService
      *     start_cycle_month: int,
      *     start_cycle_year: int,
      *     start_cycle_label: string,
-     *     start_cycle_paid: bool
+     *     start_cycle_paid: bool,
+     *     requested_start_date: string,
+     *     effective_start_date: string,
+     *     start_date_adjusted: bool,
+     *     start_date_adjusted_reasons: list<string>,
+     *     settlement_required: float,
+     *     eligibility_required: float,
+     *     cannot_meet_thresholds: bool,
+     *     include_settlement_threshold: bool,
+     *     include_eligibility_threshold: bool
      * }
      */
     public function fundProjection(
@@ -344,8 +370,20 @@ final class MemberLoanCalculatorService
         ?string $startDate = null,
         int|float|string|null $projectedContributionAmount = null,
         ?string $currentLoanSettlement = null,
+        float $newLoanAmount = 0.0,
+        ?LoanCalculatorOutstandingThresholds $outstandingThresholds = null,
     ): array {
-        $start = $this->resolvedStartDate($startDate);
+        $thresholds = $outstandingThresholds ?? LoanCalculatorOutstandingThresholds::none();
+        $requestedStart = $this->resolvedStartDate($startDate);
+        $horizon = $this->resolveOutstandingLoanHorizon(
+            $member,
+            $requestedStart,
+            $projectedContributionAmount,
+            $currentLoanSettlement,
+            $newLoanAmount,
+            $thresholds,
+        );
+        $start = $horizon['start'];
         $currentFund = round($member->getFundBalance(), 2);
         $contributionAmount = $this->resolvedContributionAmount($member, $projectedContributionAmount);
         [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
@@ -394,6 +432,15 @@ final class MemberLoanCalculatorService
             'start_cycle_year' => $startYear,
             'start_cycle_label' => $this->cycles->periodLabel($startMonth, $startYear),
             'start_cycle_paid' => $startCyclePaid,
+            'requested_start_date' => $requestedStart->toDateString(),
+            'effective_start_date' => $start->toDateString(),
+            'start_date_adjusted' => $horizon['adjusted'],
+            'start_date_adjusted_reasons' => $horizon['reasons'],
+            'settlement_required' => $horizon['settlement_required'],
+            'eligibility_required' => $horizon['eligibility_required'],
+            'cannot_meet_thresholds' => $horizon['cannot_meet'],
+            'include_settlement_threshold' => $thresholds->settlement,
+            'include_eligibility_threshold' => $thresholds->eligibility,
         ];
     }
 
@@ -469,6 +516,237 @@ final class MemberLoanCalculatorService
         }
 
         return $cycles;
+    }
+
+    /**
+     * @return array{
+     *     start: Carbon,
+     *     adjusted: bool,
+     *     reasons: list<string>,
+     *     settlement_required: float,
+     *     eligibility_required: float,
+     *     cannot_meet: bool
+     * }
+     */
+    public function resolveOutstandingLoanHorizon(
+        Member $member,
+        Carbon $requestedStart,
+        int|float|string|null $projectedContributionAmount,
+        ?string $currentLoanSettlement,
+        float $newLoanAmount = 0.0,
+        ?LoanCalculatorOutstandingThresholds $outstandingThresholds = null,
+    ): array {
+        $thresholds = $outstandingThresholds ?? LoanCalculatorOutstandingThresholds::none();
+        $remainingPayments = $this->remainingActiveLoanInstallmentAmounts($member);
+        $floors = $this->outstandingLoanFundFloors($member, $newLoanAmount, $thresholds);
+        $empty = [
+            'start' => $requestedStart->copy()->startOfDay(),
+            'adjusted' => false,
+            'reasons' => [],
+            'settlement_required' => $floors['settlement'],
+            'eligibility_required' => $floors['eligibility'],
+            'cannot_meet' => false,
+        ];
+
+        if ($remainingPayments === [] || ! $thresholds->any()) {
+            return $empty;
+        }
+
+        $contributionAmount = $this->resolvedContributionAmount($member, $projectedContributionAmount);
+        $settlementMode = LoanCalculatorCurrentLoanSettlement::normalize($currentLoanSettlement);
+        $currentFund = round($member->getFundBalance(), 2);
+        $emiCount = count($remainingPayments);
+        $emiSum = round(array_sum($remainingPayments), 2);
+
+        if (LoanCalculatorCurrentLoanSettlement::isFullEarlySettlement($settlementMode)) {
+            $fundAfterRepayments = round($currentFund + $this->fullEarlySettlementRestoreAmount($member, $currentFund), 2);
+            $repaymentCyclesNeeded = 0;
+        } elseif (LoanCalculatorCurrentLoanSettlement::isPartialToMaturity($settlementMode)) {
+            $fundAfterRepayments = round($currentFund + $emiSum, 2);
+            $repaymentCyclesNeeded = 0;
+        } else {
+            $fundAfterRepayments = round($currentFund + $emiSum, 2);
+            $repaymentCyclesNeeded = $emiCount;
+        }
+
+        $extraToSettle = $this->extraContributionCyclesToReach(
+            $fundAfterRepayments,
+            $floors['settlement'],
+            $contributionAmount,
+        );
+        $extraToEligible = $this->extraContributionCyclesToReach(
+            $fundAfterRepayments,
+            max($floors['settlement'], $floors['eligibility']),
+            $contributionAmount,
+        );
+
+        if ($extraToSettle === PHP_INT_MAX || $extraToEligible === PHP_INT_MAX) {
+            $empty['cannot_meet'] = true;
+
+            $minCycles = $repaymentCyclesNeeded;
+            if ($minCycles <= 0) {
+                return $empty;
+            }
+
+            $start = $this->earliestDateWithWindowCycles($member, $requestedStart, $minCycles);
+            $empty['start'] = $start;
+            $empty['adjusted'] = $start->toDateString() !== $requestedStart->toDateString();
+            $reasons = [];
+
+            if ($empty['adjusted'] && $thresholds->settlement) {
+                $reasons[] = 'settlement';
+            }
+
+            if ($empty['adjusted'] && $thresholds->eligibility) {
+                $reasons[] = 'eligibility';
+            }
+
+            $empty['reasons'] = $reasons;
+
+            return $empty;
+        }
+
+        $minCyclesToSettle = $repaymentCyclesNeeded + $extraToSettle;
+        $minCyclesToEligible = $repaymentCyclesNeeded + $extraToEligible;
+        $requiredCycles = max($minCyclesToSettle, $minCyclesToEligible);
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $from = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+        [$requestedMonth, $requestedYear] = $this->cycles->periodContaining($requestedStart);
+        $requestedTo = Carbon::create($requestedYear, $requestedMonth, 1)->startOfMonth();
+        $currentPosted = Contribution::activePeriodExists((int) $member->id, $openMonth, $openYear);
+        $requestedWindow = $this->projectedContributionCycles($from, $requestedTo, $currentPosted);
+
+        $reasons = $this->outstandingHorizonReasons(
+            $thresholds,
+            $requestedWindow,
+            $minCyclesToSettle,
+            $minCyclesToEligible,
+        );
+
+        $start = $requiredCycles > $requestedWindow
+            ? $this->earliestDateWithWindowCycles($member, $requestedStart, $requiredCycles)
+            : $requestedStart->copy()->startOfDay();
+
+        return [
+            'start' => $start,
+            'adjusted' => $start->toDateString() !== $requestedStart->toDateString(),
+            'reasons' => $start->toDateString() !== $requestedStart->toDateString() ? $reasons : [],
+            'settlement_required' => $floors['settlement'],
+            'eligibility_required' => $floors['eligibility'],
+            'cannot_meet' => false,
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function outstandingHorizonReasons(
+        LoanCalculatorOutstandingThresholds $thresholds,
+        int $requestedWindow,
+        int $minCyclesToSettle,
+        int $minCyclesToEligible,
+    ): array {
+        $reasons = [];
+
+        if ($thresholds->settlement && $requestedWindow < $minCyclesToSettle) {
+            $reasons[] = 'settlement';
+        }
+
+        if ($thresholds->eligibility && $requestedWindow < $minCyclesToEligible) {
+            $reasons[] = 'eligibility';
+        }
+
+        return $reasons;
+    }
+
+    /**
+     * @return array{settlement: float, eligibility: float}
+     */
+    private function outstandingLoanFundFloors(
+        Member $member,
+        float $newLoanAmount,
+        LoanCalculatorOutstandingThresholds $thresholds,
+    ): array {
+
+        $loans = Loan::query()
+            ->where('member_id', $member->id)
+            ->whereIn('status', ['active', 'transferred'])
+            ->with('loanTier')
+            ->orderBy('id')
+            ->get();
+
+        $settlement = 0.0;
+        $eligibility = 0.0;
+
+        foreach ($loans as $loan) {
+            $approved = round((float) ($loan->amount_approved ?: $loan->amount), 2);
+            $settlementPct = $loan->settlement_threshold !== null
+                ? max(0.0, (float) $loan->settlement_threshold)
+                : LoanSettings::settlementThreshold();
+            $settlement = max($settlement, round($approved * $settlementPct, 2));
+            $eligibility = max($eligibility, $loan->eligibilityThresholdAmount());
+        }
+
+        if ($newLoanAmount > 0.00001) {
+            $tier = LoanTier::forAmount($newLoanAmount);
+
+            if ($tier !== null) {
+                $eligibility = max(
+                    $eligibility,
+                    round((float) $tier->max_amount * LoanSettings::eligibilityThreshold(), 2),
+                );
+            }
+        }
+
+        return [
+            'settlement' => $thresholds->settlement ? $settlement : 0.0,
+            'eligibility' => $thresholds->eligibility ? $eligibility : 0.0,
+        ];
+    }
+
+    private function extraContributionCyclesToReach(float $fund, float $target, float $contribution): int
+    {
+        $shortfall = round($target - $fund, 2);
+
+        if ($shortfall <= 0.00001) {
+            return 0;
+        }
+
+        if ($contribution <= 0.00001) {
+            return PHP_INT_MAX;
+        }
+
+        return (int) ceil($shortfall / $contribution - 0.000000001);
+    }
+
+    private function earliestDateWithWindowCycles(Member $member, Carbon $notBefore, int $requiredCycles): Carbon
+    {
+        $candidate = $notBefore->copy()->startOfDay();
+
+        if ($requiredCycles <= 0) {
+            return $candidate;
+        }
+
+        [$openMonth, $openYear] = $this->cycles->currentOpenPeriod();
+        $from = Carbon::create($openYear, $openMonth, 1)->startOfMonth();
+        $currentPosted = Contribution::activePeriodExists(
+            (int) $member->id,
+            $openMonth,
+            $openYear,
+        );
+
+        for ($i = 0; $i < 120; $i++) {
+            [$startMonth, $startYear] = $this->cycles->periodContaining($candidate);
+            $to = Carbon::create($startYear, $startMonth, 1)->startOfMonth();
+
+            if ($this->projectedContributionCycles($from, $to, $currentPosted) >= $requiredCycles) {
+                return $candidate;
+            }
+
+            $candidate = $candidate->copy()->addMonthNoOverflow();
+        }
+
+        return $candidate;
     }
 
     /**

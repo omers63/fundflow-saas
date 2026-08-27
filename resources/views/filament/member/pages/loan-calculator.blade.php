@@ -137,6 +137,11 @@
                                 'cycle' => $this->currentCycleLabel,
                             ]) }}
                         </p>
+                        @if (filled($this->startDateAdjustmentMessage()))
+                            <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                                {{ $this->startDateAdjustmentMessage() }}
+                            </p>
+                        @endif
                     </div>
                     <div>
                         <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300" for="loan-calculator-projected-contribution">
@@ -178,6 +183,29 @@
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                             {{ __('Regular payments use one remaining installment per cycle. Partial early settlement pays remaining installments now. Full early settlement closes the loan and restores your pre-loan fund. Later cycles then add your projected monthly contribution.') }}
                         </p>
+                        <div class="mt-3 space-y-2">
+                            <label class="flex cursor-pointer items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                <input
+                                    id="loan-calculator-include-settlement-threshold"
+                                    type="checkbox"
+                                    wire:model.live="includeSettlementThreshold"
+                                    class="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
+                                />
+                                <span>{{ __('Include the :percent% settlement threshold', ['percent' => $settlementPercent]) }}</span>
+                            </label>
+                            <label class="flex cursor-pointer items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                <input
+                                    id="loan-calculator-include-eligibility-threshold"
+                                    type="checkbox"
+                                    wire:model.live="includeEligibilityThreshold"
+                                    class="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
+                                />
+                                <span>{{ __('Include the :percent% eligibility threshold', ['percent' => $eligibilityPercent]) }}</span>
+                            </label>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">
+                                {{ __('When enabled, the projected start date moves forward if regular payments would not reach that threshold before this estimate.') }}
+                            </p>
+                        </div>
                     </div>
                 @endif
 
@@ -285,6 +313,34 @@
                                             {{ __('Using your current fund balance.') }}
                                         @endif
                                     </p>
+                                    @php
+                                        $includeSettlementFloor = ($projection['include_settlement_threshold'] ?? false)
+                                            && (float) ($projection['settlement_required'] ?? 0) > 0.00001;
+                                        $includeEligibilityFloor = ($projection['include_eligibility_threshold'] ?? false)
+                                            && (float) ($projection['eligibility_required'] ?? 0) > 0.00001;
+                                    @endphp
+                                    @if ($includeSettlementFloor || $includeEligibilityFloor)
+                                        <p class="mt-1 text-xs text-emerald-800 dark:text-emerald-200">
+                                            @if ($includeSettlementFloor && $includeEligibilityFloor)
+                                                {!! __('Includes the :settlement% settlement floor (:settlement_amount) and the :eligibility% eligibility floor (:eligibility_amount).', [
+                                                    'settlement' => $settlementPercent,
+                                                    'settlement_amount' => $moneyHtml($projection['settlement_required'] ?? 0),
+                                                    'eligibility' => $eligibilityPercent,
+                                                    'eligibility_amount' => $moneyHtml($projection['eligibility_required'] ?? 0),
+                                                ]) !!}
+                                            @elseif ($includeSettlementFloor)
+                                                {!! __('Includes the :settlement% settlement floor (:settlement_amount).', [
+                                                    'settlement' => $settlementPercent,
+                                                    'settlement_amount' => $moneyHtml($projection['settlement_required'] ?? 0),
+                                                ]) !!}
+                                            @else
+                                                {!! __('Includes the :eligibility% eligibility floor (:eligibility_amount).', [
+                                                    'eligibility' => $eligibilityPercent,
+                                                    'eligibility_amount' => $moneyHtml($projection['eligibility_required'] ?? 0),
+                                                ]) !!}
+                                            @endif
+                                        </p>
+                                    @endif
                                 </div>
 
                                 <div class="ff-member-loan-calc-projected-fund__cash min-w-0">

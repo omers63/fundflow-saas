@@ -18,9 +18,11 @@ use App\Support\BusinessDay;
 use App\Support\ContributionAmountSettings;
 use App\Support\LoanCalculatorCurrentLoanSettlement;
 use App\Support\LoanCalculatorFundingApproach;
+use App\Support\LoanCalculatorOutstandingThresholds;
 use App\Support\LoanSettings;
 use App\Support\Tenant\CurrentMember;
 use BackedEnum;
+use Carbon\Carbon;
 use Filament\Notifications\Notification;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
@@ -62,7 +64,17 @@ class LoanCalculatorPage extends Page
 
     public string $currentLoanSettlement = LoanCalculatorCurrentLoanSettlement::REGULAR_PAYMENTS;
 
+    public bool $includeSettlementThreshold = true;
+
+    public bool $includeEligibilityThreshold = true;
+
     public string $calculatorMode = self::MODE_ESTIMATE;
+
+    public bool $syncingProjectedStartDate = false;
+
+    public ?string $lastStartDateAdjustmentNoticeKey = null;
+
+    public ?string $startDateAdjustmentHelper = null;
 
     public int $simulateTierIndex = 0;
 
@@ -93,6 +105,7 @@ class LoanCalculatorPage extends Page
         );
         $this->simulationContributionAmount = $this->projectedContributionAmount;
         $this->simulationCashDepositAmount = (float) $this->simulationContributionAmount;
+        $this->syncProjectedStartDate();
     }
 
     public function updatedFundingApproach(string $value): void
@@ -111,17 +124,46 @@ class LoanCalculatorPage extends Page
     {
         $this->projectedContributionAmount = $this->normalizeProjectedContribution($value);
         $this->resetSimulation();
+        $this->syncProjectedStartDate();
     }
 
     public function updatedCurrentLoanSettlement(string $value): void
     {
         $this->currentLoanSettlement = LoanCalculatorCurrentLoanSettlement::normalize($value);
         $this->resetSimulation();
+        $this->syncProjectedStartDate();
+    }
+
+    public function updatedIncludeSettlementThreshold(mixed $value): void
+    {
+        $this->includeSettlementThreshold = filter_var($value, FILTER_VALIDATE_BOOLEAN);
+        $this->lastStartDateAdjustmentNoticeKey = null;
+        $this->resetSimulation();
+        $this->syncProjectedStartDate();
+    }
+
+    public function updatedIncludeEligibilityThreshold(mixed $value): void
+    {
+        $this->includeEligibilityThreshold = filter_var($value, FILTER_VALIDATE_BOOLEAN);
+        $this->lastStartDateAdjustmentNoticeKey = null;
+        $this->resetSimulation();
+        $this->syncProjectedStartDate();
     }
 
     public function updatedLoanAmount(mixed $value): void
     {
         $this->resetSimulation();
+        $this->syncProjectedStartDate();
+    }
+
+    public function updatedStartDate(mixed $value): void
+    {
+        if ($this->syncingProjectedStartDate) {
+            return;
+        }
+
+        $this->resetSimulation();
+        $this->syncProjectedStartDate();
     }
 
     public function calculate(): void
@@ -467,6 +509,7 @@ class LoanCalculatorPage extends Page
             $this->startDate,
             $this->projectedContributionAmount,
             $this->currentLoanSettlement,
+            $this->outstandingThresholds(),
         );
     }
 
@@ -487,6 +530,7 @@ class LoanCalculatorPage extends Page
             $this->startDate,
             $this->projectedContributionAmount,
             $this->currentLoanSettlement,
+            $this->outstandingThresholds(),
         );
     }
 
@@ -587,6 +631,153 @@ class LoanCalculatorPage extends Page
     public function hasCurrentLoanToSettle(): bool
     {
         return CurrentMember::get()?->hasActiveLoanRepaymentObligation() ?? false;
+    }
+
+    private function outstandingThresholds(): LoanCalculatorOutstandingThresholds
+    {
+        return new LoanCalculatorOutstandingThresholds(
+            $this->includeSettlementThreshold,
+            $this->includeEligibilityThreshold,
+        );
+    }
+
+    public function startDateAdjustmentMessage(): ?string
+    {
+        return $this->startDateAdjustmentHelper;
+    }
+
+    private function syncProjectedStartDate(): void
+    {
+        $member = CurrentMember::get();
+
+        if ($member === null || $this->syncingProjectedStartDate) {
+            return;
+        }
+
+        $horizon = app(MemberLoanCalculatorService::class)->resolveOutstandingLoanHorizon(
+            $member,
+            $this->resolvedCalculatorStartDate(),
+            $this->projectedContributionAmount,
+            $this->currentLoanSettlement,
+            (float) ($this->loanAmount ?? 0),
+            $this->outstandingThresholds(),
+        );
+        $effective = $horizon['start']->toDateString();
+        unset($this->projection, $this->currentCycleLabel, $this->calculations, $this->estimateBlockReason);
+
+        if ($effective !== $this->startDate) {
+            $this->syncingProjectedStartDate = true;
+            $this->startDate = $effective;
+            $this->syncingProjectedStartDate = false;
+        }
+
+        if ($horizon['cannot_meet']) {
+            $this->startDateAdjustmentHelper = __('The projected monthly contribution is too low to reach the settlement and eligibility thresholds. Increase the contribution or choose another settlement option.');
+        } elseif ($horizon['adjusted']) {
+            $this->startDateAdjustmentHelper = $this->startDateAdjustmentNotice($effective, $horizon['reasons']);
+        } else {
+            $this->startDateAdjustmentHelper = null;
+        }
+
+        $this->notifyStartDateHorizon($horizon, $effective);
+    }
+
+    /**
+     * @param  array{adjusted: bool, reasons: list<string>, cannot_meet: bool}  $horizon
+     */
+    private function notifyStartDateHorizon(array $horizon, string $effectiveDate): void
+    {
+        $key = $horizon['cannot_meet']
+            ? 'cannot-meet'
+            : $effectiveDate.'|'.implode(',', $horizon['reasons']);
+
+        if ($horizon['cannot_meet']) {
+            if ($this->lastStartDateAdjustmentNoticeKey === $key) {
+                return;
+            }
+
+            $this->lastStartDateAdjustmentNoticeKey = $key;
+            Notification::make()
+                ->title(__('Start date cannot reach settlement and eligibility thresholds'))
+                ->body(__('The projected monthly contribution is too low to reach the settlement and eligibility thresholds. Increase the contribution or choose another settlement option.'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        if (! $horizon['adjusted']) {
+            return;
+        }
+
+        if ($this->lastStartDateAdjustmentNoticeKey === $key) {
+            return;
+        }
+
+        $this->lastStartDateAdjustmentNoticeKey = $key;
+
+        $body = $this->startDateAdjustmentNotice($effectiveDate, $horizon['reasons']);
+
+        if ($body === null) {
+            return;
+        }
+
+        Notification::make()
+            ->title(__('Projected start date was updated'))
+            ->body($body)
+            ->info()
+            ->send();
+    }
+
+    /**
+     * @param  list<string>  $reasons
+     */
+    private function startDateAdjustmentNotice(string $effectiveDate, array $reasons): ?string
+    {
+        $date = Carbon::parse($effectiveDate)->locale(app()->getLocale())->translatedFormat('j M Y');
+        $settlementPct = round(LoanSettings::settlementThreshold() * 100, 1);
+        $eligibilityPct = round(LoanSettings::eligibilityThreshold() * 100, 1);
+        $needsSettlement = in_array('settlement', $reasons, true);
+        $needsEligibility = in_array('eligibility', $reasons, true);
+
+        if ($needsSettlement && $needsEligibility) {
+            return __('The start date was moved to :date so regular payments can settle the current loan (including the :settlement% settlement threshold) and meet the :eligibility% eligibility threshold.', [
+                'date' => $date,
+                'settlement' => $settlementPct,
+                'eligibility' => $eligibilityPct,
+            ]);
+        }
+
+        if ($needsSettlement) {
+            return __('The start date was moved to :date so regular payments can settle the current loan, including the :settlement% settlement threshold.', [
+                'date' => $date,
+                'settlement' => $settlementPct,
+            ]);
+        }
+
+        if ($needsEligibility) {
+            return __('The start date was moved to :date so the projected fund meets the :eligibility% eligibility threshold.', [
+                'date' => $date,
+                'eligibility' => $eligibilityPct,
+            ]);
+        }
+
+        return __('The start date was moved to :date so the current loan can be settled before this estimate.', [
+            'date' => $date,
+        ]);
+    }
+
+    private function resolvedCalculatorStartDate(): Carbon
+    {
+        if (! filled($this->startDate)) {
+            return BusinessDay::today()->startOfDay();
+        }
+
+        try {
+            return Carbon::parse($this->startDate)->startOfDay();
+        } catch (Throwable) {
+            return BusinessDay::today()->startOfDay();
+        }
     }
 
     #[Computed]
@@ -692,6 +883,8 @@ class LoanCalculatorPage extends Page
                 'start_cycle_year' => 0,
                 'start_cycle_label' => '—',
                 'start_cycle_paid' => false,
+                'include_settlement_threshold' => $this->includeSettlementThreshold,
+                'include_eligibility_threshold' => $this->includeEligibilityThreshold,
             ];
         }
 
@@ -700,6 +893,8 @@ class LoanCalculatorPage extends Page
             $this->startDate,
             $this->projectedContributionAmount,
             $this->currentLoanSettlement,
+            (float) ($this->loanAmount ?? 0),
+            $this->outstandingThresholds(),
         );
     }
 
