@@ -1,12 +1,12 @@
 @php
-    $sim = $this->simulation;
-    $simActive = is_array($sim) && ($sim['status'] ?? '') === \App\Services\MemberLoanLifecycleSimulator::STATUS_ACTIVE;
-    $simClosed = is_array($sim) && in_array($sim['status'] ?? '', [
-        \App\Services\MemberLoanLifecycleSimulator::STATUS_PAID,
-        \App\Services\MemberLoanLifecycleSimulator::STATUS_FULLY_SETTLED,
-    ], true);
-    $scheduleRows = is_array($sim['schedule_rows'] ?? null) ? $sim['schedule_rows'] : [];
-    $moneyHtml = fn (float|int|string|null $value): string => \App\Filament\Support\MoneyDisplay::html($value, $currency)?->toHtml() ?? e('—');
+$sim = $this->simulation;
+$simActive = is_array($sim) && ($sim['status'] ?? '') === \App\Services\MemberLoanLifecycleSimulator::STATUS_ACTIVE;
+$simClosed = is_array($sim) && in_array($sim['status'] ?? '', [
+    \App\Services\MemberLoanLifecycleSimulator::STATUS_PAID,
+    \App\Services\MemberLoanLifecycleSimulator::STATUS_FULLY_SETTLED,
+], true);
+$scheduleRows = is_array($sim['schedule_rows'] ?? null) ? $sim['schedule_rows'] : [];
+$moneyHtml = fn(float|int|string|null $value): string => \App\Filament\Support\MoneyDisplay::html($value, $currency)?->toHtml() ?? e('—');
 @endphp
 
 <div class="ff-member-loan-sim space-y-6">
@@ -36,7 +36,7 @@
         @endif
     </x-member::panel>
 
-    @if (! is_array($sim))
+    @if (!is_array($sim))
         <div class="rounded-xl bg-white p-6 text-center shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
             <p class="text-sm text-gray-500 dark:text-gray-400">
                 {{ __('Start the simulation from your current estimate.') }}
@@ -101,8 +101,8 @@
                         @if (((float) ($sim['excess_to_cash'] ?? 0)) > 0.00001)
                             <p class="mt-0.5 text-xs text-sky-700/80 dark:text-sky-300/80">
                                 {!! __('Includes excess transferred at disbursement (:amount)', [
-                                    'amount' => $moneyHtml((float) $sim['excess_to_cash']),
-                                ]) !!}
+            'amount' => $moneyHtml((float) $sim['excess_to_cash']),
+        ]) !!}
                             </p>
                         @endif
                     </div>
@@ -144,8 +144,8 @@
                                     <p class="text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('Regular payment') }}</p>
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                         {!! __('Always pays the installment amount (:amount).', [
-                                            'amount' => $moneyHtml((float) ($sim['min_installment'] ?? 0)),
-                                        ]) !!}
+            'amount' => $moneyHtml((float) ($sim['min_installment'] ?? 0)),
+        ]) !!}
                                     </p>
                                 </div>
                                 <div class="mt-auto">
@@ -170,8 +170,8 @@
                                     />
                                     <p class="mt-1 text-xs font-medium text-gray-700 dark:text-gray-200">
                                         {!! __('Amount needed for full maturity: :amount', [
-                                            'amount' => $moneyHtml((float) ($sim['remaining_maturity'] ?? 0)),
-                                        ]) !!}
+            'amount' => $moneyHtml((float) ($sim['remaining_maturity'] ?? 0)),
+        ]) !!}
                                     </p>
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                         {{ __('Used for partial early settlement only.') }}
@@ -189,8 +189,8 @@
                                     <p class="text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('Full settlement amount') }}</p>
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                         {!! __('Pay :amount to close now.', [
-                                            'amount' => $moneyHtml((float) ($sim['full_settlement_amount'] ?? 0)),
-                                        ]) !!}
+            'amount' => $moneyHtml((float) ($sim['full_settlement_amount'] ?? 0)),
+        ]) !!}
                                     </p>
                                 </div>
                                 <div class="mt-auto">
@@ -270,97 +270,107 @@
                     </summary>
 
                     <div class="px-4 pb-4 sm:px-5">
-                        <div class="ff-member-loan-calc-schedule max-h-80 overflow-y-auto rounded-lg ring-1 ring-gray-200 dark:ring-gray-700">
-                            <div class="ff-member-loan-calc-schedule-header border-b border-gray-100 bg-gray-50 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400">
-                                <span>{{ __('EMI') }}</span>
-                                <span>{{ __('Cycle') }}</span>
-                                <span>{{ __('Due date') }}</span>
-                                <span>{{ __('Amount') }}</span>
-                            </div>
-                        @forelse ($scheduleRows as $row)
-                            @php
-                                $kind = (string) ($row['kind'] ?? 'pending');
-                                $days = $row['days_until_due'] ?? null;
-                            @endphp
-                            <div
-                                @class([
-                                    'ff-member-loan-calc-schedule-row border-b border-gray-100 px-3 py-2 last:border-b-0 dark:border-gray-700 sm:px-0',
-                                    'ff-member-loan-calc-schedule-row--grace bg-violet-50/70 dark:bg-violet-950/20' => $kind === 'grace',
-                                    'ff-member-loan-calc-schedule-row--contribution bg-amber-50/70 dark:bg-amber-950/20' => $kind === 'contribution_due',
-                                    'ff-member-loan-calc-schedule-row--contribution-paid bg-emerald-50/50 dark:bg-emerald-950/20' => $kind === 'contribution_paid',
-                                    'ff-member-loan-calc-schedule-row--regular bg-emerald-50/70 dark:bg-emerald-950/25' => $kind === 'paid',
-                                    'ff-member-loan-calc-schedule-row--partial bg-primary-50/70 dark:bg-primary-950/25' => in_array($kind, ['rolled_up', 'skipped', 'dropped'], true),
-                                    'ff-member-loan-calc-schedule-row--full bg-amber-50/70 dark:bg-amber-950/25' => $kind === 'cancelled',
-                                ])
-                            >
-                                <div class="text-xs font-semibold tabular-nums text-gray-700 dark:text-gray-200">
-                                    @if (in_array($kind, ['grace', 'contribution_due', 'contribution_paid'], true))
-                                        —
-                                    @else
-                                        {{ $row['number'] ?? '—' }}
-                                    @endif
-                                </div>
-                                <div class="min-w-0">
-                                    @if ($kind === 'grace')
-                                        <x-member::chip variant="purple">{{ __('Grace') }}</x-member::chip>
-                                    @elseif ($kind === 'contribution_due')
-                                        <x-member::chip variant="amber">{{ __('Contribution due') }}</x-member::chip>
-                                    @elseif ($kind === 'contribution_paid')
-                                        <x-member::chip variant="green">{{ __('Paid') }}</x-member::chip>
-                                    @elseif ($kind === 'paid')
-                                        <x-member::chip variant="green">{{ __('Regular payment') }}</x-member::chip>
-                                    @elseif ($kind === 'rolled_up')
-                                        <x-member::chip variant="blue">{{ __('Partial settlement') }}</x-member::chip>
-                                    @elseif ($kind === 'skipped')
-                                        <x-member::chip variant="blue">{{ __('Skipped') }}</x-member::chip>
-                                    @elseif ($kind === 'cancelled')
-                                        <x-member::chip variant="amber">{{ __('Full settlement') }}</x-member::chip>
-                                    @elseif ($kind === 'dropped')
-                                        <x-member::chip variant="blue">{{ __('Removed') }}</x-member::chip>
-                                    @elseif ($kind === 'pending')
-                                        <x-member::chip variant="gray">{{ __('Pending') }}</x-member::chip>
-                                    @endif
-                                    <p class="text-sm text-gray-800 dark:text-gray-100">{{ $row['cycle_label'] ?? '—' }}</p>
-                                </div>
-                                <div class="min-w-0 text-sm text-gray-500 dark:text-gray-400">
-                                    <p>{{ $row['due_label'] ?? ($row['due_date'] ?? '—') }}</p>
-                                    @if ($kind === 'pending' && is_numeric($days))
-                                        <p class="text-xs">
-                                            @if ((int) $days > 0)
-                                                {{ __('In :days days', ['days' => (int) $days]) }}
-                                            @elseif ((int) $days === 0)
-                                                {{ __('Due today') }}
-                                            @else
-                                                {{ __(':days days overdue', ['days' => abs((int) $days)]) }}
-                                            @endif
-                                        </p>
-                                    @elseif (filled($row['note'] ?? null))
-                                        <p class="text-xs">{{ $row['note'] }}</p>
-                                    @endif
-                                </div>
-                                <p @class([
-                                    'text-sm font-semibold tabular-nums sm:text-end',
-                                    'text-gray-400 dark:text-gray-500' => in_array($kind, ['skipped', 'grace', 'contribution_paid'], true)
-                                        || ($kind === 'cancelled' && ((float) ($row['amount'] ?? 0)) <= 0.00001),
-                                    'text-gray-900 dark:text-white' => ! in_array($kind, ['skipped', 'grace', 'contribution_paid'], true)
-                                        && ! ($kind === 'cancelled' && ((float) ($row['amount'] ?? 0)) <= 0.00001),
-                                ])>
-                                    @if (in_array($kind, ['grace', 'contribution_paid'], true))
-                                        —
-                                    @elseif ($kind === 'skipped' || ($kind === 'cancelled' && ((float) ($row['amount'] ?? 0)) <= 0.00001))
-                                        {{ __('No EMI') }}
-                                    @else
-                                        <x-member::amount :value="$row['amount'] ?? 0" :currency="$currency" />
-                                    @endif
-                                </p>
-                            </div>
-                        @empty
-                            <div class="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                {{ __('No schedule rows.') }}
-                            </div>
-                        @endforelse
+                        <div class="max-h-80 overflow-y-auto rounded-lg ring-1 ring-gray-200 dark:ring-gray-700">
+                            <table class="w-full divide-y divide-gray-100 text-xs dark:divide-gray-700">
+                                <thead class="sticky top-0 z-10 bg-gray-50 text-[10px] font-semibold uppercase tracking-wide text-gray-500 shadow-sm dark:bg-gray-800 dark:text-gray-400">
+                                    <tr>
+                                        <th scope="col" class="px-3 py-2 text-start font-semibold">{{ __('EMI') }}</th>
+                                        <th scope="col" class="px-3 py-2 text-start font-semibold">{{ __('Cycle') }}</th>
+                                        <th scope="col" class="px-3 py-2 text-start font-semibold">{{ __('Due date') }}</th>
+                                        <th scope="col" class="px-3 py-2 text-end font-semibold">{{ __('Amount') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 bg-white dark:divide-gray-700 dark:bg-gray-900/40">
+                                    @forelse ($scheduleRows as $row)
+                                                                        @php
+                                        $kind = (string) ($row['kind'] ?? 'pending');
+                                        $days = $row['days_until_due'] ?? null;
+                                                                        @endphp
+                                                                        <tr
+                                                                            @class([
+                                                                                'border-b border-gray-100 transition-colors last:border-b-0 dark:border-gray-700',
+                                                                                'bg-violet-50/70 dark:bg-violet-950/20' => $kind === 'grace',
+                                                                                'bg-amber-50/70 dark:bg-amber-950/20' => $kind === 'contribution_due',
+                                                                                'bg-emerald-50/50 dark:bg-emerald-950/20' => $kind === 'contribution_paid',
+                                                                                'bg-emerald-50/70 dark:bg-emerald-950/25' => $kind === 'paid',
+                                                                                'bg-primary-50/70 dark:bg-primary-950/25' => in_array($kind, ['rolled_up', 'skipped', 'dropped'], true),
+                                                                                'bg-amber-50/70 dark:bg-amber-950/25' => $kind === 'cancelled',
+                                                                            ])
+                                                                        >
+                                                                            <td class="whitespace-nowrap px-3 py-2 align-top text-start font-semibold tabular-nums text-gray-700 dark:text-gray-200">
+                                                                                @if (in_array($kind, ['grace', 'contribution_due', 'contribution_paid'], true))
+                                                                                    —
+                                                                                @else
+                                                                                    {{ $row['number'] ?? '—' }}
+                                                                                @endif
+                                                                            </td>
+                                                                            <td class="px-3 py-2 align-top text-start">
+                                                                                <div class="flex flex-wrap items-center gap-1.5">
+                                                                                    @if ($kind === 'grace')
+                                                                                        <x-member::chip variant="purple">{{ __('Grace') }}</x-member::chip>
+                                                                                    @elseif ($kind === 'contribution_due')
+                                                                                        <x-member::chip variant="amber">{{ __('Contribution due') }}</x-member::chip>
+                                                                                    @elseif ($kind === 'contribution_paid')
+                                                                                        <x-member::chip variant="green">{{ __('Paid') }}</x-member::chip>
+                                                                                    @elseif ($kind === 'paid')
+                                                                                        <x-member::chip variant="green">{{ __('Regular payment') }}</x-member::chip>
+                                                                                    @elseif ($kind === 'rolled_up')
+                                                                                        <x-member::chip variant="blue">{{ __('Partial settlement') }}</x-member::chip>
+                                                                                    @elseif ($kind === 'skipped')
+                                                                                        <x-member::chip variant="blue">{{ __('Skipped') }}</x-member::chip>
+                                                                                    @elseif ($kind === 'cancelled')
+                                                                                        <x-member::chip variant="amber">{{ __('Full settlement') }}</x-member::chip>
+                                                                                    @elseif ($kind === 'dropped')
+                                                                                        <x-member::chip variant="blue">{{ __('Removed') }}</x-member::chip>
+                                                                                    @elseif ($kind === 'pending')
+                                                                                        <x-member::chip variant="gray">{{ __('Pending') }}</x-member::chip>
+                                                                                    @endif
+                                                                                    <span class="text-sm font-medium text-gray-800 dark:text-gray-100">{{ $row['cycle_label'] ?? '—' }}</span>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td class="whitespace-nowrap px-3 py-2 align-top text-start text-sm text-gray-500 dark:text-gray-400">
+                                                                                <p class="tabular-nums">{{ $row['due_label'] ?? ($row['due_date'] ?? '—') }}</p>
+                                                                                @if ($kind === 'pending' && is_numeric($days))
+                                                                                    <p class="text-xs">
+                                                                                        @if ((int) $days > 0)
+                                                                                            {{ __('In :days days', ['days' => (int) $days]) }}
+                                                                                        @elseif ((int) $days === 0)
+                                                                                            {{ __('Due today') }}
+                                                                                        @else
+                                                                                            {{ __(':days days overdue', ['days' => abs((int) $days)]) }}
+                                                                                        @endif
+                                                                                    </p>
+                                                                                @elseif (filled($row['note'] ?? null))
+                                                                                    <p class="text-xs">{{ $row['note'] }}</p>
+                                                                                @endif
+                                                                            </td>
+                                                                            <td @class([
+                                                                                'whitespace-nowrap px-3 py-2 align-top text-end text-sm font-semibold tabular-nums',
+                                                                                'text-gray-400 dark:text-gray-500' => in_array($kind, ['skipped', 'grace', 'contribution_paid'], true)
+                                                                                    || ($kind === 'cancelled' && ((float) ($row['amount'] ?? 0)) <= 0.00001),
+                                                                                'text-gray-900 dark:text-white' => !in_array($kind, ['skipped', 'grace', 'contribution_paid'], true)
+                                                                                    && !($kind === 'cancelled' && ((float) ($row['amount'] ?? 0)) <= 0.00001),
+                                                                            ])>
+                                                                                @if (in_array($kind, ['grace', 'contribution_paid'], true))
+                                                                                    —
+                                                                                @elseif ($kind === 'skipped' || ($kind === 'cancelled' && ((float) ($row['amount'] ?? 0)) <= 0.00001))
+                                                                                    {{ __('No EMI') }}
+                                                                                @else
+                                                                                    <x-member::amount :value="$row['amount'] ?? 0" :currency="$currency" />
+                                                                                @endif
+                                                                            </td>
+                                                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="4" class="px-3 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                                                {{ __('No schedule rows.') }}
+                                            </td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
                 </details>
             </div>
 
@@ -466,15 +476,15 @@
                     </div>
                     <p class="text-sm text-gray-600 dark:text-gray-300">
                         {!! __('Need fund ≥ :amount (:percent% of tier ceiling). Deposit cash first, then apply any allowable contribution amount from cash.', [
-                            'amount' => $moneyHtml((float) $sim['eligibility_amt']),
-                            'percent' => $this->eligibilityPct > 0 ? round($this->eligibilityPct * 100) : '—',
-                        ]) !!}
+            'amount' => $moneyHtml((float) $sim['eligibility_amt']),
+            'percent' => $this->eligibilityPct > 0 ? round($this->eligibilityPct * 100) : '—',
+        ]) !!}
                     </p>
                     @php
-                        $afterCloseMinDate = filled($sim['expected_maturity_date'] ?? null)
-                            ? (string) $sim['expected_maturity_date']
-                            : null;
-                        $showAfterCloseContribution = ! ($sim['eligible_for_new_loan'] ?? false);
+        $afterCloseMinDate = filled($sim['expected_maturity_date'] ?? null)
+            ? (string) $sim['expected_maturity_date']
+            : null;
+        $showAfterCloseContribution = !($sim['eligible_for_new_loan'] ?? false);
                     @endphp
                     <div class="space-y-3">
                         <div class="min-w-0 w-full sm:max-w-xs">
@@ -491,9 +501,9 @@
                         </div>
 
                         <div @class([
-                            'grid grid-cols-1 gap-3',
-                            'sm:grid-cols-2' => $showAfterCloseContribution,
-                        ])>
+            'grid grid-cols-1 gap-3',
+            'sm:grid-cols-2' => $showAfterCloseContribution,
+        ])>
                             @if ($showAfterCloseContribution)
                                 <div class="min-w-0">
                                     <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="loan-sim-contribution">
@@ -538,8 +548,8 @@
                     @if ($afterCloseMinDate)
                         <p class="text-xs text-gray-500 dark:text-gray-400">
                             {{ __('Not before loan maturity (:date).', [
-                                'date' => \Carbon\Carbon::parse($afterCloseMinDate)->locale(app()->getLocale())->translatedFormat('j M Y'),
-                            ]) }}
+                'date' => \Carbon\Carbon::parse($afterCloseMinDate)->locale(app()->getLocale())->translatedFormat('j M Y'),
+            ]) }}
                         </p>
                     @endif
                 </div>

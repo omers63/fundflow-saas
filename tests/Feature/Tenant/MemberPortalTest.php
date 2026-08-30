@@ -271,7 +271,7 @@ test('loan calculator shows fund balance and eligibility without raw html', func
         ->assertDontSee('&lt;span class=&quot;ff-member-amount', false);
 });
 
-test('loan calculator tier chips expose lower and upper amounts', function () {
+test('loan calculator allows setting loan amount directly', function () {
     LoanTier::query()->forceDelete();
     LoanTier::create([
         'tier_number' => 1,
@@ -286,12 +286,7 @@ test('loan calculator tier chips expose lower and upper amounts', function () {
     Filament::setCurrentPanel('member');
 
     Livewire::test(LoanCalculatorPage::class)
-        ->assertSee(__('Loan tiers'))
-        ->assertSeeHtml('ff-member-loan-calc-tiers-wrap')
-        ->assertSeeHtml('ff-member-loan-calc-tiers')
-        ->assertSeeHtml('ff-member-loan-calc-tier')
-        ->assertSeeHtml('wire:click="$set(\'loanAmount\', 1000)"')
-        ->assertSeeHtml('wire:click="$set(\'loanAmount\', 50000)"')
+        ->assertDontSeeHtml('ff-member-loan-calc-tiers-wrap')
         ->set('loanAmount', 50000)
         ->assertSet('loanAmount', 50000)
         ->set('loanAmount', 1000)
@@ -675,6 +670,8 @@ test('loan calculator projects fund after settling the active loan with regular 
     Filament::setCurrentPanel('member');
 
     $component = Livewire::test(LoanCalculatorPage::class)
+        ->set('includeSettlementThreshold', false)
+        ->set('includeEligibilityThreshold', false)
         ->set('startDate', '2025-10-15')
         ->set('projectedContributionAmount', 500)
         ->assertSee(__('Projected fund at start'), false)
@@ -724,12 +721,134 @@ test('loan calculator projects fund after settling the active loan with regular 
 
     $fullProjection = $component->instance()->projection;
 
-    expect($fullProjection['projected_fund'])->toBe(5000.0)
+    expect($fullProjection['projected_fund'])->toBe(11000.0)
         ->and($fullProjection['loan_repayment_cycles'])->toBe(0)
         ->and($fullProjection['cycles_added'])->toBe(10)
-        ->and($fullProjection['loan_repayment_amount'])->toBe(6000.0)
+        ->and($fullProjection['loan_repayment_amount'])->toBe(12000.0)
         ->and($fullProjection['loan_settlement_mode'])->toBe(LoanCalculatorCurrentLoanSettlement::FULL_EARLY_SETTLEMENT)
-        ->and($fullProjection['cash_needed'])->toBe(11000.0);
+        ->and($fullProjection['cash_needed'])->toBe(17000.0);
+
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('loan calculator settlement threshold changes projected fund and eligibility moves the start date', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    LoanSettings::save([
+        'settlement_threshold_pct' => 0.10,
+        'eligibility_threshold_pct' => 0.20,
+    ]);
+    LoanTier::query()->forceDelete();
+    $tier = LoanTier::create([
+        'tier_number' => 1,
+        'label' => 'Standard',
+        'min_amount' => 1000,
+        'max_amount' => 50_000,
+        'min_monthly_installment' => 500,
+        'is_active' => true,
+    ]);
+    $this->memberA->fundAccount->update(['balance' => -6000]);
+    $this->memberA->update(['monthly_contribution_amount' => 500]);
+
+    $loan = Loan::create([
+        'member_id' => $this->memberA->id,
+        'loan_tier_id' => $tier->id,
+        'amount' => 6000,
+        'amount_requested' => 6000,
+        'amount_approved' => 6000,
+        'amount_disbursed' => 6000,
+        'member_portion' => 6000,
+        'master_portion' => 0,
+        'interest_rate' => 0,
+        'term_months' => 2,
+        'monthly_repayment' => 3000,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(2),
+        'disbursed_at' => now()->subMonths(2),
+        'settlement_threshold' => 0.10,
+        'eligibility_threshold' => 0.20,
+    ]);
+
+    foreach ([1, 2] as $number) {
+        LoanInstallment::create([
+            'loan_id' => $loan->id,
+            'installment_number' => $number,
+            'amount' => 3000,
+            'due_date' => now()->addMonths($number),
+            'status' => 'pending',
+        ]);
+    }
+
+    $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
+
+    $component = Livewire::test(LoanCalculatorPage::class)
+        ->set('includeSettlementThreshold', false)
+        ->set('includeEligibilityThreshold', false)
+        ->set('startDate', '2025-10-15')
+        ->set('projectedContributionAmount', 500)
+        ->assertSee(__('Added to the projected fund at start.'), false)
+        ->assertSee(__('Moves the projected start date forward until the projected fund meets this threshold. Turning it off restores the date you chose.'), false);
+
+    expect($component->get('requestedStartDate'))->toBe('2025-10-15')
+        ->and($component->get('startDate'))->toBe('2025-10-15')
+        ->and($component->instance()->projection['projected_fund'])->toBe(4000.0);
+
+    $component->set('includeSettlementThreshold', true);
+
+    expect($component->get('startDate'))->toBe('2025-10-15')
+        ->and($component->instance()->projection['projected_fund'])->toBe(4100.0)
+        ->and($component->instance()->projection['settlement_included_amount'])->toBe(600.0);
+
+    $component->set('includeEligibilityThreshold', true);
+
+    $adjustedStart = $component->get('startDate');
+
+    expect($adjustedStart)->toBeGreaterThan('2025-10-15')
+        ->and($component->get('requestedStartDate'))->toBe('2025-10-15')
+        ->and($component->instance()->projection['projected_fund'])->toBeGreaterThan(4100.0);
+
+    $component->set('includeEligibilityThreshold', false);
+
+    expect($component->get('startDate'))->toBe('2025-10-15')
+        ->and($component->get('requestedStartDate'))->toBe('2025-10-15')
+        ->and($component->instance()->projection['projected_fund'])->toBe(4100.0);
+
+    $component->set('includeSettlementThreshold', false);
+
+    expect($component->get('startDate'))->toBe('2025-10-15')
+        ->and($component->instance()->projection['projected_fund'])->toBe(4000.0);
+
+    // Test with partial early settlement to full loan maturity:
+    $component->set('currentLoanSettlement', LoanCalculatorCurrentLoanSettlement::PARTIAL_TO_MATURITY)
+        ->set('includeSettlementThreshold', false)
+        ->set('includeEligibilityThreshold', false);
+
+    expect($component->instance()->projection['loan_repayment_amount'])->toBe(6000.0)
+        ->and($component->instance()->projection['projected_fund'])->toBe(5000.0)
+        ->and($component->instance()->projection['settlement_included_amount'])->toBe(0.0);
+
+    $component->set('includeSettlementThreshold', true);
+
+    expect($component->instance()->projection['loan_repayment_amount'])->toBe(6000.0)
+        ->and($component->instance()->projection['settlement_included_amount'])->toBe(600.0)
+        ->and($component->instance()->projection['projected_fund'])->toBe(5600.0)
+        ->and($component->get('startDate'))->toBe('2025-10-15');
+
+    $component->set('includeSettlementThreshold', false);
+
+    expect($component->instance()->projection['projected_fund'])->toBe(5000.0)
+        ->and($component->instance()->projection['settlement_included_amount'])->toBe(0.0);
+
+    // Partial early settlement with eligibility threshold toggling:
+    $component->set('includeEligibilityThreshold', true);
+    $partialEligibilityStart = $component->get('startDate');
+    expect($partialEligibilityStart)->toBeGreaterThan('2025-10-15')
+        ->and($component->instance()->projection['projected_fund'])->toBeGreaterThan(5000.0);
+
+    $component->set('includeEligibilityThreshold', false);
+    expect($component->get('startDate'))->toBe('2025-10-15')
+        ->and($component->instance()->projection['projected_fund'])->toBe(5000.0);
 
     BusinessDaySettings::saveFromForm(null);
 });
@@ -761,6 +880,97 @@ test('loan calculator shows a negative projected fund in red', function () {
         ->and($projectedCard[0] ?? '')
         ->toContain('ff-member-amount--danger')
         ->not->toContain('text-emerald-900');
+
+    BusinessDaySettings::saveFromForm(null);
+});
+
+test('loan calculator organizes UI into 3 tabs with active loan settlement, estimation, and simulator', function () {
+    Setting::set('contribution', 'cycle_start_day', '6');
+    BusinessDaySettings::saveFromForm('2025-01-15');
+    LoanSettings::save([
+        'settlement_threshold_pct' => 0.10,
+        'eligibility_threshold_pct' => 0.20,
+        'member_funding_split_pct' => 50,
+        'allow_funding_strategy_split_percentage' => true,
+        'max_allowed_grace_cycles' => 2,
+    ]);
+    LoanTier::query()->forceDelete();
+    LoanTier::create([
+        'tier_number' => 1,
+        'label' => 'Tier 1',
+        'min_amount' => 1000,
+        'max_amount' => 50000,
+        'min_monthly_installment' => 500,
+        'is_active' => true,
+    ]);
+
+    $this->memberA->fundAccount->update(['balance' => -6500]);
+    $loan = Loan::create([
+        'member_id' => $this->memberA->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'member_portion' => 10000,
+        'master_portion' => 0,
+        'interest_rate' => 0,
+        'term_months' => 4,
+        'status' => 'active',
+        'settlement_threshold' => 0.10,
+    ]);
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 2000,
+        'due_date' => '2025-02-05',
+        'status' => 'pending',
+    ]);
+
+    $this->actingAs($this->memberUserA, 'tenant');
+    Filament::setCurrentPanel('member');
+
+    $component = Livewire::test(LoanCalculatorPage::class);
+
+    // Initial state with active loan: Tab 1 (settlement) is active
+    $component
+        ->assertSet('activeTab', 'settlement')
+        ->assertSee(__('Outstanding loan settlement'), false)
+        ->assertSee(__('Active loan'), false)
+        ->assertSee(__('Settle current loan'), false)
+        ->assertSee(__('Proceed to loan estimation'), false);
+
+    // Switch to Tab 2 (estimate)
+    $component
+        ->call('setActiveTab', 'estimate')
+        ->assertSet('activeTab', 'estimate')
+        ->assertSee(__('Loan estimation'), false)
+        ->assertSee(__('Loan parameters'), false)
+        ->assertSee(__('Modify settlement options'), false);
+
+    // Switch to Tab 3 (simulate) without calculation shows empty state
+    $component
+        ->call('setActiveTab', 'simulate')
+        ->assertSet('activeTab', 'simulate')
+        ->assertSee(__('Calculate a loan estimate first'), false)
+        ->assertSee(__('Go to loan estimation'), false);
+
+    // Provide sufficient fund for the loan estimate
+    $this->memberA->fundAccount->update(['balance' => 50000]);
+
+    // Calculate loan on Tab 2 and switch to simulator
+    $component
+        ->set('loanAmount', 20000)
+        ->call('calculate')
+        ->assertSet('activeTab', 'estimate')
+        ->assertSee(__('Calculation breakdown'), false)
+        ->assertSee(__('Simulate loan lifecycle'), false);
+
+    // Switch to Tab 3 now loads simulation
+    $component
+        ->call('setActiveTab', 'simulate')
+        ->assertSet('activeTab', 'simulate')
+        ->assertSet('calculatorMode', 'simulate')
+        ->assertSeeHtml('ff-member-loan-sim');
 
     BusinessDaySettings::saveFromForm(null);
 });

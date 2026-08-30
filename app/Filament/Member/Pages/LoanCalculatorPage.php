@@ -8,6 +8,7 @@ use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Pages\Page;
 use App\Filament\Support\MoneyDisplay;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanTier;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
@@ -52,6 +53,14 @@ class LoanCalculatorPage extends Page
 
     public const MODE_SIMULATE = 'simulate';
 
+    public const TAB_SETTLEMENT = 'settlement';
+
+    public const TAB_ESTIMATE = 'estimate';
+
+    public const TAB_SIMULATE = 'simulate';
+
+    public string $activeTab = self::TAB_ESTIMATE;
+
     public int|float|string|null $loanAmount = null;
 
     public string $fundingApproach = '';
@@ -59,6 +68,8 @@ class LoanCalculatorPage extends Page
     public int $graceCycles = 0;
 
     public string $startDate = '';
+
+    public string $requestedStartDate = '';
 
     public int $projectedContributionAmount = 0;
 
@@ -100,11 +111,13 @@ class LoanCalculatorPage extends Page
         $this->fundingApproach = LoanCalculatorFundingApproach::defaultForApplication();
         $this->graceCycles = LoanSettings::defaultApplicationGraceCycles();
         $this->startDate = BusinessDay::today()->toDateString();
+        $this->requestedStartDate = $this->startDate;
         $this->projectedContributionAmount = $this->normalizeProjectedContribution(
             CurrentMember::get()?->monthly_contribution_amount,
         );
         $this->simulationContributionAmount = $this->projectedContributionAmount;
         $this->simulationCashDepositAmount = (float) $this->simulationContributionAmount;
+        $this->activeTab = $this->hasCurrentLoanToSettle ? self::TAB_SETTLEMENT : self::TAB_ESTIMATE;
         $this->syncProjectedStartDate();
     }
 
@@ -162,6 +175,7 @@ class LoanCalculatorPage extends Page
             return;
         }
 
+        $this->requestedStartDate = $this->resolvedCalculatorStartDate()->toDateString();
         $this->resetSimulation();
         $this->syncProjectedStartDate();
     }
@@ -171,6 +185,8 @@ class LoanCalculatorPage extends Page
         unset($this->calculations, $this->estimateBlockReason);
         $this->resetSimulation();
 
+        $this->activeTab = self::TAB_ESTIMATE;
+
         $reason = $this->estimateBlockReason;
 
         if (is_string($reason) && $reason !== '') {
@@ -179,6 +195,33 @@ class LoanCalculatorPage extends Page
                 ->warning()
                 ->send();
         }
+    }
+
+    public function setActiveTab(string $tab): void
+    {
+        if (! in_array($tab, [self::TAB_SETTLEMENT, self::TAB_ESTIMATE, self::TAB_SIMULATE], true)) {
+            return;
+        }
+
+        if ($tab === self::TAB_SETTLEMENT && ! $this->hasCurrentLoanToSettle) {
+            $this->activeTab = self::TAB_ESTIMATE;
+
+            return;
+        }
+
+        $this->activeTab = $tab;
+
+        if ($tab === self::TAB_SIMULATE) {
+            $this->calculatorMode = self::MODE_SIMULATE;
+
+            if ($this->canEstimateOrSimulate() && count($this->calculations) > 0 && ! is_array($this->simulation)) {
+                $this->startSimulationFromEstimate();
+            }
+
+            return;
+        }
+
+        $this->calculatorMode = self::MODE_ESTIMATE;
     }
 
     public function setCalculatorMode(string $mode): void
@@ -197,11 +240,13 @@ class LoanCalculatorPage extends Page
                 ->send();
 
             $this->calculatorMode = self::MODE_ESTIMATE;
+            $this->activeTab = self::TAB_ESTIMATE;
 
             return;
         }
 
         $this->calculatorMode = $mode;
+        $this->activeTab = $mode === self::MODE_SIMULATE ? self::TAB_SIMULATE : self::TAB_ESTIMATE;
 
         // Keep an existing simulation when toggling back from Estimate.
         if ($mode === self::MODE_SIMULATE && ! is_array($this->simulation)) {
@@ -222,6 +267,7 @@ class LoanCalculatorPage extends Page
                 ->send();
 
             $this->calculatorMode = self::MODE_ESTIMATE;
+            $this->activeTab = self::TAB_ESTIMATE;
 
             return;
         }
@@ -236,6 +282,7 @@ class LoanCalculatorPage extends Page
                 ->send();
 
             $this->calculatorMode = self::MODE_ESTIMATE;
+            $this->activeTab = self::TAB_ESTIMATE;
 
             return;
         }
@@ -393,6 +440,10 @@ class LoanCalculatorPage extends Page
         if ($this->calculatorMode === self::MODE_SIMULATE) {
             $this->calculatorMode = self::MODE_ESTIMATE;
         }
+
+        if ($this->activeTab === self::TAB_SIMULATE) {
+            $this->activeTab = self::TAB_ESTIMATE;
+        }
     }
 
     /**
@@ -506,7 +557,7 @@ class LoanCalculatorPage extends Page
             LoanCalculatorFundingApproach::toFundingStrategy($this->fundingApproach),
             LoanCalculatorFundingApproach::toSettlementOption($this->fundingApproach),
             $this->graceCycles,
-            $this->startDate,
+            $this->calculatorRequestedStartDateString(),
             $this->projectedContributionAmount,
             $this->currentLoanSettlement,
             $this->outstandingThresholds(),
@@ -527,7 +578,7 @@ class LoanCalculatorPage extends Page
             $amount,
             $member,
             LoanCalculatorFundingApproach::toFundingStrategy($this->fundingApproach),
-            $this->startDate,
+            $this->calculatorRequestedStartDateString(),
             $this->projectedContributionAmount,
             $this->currentLoanSettlement,
             $this->outstandingThresholds(),
@@ -633,6 +684,28 @@ class LoanCalculatorPage extends Page
         return CurrentMember::get()?->hasActiveLoanRepaymentObligation() ?? false;
     }
 
+    #[Computed]
+    public function activeLoan(): ?Loan
+    {
+        $member = CurrentMember::get();
+
+        if ($member === null) {
+            return null;
+        }
+
+        return Loan::query()
+            ->where('member_id', $member->id)
+            ->whereIn('status', ['active', 'transferred'])
+            ->with(['installments', 'loanTier'])
+            ->first();
+    }
+
+    #[Computed]
+    public function showsCurrentLoanThresholdOptions(): bool
+    {
+        return ! LoanCalculatorCurrentLoanSettlement::isFullEarlySettlement($this->currentLoanSettlement);
+    }
+
     private function outstandingThresholds(): LoanCalculatorOutstandingThresholds
     {
         return new LoanCalculatorOutstandingThresholds(
@@ -656,7 +729,7 @@ class LoanCalculatorPage extends Page
 
         $horizon = app(MemberLoanCalculatorService::class)->resolveOutstandingLoanHorizon(
             $member,
-            $this->resolvedCalculatorStartDate(),
+            $this->resolvedCalculatorRequestedStartDate(),
             $this->projectedContributionAmount,
             $this->currentLoanSettlement,
             (float) ($this->loanAmount ?? 0),
@@ -765,6 +838,24 @@ class LoanCalculatorPage extends Page
         return __('The start date was moved to :date so the current loan can be settled before this estimate.', [
             'date' => $date,
         ]);
+    }
+
+    private function calculatorRequestedStartDateString(): string
+    {
+        return $this->resolvedCalculatorRequestedStartDate()->toDateString();
+    }
+
+    private function resolvedCalculatorRequestedStartDate(): Carbon
+    {
+        if (filled($this->requestedStartDate)) {
+            try {
+                return Carbon::parse($this->requestedStartDate)->startOfDay();
+            } catch (Throwable) {
+                // Fall through to the visible start date.
+            }
+        }
+
+        return $this->resolvedCalculatorStartDate();
     }
 
     private function resolvedCalculatorStartDate(): Carbon
@@ -883,6 +974,7 @@ class LoanCalculatorPage extends Page
                 'start_cycle_year' => 0,
                 'start_cycle_label' => '—',
                 'start_cycle_paid' => false,
+                'settlement_included_amount' => 0.0,
                 'include_settlement_threshold' => $this->includeSettlementThreshold,
                 'include_eligibility_threshold' => $this->includeEligibilityThreshold,
             ];
@@ -890,7 +982,7 @@ class LoanCalculatorPage extends Page
 
         return app(MemberLoanCalculatorService::class)->fundProjection(
             $member,
-            $this->startDate,
+            $this->calculatorRequestedStartDateString(),
             $this->projectedContributionAmount,
             $this->currentLoanSettlement,
             (float) ($this->loanAmount ?? 0),

@@ -349,12 +349,8 @@ class Loan extends Model
      */
     public function eligibilityThresholdPercent(): float
     {
-        if ($this->eligibility_threshold !== null) {
-            return max(0.0, (float) $this->eligibility_threshold);
-        }
-
-        if ($this->settlement_threshold !== null) {
-            return max(0.0, (float) $this->settlement_threshold);
+        if ((float) ($this->eligibility_threshold ?? 0) > 0.00001) {
+            return (float) $this->eligibility_threshold;
         }
 
         return LoanSettings::eligibilityThreshold();

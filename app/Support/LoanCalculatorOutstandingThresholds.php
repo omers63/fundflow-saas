@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * Whether outstanding-loan fund floors apply when projecting the calculator start date.
+ * Outstanding-loan options for the member loan calculator.
  *
- * The member calculator defaults both checkboxes on. Service callers that omit this
- * object keep the legacy projection (remaining installments that fit the window only).
+ * Settlement adds the current-loan settlement floor to projected fund at start.
+ * Eligibility advances the start date until projected fund meets the eligibility floor.
+ * Service callers that omit this object keep the legacy projection (remaining
+ * installments that fit the window only).
  */
 final class LoanCalculatorOutstandingThresholds
 {

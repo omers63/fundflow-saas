@@ -189,6 +189,14 @@ final class MemberLoanLifecycleSimulator
             if ($state['remaining_maturity'] <= 0.00001) {
                 return $this->markPaid($state, $this->lastPendingDueDate($state) ?? $start->toDateString());
             }
+
+                        $rows = is_array($state['schedule_rows'] ?? null) ? $state['schedule_rows'] : [];
+                        $rows = array_values(array_filter(
+                            $rows,
+                            fn(array $r): bool => ($r['kind'] ?? '') !== 'dropped',
+                        ));
+
+                        return $this->syncScheduleAfterSettlement($state, $rows);
         }
 
         return $this->withDerived($state);
