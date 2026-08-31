@@ -84,7 +84,7 @@ enum LoanUserFacingStage: string
             [
                 'key' => self::UnderReview->value,
                 'label' => self::UnderReview->label(),
-                'gate' => !$pending,
+                'gate' => ! $pending,
                 'description' => null,
             ],
             [
@@ -176,7 +176,7 @@ enum LoanUserFacingStage: string
                 $state = 'complete';
             } elseif ($complete) {
                 $state = 'complete';
-            } elseif (!$currentAssigned) {
+            } elseif (! $currentAssigned) {
                 $state = 'current';
                 $currentAssigned = true;
             } else {
@@ -202,7 +202,7 @@ enum LoanUserFacingStage: string
 
     private static function disbursedDescription(Loan $loan, bool $disbursedStarted, bool $fullyDisbursed): ?string
     {
-        if (!$disbursedStarted) {
+        if (! $disbursedStarted) {
             return null;
         }
 

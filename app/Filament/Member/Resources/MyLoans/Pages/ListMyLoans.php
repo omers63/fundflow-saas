@@ -47,7 +47,7 @@ class ListMyLoans extends ListRecords
             $this->openEarlySettleModal = true;
         }
 
-        if (!in_array($this->hubTab, ['active', 'history', 'apply'], true)) {
+        if (! in_array($this->hubTab, ['active', 'history', 'apply'], true)) {
             $this->hubTab = 'active';
         }
 
@@ -88,7 +88,7 @@ class ListMyLoans extends ListRecords
     {
         $loan = $this->resolveEarlySettleLoan($loanId);
 
-        if (!$loan instanceof Loan) {
+        if (! $loan instanceof Loan) {
             Notification::make()
                 ->title(__('No active loan'))
                 ->body(__('You do not have an active loan to settle right now.'))
@@ -145,7 +145,7 @@ class ListMyLoans extends ListRecords
 
     protected function openEarlySettlementWhenRequested(): void
     {
-        if (!$this->openEarlySettleModal) {
+        if (! $this->openEarlySettleModal) {
             return;
         }
 
@@ -158,7 +158,7 @@ class ListMyLoans extends ListRecords
     {
         return RequestLoanEligibilityOverrideAction::make()
             ->visible(
-                fn(): bool => $this->hubTab === 'apply'
+                fn (): bool => $this->hubTab === 'apply'
                 && RequestLoanEligibilityOverrideAction::canRequest(),
             );
     }
@@ -167,7 +167,7 @@ class ListMyLoans extends ListRecords
     {
         return RequestLoanEligibilityOverrideAction::pendingReviewAction()
             ->visible(
-                fn(): bool => $this->hubTab === 'apply'
+                fn (): bool => $this->hubTab === 'apply'
                 && RequestLoanEligibilityOverrideAction::hasPendingRequest(),
             );
     }
@@ -190,8 +190,8 @@ class ListMyLoans extends ListRecords
     public function earlySettleAction(): Action
     {
         return MemberLoanFilamentActions::earlySettle()
-            ->record(fn(): ?Loan => $this->resolveEarlySettleLoan($this->earlySettleLoanId))
-            ->hidden(fn(): bool => $this->hubTab !== 'active');
+            ->record(fn (): ?Loan => $this->resolveEarlySettleLoan($this->earlySettleLoanId))
+            ->hidden(fn (): bool => $this->hubTab !== 'active');
     }
 
     public function setHubTab(string $tab): void
@@ -200,7 +200,7 @@ class ListMyLoans extends ListRecords
             $tab = 'active';
         }
 
-        if (!in_array($tab, ['active', 'history', 'apply'], true)) {
+        if (! in_array($tab, ['active', 'history', 'apply'], true)) {
             return;
         }
 

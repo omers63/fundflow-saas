@@ -28,8 +28,8 @@ final class FundPostingNotificationFormatter
                 (bool) ($row['emphasis'] ?? false),
             );
 
-            $items .= '<dt class="ff-notification-details__label">' . e($row['label']) . '</dt>'
-                . '<dd class="ff-notification-details__value">' . $value . '</dd>';
+            $items .= '<dt class="ff-notification-details__label">'.e($row['label']).'</dt>'
+                .'<dd class="ff-notification-details__value">'.$value.'</dd>';
         }
 
         return '<dl class="ff-notification-details">'.$items.'</dl>';
@@ -54,7 +54,7 @@ final class FundPostingNotificationFormatter
 
     public static function adminNewRequestPlainText(FundPosting $posting): string
     {
-        return trim(__('A new deposit request was submitted.') . "\n" . self::plainTextDepositDetails($posting, includeMember: true));
+        return trim(__('A new deposit request was submitted.')."\n".self::plainTextDepositDetails($posting, includeMember: true));
     }
 
     public static function memberAcceptedPlainText(

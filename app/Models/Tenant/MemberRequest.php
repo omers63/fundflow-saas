@@ -213,8 +213,8 @@ class MemberRequest extends Model
     public function describePayload(): string
     {
         return collect($this->payloadDetailItems())
-            ->map(fn(array $item): string => $item['value'])
-            ->filter(fn(string $value): bool => $value !== '' && $value !== __('—'))
+            ->map(fn (array $item): string => $item['value'])
+            ->filter(fn (string $value): bool => $value !== '' && $value !== __('—'))
             ->implode(' · ')
             ?: __('—');
     }
@@ -275,7 +275,7 @@ class MemberRequest extends Model
         ];
 
         if ($extra !== null) {
-            $items[] = ['label' => __('Top-up'), 'value' => '+' . $extra];
+            $items[] = ['label' => __('Top-up'), 'value' => '+'.$extra];
         }
 
         if ($standing !== null) {
@@ -410,7 +410,7 @@ class MemberRequest extends Model
             [
                 'label' => $label,
                 'value' => $amount !== null ? (string) (int) $amount : __('—'),
-            ]
+            ],
         ];
     }
 
@@ -425,7 +425,7 @@ class MemberRequest extends Model
             [
                 'label' => __('Reason'),
                 'value' => $text !== '' ? $text : $fallback,
-            ]
+            ],
         ];
     }
 
@@ -440,7 +440,7 @@ class MemberRequest extends Model
         $member = Member::query()->find($id);
 
         return $member instanceof Member
-            ? $member->name . ' (' . $member->member_number . ')'
+            ? $member->name.' ('.$member->member_number.')'
             : __('Member #:id', ['id' => $id]);
     }
 }

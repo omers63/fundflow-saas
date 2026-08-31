@@ -54,7 +54,7 @@ beforeEach(function () {
 function assertStatusFilterHasNoDefault(Testable $component): void
 {
     $filter = collect($component->instance()->getTable()->getFilters())
-        ->first(fn($candidate): bool => $candidate instanceof SelectFilter && $candidate->getName() === 'status');
+        ->first(fn ($candidate): bool => $candidate instanceof SelectFilter && $candidate->getName() === 'status');
 
     expect($filter)->toBeInstanceOf(SelectFilter::class)
         ->and($filter->getDefaultState())->toBeNull();
@@ -104,15 +104,15 @@ test('member portal shows rejected freeze, withdraw, and extend-freeze requests'
         MemberRequest::TYPE_FREEZE_MEMBERSHIP,
         MemberRequest::TYPE_WITHDRAW_MEMBERSHIP,
         MemberRequest::TYPE_EXTEND_FREEZE_MEMBERSHIP,
-    ])->map(fn(string $type): MemberRequest => MemberRequest::query()->create([
-            'requester_member_id' => $this->member->id,
-            'type' => $type,
-            'status' => MemberRequest::STATUS_REJECTED,
-            'payload' => ['cycles' => 1, 'reason' => 'Fixture'],
-            'reviewed_at' => now(),
-            'reviewed_by_user_id' => $this->admin->id,
-            'admin_note' => 'Not approved',
-        ]));
+    ])->map(fn (string $type): MemberRequest => MemberRequest::query()->create([
+        'requester_member_id' => $this->member->id,
+        'type' => $type,
+        'status' => MemberRequest::STATUS_REJECTED,
+        'payload' => ['cycles' => 1, 'reason' => 'Fixture'],
+        'reviewed_at' => now(),
+        'reviewed_by_user_id' => $this->admin->id,
+        'admin_note' => 'Not approved',
+    ]));
 
     $this->actingAs($this->memberUser, 'tenant');
 

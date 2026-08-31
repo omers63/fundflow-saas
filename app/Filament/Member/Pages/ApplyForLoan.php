@@ -236,9 +236,9 @@ class ApplyForLoan extends Page implements HasForms
                         ->schema([
                             Placeholder::make('review_amount')
                                 ->label(__('Amount'))
-                                                                ->content(fn(Get $get): HtmlString => new HtmlString(
-                                                                    MoneyDisplay::html((float) ($get('amount') ?? 0), $currency)?->toHtml() ?? e('—')
-                                                                )),
+                                ->content(fn (Get $get): HtmlString => new HtmlString(
+                                    MoneyDisplay::html((float) ($get('amount') ?? 0), $currency)?->toHtml() ?? e('—')
+                                )),
                             Placeholder::make('review_installment')
                                 ->label(__('Estimated monthly installment'))
                                 ->content(function (Get $get) use ($currency, $member): HtmlString {
@@ -256,13 +256,13 @@ class ApplyForLoan extends Page implements HasForms
                                     }
 
                                     $html = (MoneyDisplay::html($install, $currency)?->toHtml() ?? e('—'))
-                                        . ' / ' . e(__('month'));
+                                        .' / '.e(__('month'));
 
                                     if ($months > 0) {
-                                        $html .= ' · ' . e(trans_choice('~:count month|~:count months', $months, ['count' => $months]));
+                                        $html .= ' · '.e(trans_choice('~:count month|~:count months', $months, ['count' => $months]));
                                     }
 
-                                    return new HtmlString('<span class="font-semibold">' . $html . '</span>');
+                                    return new HtmlString('<span class="font-semibold">'.$html.'</span>');
                                 }),
                             Placeholder::make('review_purpose')
                                 ->label(__('Purpose'))

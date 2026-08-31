@@ -50,9 +50,9 @@ class InstallmentsRelationManager extends RelationManager
                     ->placeholder(__('—')),
                 TextColumn::make('status')
                     ->badge()
-                    ->formatStateUsing(fn(string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusLabel($record))
-                    ->color(fn(string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusColor($record))
-                    ->tooltip(fn(LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
+                    ->formatStateUsing(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusLabel($record))
+                    ->color(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusColor($record))
+                    ->tooltip(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
                         ? LateSettledArrearsTableStyling::eligibilityHint()
                         : null),
                 TextColumn::make('paid_at')
@@ -69,7 +69,7 @@ class InstallmentsRelationManager extends RelationManager
                 DateColumnRangeFilter::make('due_date', __('Due date')),
             ])
             ->defaultSort('installment_number')
-            ->recordClasses(fn(LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentRecordClasses($record))
+            ->recordClasses(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentRecordClasses($record))
             ->recordActions(TableRecordActionGroups::wrap([]))
             ->toolbarActions([
                 BulkActionGroup::make([

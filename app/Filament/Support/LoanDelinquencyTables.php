@@ -50,12 +50,12 @@ final class LoanDelinquencyTables
                 $q->whereNotNull('guarantor_liability_transferred_at')
                     ->orWhereHas(
                         'installments',
-                        fn(Builder $i): Builder => $i->where('paid_by_guarantor', true),
+                        fn (Builder $i): Builder => $i->where('paid_by_guarantor', true),
                     )
                     // Active loans past grace with overdue EMIs (ready for guarantor action).
                     ->orWhere(function (Builder $inner) use ($grace): void {
-                    $inner->where('status', 'active')
-                        ->whereNull('guarantor_liability_transferred_at')
+                        $inner->where('status', 'active')
+                            ->whereNull('guarantor_liability_transferred_at')
                             ->where('late_repayment_count', '>=', $grace)
                             ->whereHas('installments', fn (Builder $i): Builder => $i->where('status', 'overdue'));
                     });
@@ -63,8 +63,8 @@ final class LoanDelinquencyTables
             ->with(['member', 'guarantor'])
             ->withCount([
                 'installments as overdue_installments_count' => fn (Builder $q): Builder => $q->where('status', 'overdue'),
-                'installments as guarantor_paid_installments_count' => fn(Builder $q): Builder => $q->where('paid_by_guarantor', true),
-                'installments as late_installments_count' => fn(Builder $q): Builder => $q->where(function (Builder $inner): void {
+                'installments as guarantor_paid_installments_count' => fn (Builder $q): Builder => $q->where('paid_by_guarantor', true),
+                'installments as late_installments_count' => fn (Builder $q): Builder => $q->where(function (Builder $inner): void {
                     $inner->where('is_late', true)
                         ->orWhere('status', 'overdue')
                         ->orWhere('paid_by_guarantor', true);
@@ -176,8 +176,8 @@ final class LoanDelinquencyTables
                     ->columns([
                         TextColumn::make('id')
                             ->label(__('Loan'))
-                            ->formatStateUsing(fn(int $state): string => '#' . $state)
-                            ->url(fn(Loan $record): string => LoanResource::getUrl('view', ['record' => $record]))
+                            ->formatStateUsing(fn (int $state): string => '#'.$state)
+                            ->url(fn (Loan $record): string => LoanResource::getUrl('view', ['record' => $record]))
                             ->sortable()
                             ->searchable(),
                         MemberTableColumns::relationNumber()
@@ -196,8 +196,8 @@ final class LoanDelinquencyTables
                         TextColumn::make('status')
                             ->label(__('Loan status'))
                             ->badge()
-                            ->formatStateUsing(fn(string $state): string => __(ucfirst($state)))
-                            ->color(fn(string $state): string => match ($state) {
+                            ->formatStateUsing(fn (string $state): string => __(ucfirst($state)))
+                            ->color(fn (string $state): string => match ($state) {
                                 'active' => 'success',
                                 'completed' => 'gray',
                                 default => 'warning',
@@ -268,7 +268,7 @@ final class LoanDelinquencyTables
                 [
                     ViewAction::make(),
                 ],
-                recordUrl: fn(Loan $record): string => LoanResource::getUrl('view', ['record' => $record]),
+                recordUrl: fn (Loan $record): string => LoanResource::getUrl('view', ['record' => $record]),
             ),
             TableGrouping::delinquencyGuarantorLoans(),
         );
@@ -298,11 +298,11 @@ final class LoanDelinquencyTables
                     ->sortable(),
                 TextColumn::make('policy_risk')
                     ->label(__('Risk'))
-                    ->state(fn(Member $record): string => isset($policyBreachIds[(int) $record->id])
+                    ->state(fn (Member $record): string => isset($policyBreachIds[(int) $record->id])
                         ? __('Policy breach')
                         : __('At risk'))
                     ->badge()
-                    ->color(fn(Member $record): string => isset($policyBreachIds[(int) $record->id])
+                    ->color(fn (Member $record): string => isset($policyBreachIds[(int) $record->id])
                         ? 'danger'
                         : 'warning')
                     ->searchable(false)

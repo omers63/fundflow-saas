@@ -8,8 +8,8 @@ final class TenantAbsoluteUrl
 {
     public static function resolve(string $url): string
     {
-        if (!str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
-            $url = self::tenantOrigin() . '/' . ltrim($url, '/');
+        if (! str_starts_with($url, 'http://') && ! str_starts_with($url, 'https://')) {
+            $url = self::tenantOrigin().'/'.ltrim($url, '/');
         }
 
         return self::ensureTenantHost($url);
@@ -19,13 +19,13 @@ final class TenantAbsoluteUrl
     {
         $parts = parse_url($url);
 
-        if ($parts === false || !isset($parts['host'])) {
+        if ($parts === false || ! isset($parts['host'])) {
             return $url;
         }
 
         $centralDomains = config('tenancy.central_domains', []);
 
-        if (!in_array($parts['host'], $centralDomains, true)) {
+        if (! in_array($parts['host'], $centralDomains, true)) {
             return $url;
         }
 
@@ -36,10 +36,10 @@ final class TenantAbsoluteUrl
         }
 
         $scheme = $parts['scheme'] ?? (str_starts_with((string) config('app.url'), 'https') ? 'https' : 'http');
-        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+        $port = isset($parts['port']) ? ':'.$parts['port'] : '';
         $path = $parts['path'] ?? '/';
-        $query = isset($parts['query']) ? '?' . $parts['query'] : '';
-        $fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+        $query = isset($parts['query']) ? '?'.$parts['query'] : '';
+        $fragment = isset($parts['fragment']) ? '#'.$parts['fragment'] : '';
 
         return "{$scheme}://{$tenantDomain}{$port}{$path}{$query}{$fragment}";
     }

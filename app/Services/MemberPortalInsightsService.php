@@ -592,7 +592,7 @@ final class MemberPortalInsightsService
         /** @var list<array{label: string, value: string, sub: ?string, url: string, icon: string}> $spotlights */
         $spotlights = [];
 
-        if (!$underLoanRepayment) {
+        if (! $underLoanRepayment) {
             $spotlights[] = [
                 'label' => __('Current cycle'),
                 'value' => $hasOpenCycleDue
@@ -1121,7 +1121,7 @@ final class MemberPortalInsightsService
         return $activeLoan->installments
             ->where('status', 'paid')
             ->sortByDesc('installment_number')
-            ->sortByDesc(fn(LoanInstallment $installment): string => $installment->due_date?->toDateString() ?? '')
+            ->sortByDesc(fn (LoanInstallment $installment): string => $installment->due_date?->toDateString() ?? '')
             ->first();
     }
 

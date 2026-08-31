@@ -86,8 +86,8 @@ it('shows the sms import action in workspace panel actions on the sms clearing q
                 return collect($action->getFlatActions())->map->getName();
             }
 
-                        return [$action->getName()];
-                    })
+            return [$action->getName()];
+        })
         ->all();
 
     expect($actionNames)->toContain('importSms');

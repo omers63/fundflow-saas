@@ -99,7 +99,7 @@ final class LoanQueueTable
                 }),
             SelectFilter::make('fund_tier_id')
                 ->label(__('Fund tier'))
-                ->options(fn(): array => FundTier::query()
+                ->options(fn (): array => FundTier::query()
                     ->where('is_active', true)
                     ->orderBy('tier_number')
                     ->pluck('label', 'id')
@@ -128,7 +128,7 @@ final class LoanQueueTable
                                     ->where(function (Builder $match) use ($tierId): void {
                                         $match->whereHas(
                                             'loanTier',
-                                            fn(Builder $q) => $q->where('fund_tier_id', $tierId),
+                                            fn (Builder $q) => $q->where('fund_tier_id', $tierId),
                                         )->orWhere(function (Builder $byAmount) use ($tierId): void {
                                             $byAmount->whereNull('loans.loan_tier_id')
                                                 ->whereExists(function ($sub) use ($tierId): void {
@@ -165,10 +165,10 @@ final class LoanQueueTable
                 ]),
             SelectFilter::make('fund_tier_id')
                 ->label(__('Fund tier'))
-                ->options(fn(): array => FundTier::withTrashed()
+                ->options(fn (): array => FundTier::withTrashed()
                     ->orderBy('tier_number')
                     ->get()
-                    ->mapWithKeys(fn(FundTier $tier): array => [
+                    ->mapWithKeys(fn (FundTier $tier): array => [
                         $tier->id => $tier->trashed()
                             ? __(':label (archived)', ['label' => $tier->label])
                             : $tier->label,
@@ -194,7 +194,7 @@ final class LoanQueueTable
             ->label($queueTab === 'process' ? __('Projected disbursement') : __('Projected approval'))
             ->state(fn (Loan $record): string => $projections->labelFor($record))
             ->badge()
-            ->color(fn(Loan $record): string => $projections->projectionFor($record)['ready_now'] ? 'success' : 'info')
+            ->color(fn (Loan $record): string => $projections->projectionFor($record)['ready_now'] ? 'success' : 'info')
             ->searchable(false);
 
         if ($queueTab === 'process') {
@@ -235,9 +235,9 @@ final class LoanQueueTable
     {
         return [
             Sum::make()
-                ->label(fn(): string => $label)
+                ->label(fn (): string => $label)
                 ->formatStateUsing(
-                    fn($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency)
+                    fn ($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency)
                 )
                 ->html(),
         ];
@@ -288,7 +288,7 @@ final class LoanQueueTable
                 ->label(__('Fund tier'))
                 ->state(fn (Loan $record): string => FundTier::resolveForLoan($record)?->label ?? '—')
                 ->badge()
-                ->color(fn(Loan $record): string => $record->is_emergency ? 'danger' : 'gray')
+                ->color(fn (Loan $record): string => $record->is_emergency ? 'danger' : 'gray')
                 ->searchable(false)
                 ->sortable(false),
         ];
@@ -332,9 +332,9 @@ final class LoanQueueTable
                 ->sortable(query: self::remainingToDisburseSortQuery())
                 ->summarize([
                     LoanRemainingToDisburseSum::make()
-                        ->label(fn(): string => __('Remaining'))
+                        ->label(fn (): string => __('Remaining'))
                         ->formatStateUsing(
-                            fn($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency)
+                            fn ($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency)
                         )
                         ->html(),
                 ]),
@@ -390,8 +390,8 @@ final class LoanQueueTable
             TextColumn::make('status')
                 ->label(__('Settlement'))
                 ->badge()
-                ->formatStateUsing(fn(string $state): string => Loan::statusOptions()[$state] ?? $state)
-                ->color(fn(string $state): string => Loan::statusColor($state)),
+                ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
+                ->color(fn (string $state): string => Loan::statusColor($state)),
             MemberTableColumns::relationNumber(),
             TextColumn::make('member.name')
                 ->label(__('Member'))
@@ -427,7 +427,7 @@ final class LoanQueueTable
                 ->sortable(query: function (Builder $query, string $direction): Builder {
                     $dir = strtolower($direction) === 'desc' ? 'desc' : 'asc';
 
-                    if (!self::queryHasFundTiersJoin($query)) {
+                    if (! self::queryHasFundTiersJoin($query)) {
                         $query->leftJoin('fund_tiers', 'fund_tiers.id', '=', 'loans.fund_tier_id');
                     }
 
@@ -441,8 +441,8 @@ final class LoanQueueTable
             TextColumn::make('is_emergency')
                 ->label(__('Lane'))
                 ->badge()
-                ->formatStateUsing(fn(bool $state): string => $state ? __('Emergency') : __('Standard'))
-                ->color(fn(bool $state): string => $state ? 'danger' : 'gray'),
+                ->formatStateUsing(fn (bool $state): string => $state ? __('Emergency') : __('Standard'))
+                ->color(fn (bool $state): string => $state ? 'danger' : 'gray'),
             TextColumn::make('disbursed_at')
                 ->label(__('Disbursed at'))
                 ->dateTime()

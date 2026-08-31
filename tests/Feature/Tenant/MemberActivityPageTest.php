@@ -168,7 +168,7 @@ test('member activity feed hides fully reversed ledger pairs', function () {
         'balance_after' => 200,
         'reference_type' => Transaction::class,
         'reference_id' => $original->id,
-        'description' => 'Reversal of #' . $original->id . ': Posted: Deposit #3 — Business day window rollback',
+        'description' => 'Reversal of #'.$original->id.': Posted: Deposit #3 — Business day window rollback',
         'transacted_at' => now(),
     ]);
 
@@ -178,11 +178,11 @@ test('member activity feed hides fully reversed ledger pairs', function () {
         ->and($ids)->not->toContain($original->id)
         ->and($ids)->not->toContain($reversal->id);
 
-    $this->get('http://' . $this->domain . '/member/activity')
+    $this->get('http://'.$this->domain.'/member/activity')
         ->assertSuccessful()
         ->assertSee('Kept deposit')
         ->assertDontSee('Deposit #3', false)
-        ->assertDontSee('Reversal of #' . $original->id, false);
+        ->assertDontSee('Reversal of #'.$original->id, false);
 });
 
 test('contributions list shows stat cards only', function () {

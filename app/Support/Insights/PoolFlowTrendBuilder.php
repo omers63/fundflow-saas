@@ -74,14 +74,14 @@ final class PoolFlowTrendBuilder
             return [];
         }
 
-        $floatValues = array_map(static fn($v): float => (float) $v, $values);
+        $floatValues = array_map(static fn ($v): float => (float) $v, $values);
         $min = min($floatValues);
         $max = max($floatValues);
         $range = $max - $min;
 
         if ($range < 0.01) {
             // Flat series: mid-height stub so the strip still reads as a continuous baseline.
-            return array_map(static fn(): float => 42.0, $floatValues);
+            return array_map(static fn (): float => 42.0, $floatValues);
         }
 
         $alpha = self::EXPONENTIAL_ALPHA;

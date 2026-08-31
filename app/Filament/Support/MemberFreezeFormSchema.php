@@ -121,7 +121,7 @@ final class MemberFreezeFormSchema
                 ])),
             Placeholder::make('cycle_preview')
                 ->hiddenLabel()
-                ->content(fn($get): HtmlString => self::cyclePreviewHtml(
+                ->content(fn ($get): HtmlString => self::cyclePreviewHtml(
                     MemberFreezeService::normalizeCycles($get('cycles')),
                 )),
             Textarea::make('reason')

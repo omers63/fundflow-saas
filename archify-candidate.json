@@ -1,0 +1,386 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "FundFlow SaaS Runtime Architecture",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "primary-flow",
+        "label": "Primary transaction path",
+        "focus": [
+          "clients",
+          "ingress",
+          "app_core",
+          "domain_services",
+          "database"
+        ],
+        "note": "Synchronous request execution: UI actions pass through Nginx to Filament/Livewire and the dual-entry accounting domain."
+      },
+      {
+        "id": "security-and-auth",
+        "label": "Tenant isolation & auth",
+        "focus": [
+          "ingress",
+          "auth",
+          "app_core",
+          "domain_services"
+        ],
+        "note": "Tenant resolution, role-based authorization, and member context bounding all domain transactions."
+      },
+      {
+        "id": "async-and-events",
+        "label": "Async workers & real-time",
+        "focus": [
+          "app_core",
+          "redis_queue",
+          "worker",
+          "reverb",
+          "clients",
+          "smtp_gateway"
+        ],
+        "note": "Asynchronous job draining, delinquency schedules, SMTP alerts, and Reverb WebSocket broadcasting."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "clients",
+      "type": "frontend",
+      "label": "Member & Admin Portal",
+      "sublabel": "Browser & Mobile PWA",
+      "tag": "HTTPS / WSS",
+      "pos": [
+        40,
+        240
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "ingress",
+      "type": "cloud",
+      "label": "Nginx & PHP-FPM",
+      "sublabel": "TLS & Reverse Proxy",
+      "tag": "PHP 8.4",
+      "pos": [
+        260,
+        240
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Auth & Tenancy Guard",
+      "sublabel": "Context & Permissions",
+      "tag": "Session & RBAC",
+      "pos": [
+        260,
+        80
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "app_core",
+      "type": "backend",
+      "label": "Livewire App Core",
+      "sublabel": "Filament v5 Panels",
+      "tag": "Laravel 12",
+      "pos": [
+        500,
+        240
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "domain_services",
+      "type": "backend",
+      "label": "Domain & Accounting",
+      "sublabel": "Ledger, Loans & Delinquency",
+      "tag": "Pool Mirror Sync",
+      "pos": [
+        750,
+        240
+      ],
+      "size": [
+        160,
+        60
+      ]
+    },
+    {
+      "id": "database",
+      "type": "database",
+      "label": "Tenant Database",
+      "sublabel": "Double-Entry Ledgers",
+      "brand": "postgresql",
+      "pos": [
+        1010,
+        240
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "bank_feed",
+      "type": "external",
+      "label": "Bank Statement Feeds",
+      "sublabel": "CSV & Match Clearance",
+      "tag": "External Bank",
+      "pos": [
+        750,
+        80
+      ],
+      "size": [
+        160,
+        60
+      ]
+    },
+    {
+      "id": "redis_queue",
+      "type": "database",
+      "label": "Redis Store",
+      "sublabel": "Queue, Cache & Sessions",
+      "brand": "redis",
+      "pos": [
+        500,
+        420
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Queue & Scheduler Worker",
+      "sublabel": "Nightly Cycles & Invariants",
+      "tag": "Artisan Horizon",
+      "pos": [
+        750,
+        420
+      ],
+      "size": [
+        160,
+        60
+      ]
+    },
+    {
+      "id": "reverb",
+      "type": "messagebus",
+      "label": "Laravel Reverb",
+      "sublabel": "WebSocket Server",
+      "tag": "Real-time Push",
+      "pos": [
+        260,
+        420
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "smtp_gateway",
+      "type": "external",
+      "label": "Mail Gateway",
+      "sublabel": "SMTP / Mailgun",
+      "tag": "Notifications",
+      "pos": [
+        1010,
+        420
+      ],
+      "size": [
+        140,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "FundFlow Application Runtime",
+      "wraps": [
+        "ingress",
+        "auth",
+        "app_core",
+        "domain_services",
+        "worker",
+        "reverb"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Data & Cache Layer",
+      "wraps": [
+        "database",
+        "redis_queue"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "client-to-ingress",
+      "from": "clients",
+      "to": "ingress",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "ingress-to-auth",
+      "from": "ingress",
+      "to": "auth",
+      "label": "tenant check",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDy": -50
+    },
+    {
+      "id": "auth-to-app",
+      "from": "auth",
+      "to": "app_core",
+      "label": "scoped context",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "ingress-to-app",
+      "from": "ingress",
+      "to": "app_core",
+      "label": "dispatch",
+      "variant": "emphasis"
+    },
+    {
+      "id": "app-to-domain",
+      "from": "app_core",
+      "to": "domain_services",
+      "label": "service call",
+      "variant": "emphasis"
+    },
+    {
+      "id": "domain-to-db",
+      "from": "domain_services",
+      "to": "database",
+      "label": "SQL ledger",
+      "variant": "emphasis"
+    },
+    {
+      "id": "bank-to-domain",
+      "from": "bank_feed",
+      "to": "domain_services",
+      "label": "import CSV",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 50
+    },
+    {
+      "id": "app-to-redis",
+      "from": "app_core",
+      "to": "redis_queue",
+      "label": "enqueue",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 50
+    },
+    {
+      "id": "redis-to-worker",
+      "from": "redis_queue",
+      "to": "worker",
+      "label": "drain jobs",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "worker-to-domain",
+      "from": "worker",
+      "to": "domain_services",
+      "label": "cycle batch",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDy": -50
+    },
+    {
+      "id": "worker-to-smtp",
+      "from": "worker",
+      "to": "smtp_gateway",
+      "label": "SMTP",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "app-to-reverb",
+      "from": "app_core",
+      "to": "reverb",
+      "label": "broadcast",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "right"
+    },
+    {
+      "id": "reverb-to-client",
+      "from": "reverb",
+      "to": "clients",
+      "label": "WSS push",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Ingress & Presentation",
+      "items": [
+        "Nginx terminates TLS and serves static UI bundles to desktop and mobile clients.",
+        "Filament v5 + Livewire v4 render reactive Member, Tenant Admin, and System Admin panels.",
+        "Reverb delivers instantaneous Livewire DOM and notification updates over WebSockets."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Accounting & Loan Domain",
+      "items": [
+        "Dual-entry ledger maintains real-time parity between Member and Master fund accounts.",
+        "Accounting invariants strictly enforce zero pool drift across member deposit, disbursement, and cash-out.",
+        "Loan calculator & lifecycle engines simulate amortization, grace cycles, and threshold milestones."
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Async Processing & Integrations",
+      "items": [
+        "Redis queues isolate heavy operations (delinquency audits, collection cycles, PDF exports).",
+        "Scheduled workers run nightly invariant integrity checks and trigger automatic notifications.",
+        "Bank transaction feeds ingest and match statement lines against uncleared ledger postings."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Security & Multi-Tenancy",
+      "items": [
+        "Tenant context scoping isolates database queries and ledger transactions strictly per organization.",
+        "Role-based authorization and 2FA protect administrative financial adjustments.",
+        "Complete audit trail logs every state mutation and clearance action."
+      ]
+    }
+  ]
+}

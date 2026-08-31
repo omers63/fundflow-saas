@@ -38,11 +38,11 @@ test('membership enrollment page binds livewire root around navigation buttons',
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $html = $this->get('http://' . $domain . '/membership')->assertSuccessful()->getContent();
+    $html = $this->get('http://'.$domain.'/membership')->assertSuccessful()->getContent();
 
     expect($html)->toMatch('/wire:id="[^"]+"[^>]*class="membership-enrollment-wizard"/');
     expect($html)->toContain('wire:click="nextStep"');
@@ -52,11 +52,11 @@ test('membership enrollment page is available on the tenant domain', function ()
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $this->get('http://' . $domain . '/membership')
+    $this->get('http://'.$domain.'/membership')
         ->assertSuccessful()
         ->assertSee(__('Apply for membership'), false);
 });
@@ -65,11 +65,11 @@ test('apply route serves the same enrollment wizard', function () {
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $this->get('http://' . $domain . '/apply')
+    $this->get('http://'.$domain.'/apply')
         ->assertSuccessful()
         ->assertSee(__('Information'), false)
         ->assertSee(__('Personal details'), false);
@@ -79,11 +79,11 @@ test('landing page links to membership enrollment instead of embedding the form'
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $response = $this->get('http://' . $domain);
+    $response = $this->get('http://'.$domain);
 
     $response->assertSuccessful();
     $response->assertSee(route('tenant.membership', absolute: false), false);
@@ -187,7 +187,7 @@ test('membership wizard shows fee transfer bank details on fees step when fee ap
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->tap(fn ($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
         ->call('nextStep')
         ->assertSet('step', 5)
         ->assertSee(__('Membership fees'), false)
@@ -204,7 +204,7 @@ test('membership wizard stores a hashed password and profile on the application'
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->tap(fn ($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
         ->call('nextStep')
         ->call('submit')
         ->assertSet('submitted', true)
@@ -227,7 +227,7 @@ test('membership wizard does not require next of kin', function () {
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn($test) => $this->withEnrollmentProfile($test, withNextOfKin: false)->call('nextStep')->call('nextStep'))
+        ->tap(fn ($test) => $this->withEnrollmentProfile($test, withNextOfKin: false)->call('nextStep')->call('nextStep'))
         ->assertSet('step', 4)
         ->call('submit')
         ->assertSet('submitted', true)
@@ -248,7 +248,7 @@ test('membership wizard submits from document step when no fee applies', functio
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->tap(fn ($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
         ->assertSet('step', 4)
         ->call('submit')
         ->assertSet('submitted', true)
@@ -277,10 +277,10 @@ test('membership wizard submits from fees step when a fee applies', function () 
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->tap(fn ($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
         ->call('nextStep')
         ->assertSet('step', 5)
-        ->tap(fn($test) => $this->withEnrollmentFeePayment($test))
+        ->tap(fn ($test) => $this->withEnrollmentFeePayment($test))
         ->call('submit')
         ->assertSet('submitted', true)
         ->assertSee('tenant-centered-page', false);
@@ -323,7 +323,7 @@ test('membership wizard requires transfer date and amount on fees step', functio
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->tap(fn ($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
         ->call('nextStep')
         ->set('membership_fee_transfer_date', '')
         ->set('membership_fee_transfer_amount', '')
@@ -345,7 +345,7 @@ test('membership wizard requires fee acknowledgment when fee applies', function 
             ->set('email', 'jane@example.com')
     )
         ->call('nextStep')
-        ->tap(fn($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
+        ->tap(fn ($test) => $this->withEnrollmentProfile($test)->call('nextStep')->call('nextStep'))
         ->call('nextStep')
         ->set('membership_fee_transfer_reference', 'TXN-REF')
         ->call('submit')

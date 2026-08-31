@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Member\Resources\MyContributions\Pages\ListMyContributions;
+use App\Filament\Tenant\Resources\Loans\Pages\ListLoans;
 use App\Filament\Tenant\Resources\Members\Pages\ListMembers;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
@@ -112,7 +113,7 @@ test('loans to-collect table stacks on mobile by default', function (): void {
     ]);
 
     $component = Livewire::actingAs($admin, 'tenant')
-        ->test(\App\Filament\Tenant\Resources\Loans\Pages\ListLoans::class);
+        ->test(ListLoans::class);
 
     expect($component->instance()->getTable()->isStackedOnMobile())->toBeTrue();
 });

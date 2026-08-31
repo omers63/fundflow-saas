@@ -17,7 +17,7 @@ test('landing page shows arabic fund name when configured', function () {
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
@@ -27,7 +27,7 @@ test('landing page shows arabic fund name when configured', function () {
         'fund_name_ar' => 'صندوق النور',
     ]);
 
-    $this->get('http://' . $domain)
+    $this->get('http://'.$domain)
         ->assertSuccessful()
         ->assertSee('tenant-public-nav__fund-name', false)
         ->assertSee('tenant-public-nav__language', false)
@@ -39,7 +39,7 @@ test('public header shows english fund name when locale is english', function ()
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
@@ -49,10 +49,10 @@ test('public header shows english fund name when locale is english', function ()
         'fund_name_ar' => 'صندوق النور',
     ]);
 
-    $this->get('http://' . $domain . '/locale/en')
+    $this->get('http://'.$domain.'/locale/en')
         ->assertRedirect();
 
-    $this->get('http://' . $domain)
+    $this->get('http://'.$domain)
         ->assertSuccessful()
         ->assertSee('tenant-public-nav__fund-name', false)
         ->assertSee('tenant-public-nav__language', false)
@@ -64,11 +64,11 @@ test('landing page defaults to arabic locale and rtl layout', function () {
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $response = $this->get('http://' . $domain);
+    $response = $this->get('http://'.$domain);
 
     $response
         ->assertSuccessful()
@@ -84,11 +84,11 @@ test('landing page can be switched to english via query locale', function () {
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $this->get('http://' . $domain . '?locale=en')
+    $this->get('http://'.$domain.'?locale=en')
         ->assertSuccessful()
         ->assertSee('dir="ltr"', false)
         ->assertSee(__('Member login', locale: 'en'), false);
@@ -105,11 +105,11 @@ test('public nav shows flag language switcher when locale is arabic', function (
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $this->get('http://' . $domain)
+    $this->get('http://'.$domain)
         ->assertSuccessful()
         ->assertSee('language-switch-trigger', false)
         ->assertSee('flagcdn.com/w40/sa.png', false);
@@ -119,15 +119,15 @@ test('locale switch route sets session and redirects back', function () {
     $tenant = Tenant::find('testing');
     $domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 
-    $this->get('http://' . $domain . '/locale/en')
+    $this->get('http://'.$domain.'/locale/en')
         ->assertRedirect()
         ->assertSessionHas('locale', 'en');
 
-    $this->get('http://' . $domain)
+    $this->get('http://'.$domain)
         ->assertSuccessful()
         ->assertSee('dir="ltr"', false)
         ->assertSee('flagcdn.com/w40/gb.png', false);

@@ -15,7 +15,7 @@ beforeEach(function () {
 function makeStepperLoan(array $attributes = []): Loan
 {
     $member = Member::create([
-        'member_number' => 'MEM-' . uniqid(),
+        'member_number' => 'MEM-'.uniqid(),
         'name' => 'Stepper Member',
         'monthly_contribution_amount' => 5000,
         'joined_at' => now()->subMonths(18),
@@ -139,9 +139,9 @@ test('active loan with installments shows repaying progress', function () {
 
     expect($current['key'])->toBe('repaying')
         ->and($current['description'])->toBe(__(':paid paid · :remaining remaining', [
-                    'paid' => 1,
-                    'remaining' => 1,
-                ]));
+            'paid' => 1,
+            'remaining' => 1,
+        ]));
 });
 
 test('completed loan marks all stages complete', function () {
@@ -155,7 +155,7 @@ test('completed loan marks all stages complete', function () {
 
     $steps = LoanUserFacingStage::stepperFor($loan->fresh());
 
-    expect(collect($steps)->every(fn(array $step): bool => $step['state'] === 'complete'))->toBeTrue();
+    expect(collect($steps)->every(fn (array $step): bool => $step['state'] === 'complete'))->toBeTrue();
 });
 
 test('rejected loan uses shortened terminal stepper', function () {

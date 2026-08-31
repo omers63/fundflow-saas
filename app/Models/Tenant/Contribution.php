@@ -70,7 +70,7 @@ class Contribution extends Model
         static::creating(function (Contribution $contribution): void {
             $member = Member::query()->find((int) $contribution->member_id);
 
-            if ($member && !ContributionService::liveCollectionGuardsSuppressed()) {
+            if ($member && ! ContributionService::liveCollectionGuardsSuppressed()) {
                 $policy = app(ContributionExemptionPolicy::class);
 
                 if ($contribution->period !== null) {

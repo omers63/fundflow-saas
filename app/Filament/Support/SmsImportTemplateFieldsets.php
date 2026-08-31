@@ -121,7 +121,7 @@ final class SmsImportTemplateFieldsets
                         ->label(__('Credit keywords'))
                         ->default(['credited', 'received', 'deposit', 'credit'])
                         ->afterStateHydrated(function (TagsInput $component, mixed $state): void {
-                            if (!is_array($state)) {
+                            if (! is_array($state)) {
                                 $component->state(['credited', 'received', 'deposit', 'credit']);
                             }
                         })
@@ -130,7 +130,7 @@ final class SmsImportTemplateFieldsets
                         ->label(__('Debit keywords'))
                         ->default(['debited', 'paid', 'purchase', 'debit', 'withdraw'])
                         ->afterStateHydrated(function (TagsInput $component, mixed $state): void {
-                            if (!is_array($state)) {
+                            if (! is_array($state)) {
                                 $component->state(['debited', 'paid', 'purchase', 'debit', 'withdraw']);
                             }
                         })
@@ -169,7 +169,7 @@ final class SmsImportTemplateFieldsets
                         ]))
                         ->default(['date', 'amount', 'reference'])
                         ->afterStateHydrated(function (CheckboxList $component, mixed $state): void {
-                            if (!is_array($state)) {
+                            if (! is_array($state)) {
                                 $component->state(['date', 'amount', 'reference']);
                             }
                         })

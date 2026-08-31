@@ -9,7 +9,7 @@ declare(strict_types=1);
  * @see app/Providers/AppServiceProvider.php Column::configureUsing
  */
 test('virtual filament table columns override default SQL sorting', function (): void {
-    $root = dirname(__DIR__, 2) . '/app/Filament';
+    $root = dirname(__DIR__, 2).'/app/Filament';
 
     /** Column names that map to real DB attributes even when display uses state(). */
     $dbBackedNames = [
@@ -36,18 +36,18 @@ test('virtual filament table columns override default SQL sorting', function ():
     $columnMakePattern = '/(?P<class>(?:Text|Icon|Image|Color|Checkbox|Select|Toggle|View|Badge)Column)::make\((?P<name>[^)]+)\)/';
 
     foreach ($paths as $file) {
-        if (!$file->isFile() || $file->getExtension() !== 'php') {
+        if (! $file->isFile() || $file->getExtension() !== 'php') {
             continue;
         }
 
         $path = $file->getPathname();
         $contents = file_get_contents($path);
 
-        if ($contents === false || !preg_match_all($columnMakePattern, $contents, $matches, PREG_OFFSET_CAPTURE)) {
+        if ($contents === false || ! preg_match_all($columnMakePattern, $contents, $matches, PREG_OFFSET_CAPTURE)) {
             continue;
         }
 
-        $relative = str_replace(dirname(__DIR__, 2) . '/', '', $path);
+        $relative = str_replace(dirname(__DIR__, 2).'/', '', $path);
         $count = count($matches[0]);
 
         for ($i = 0; $i < $count; $i++) {
@@ -73,7 +73,7 @@ test('virtual filament table columns override default SQL sorting', function ():
 
             $hasVirtualState = str_contains($body, '->state(') || str_contains($body, '->getStateUsing(');
 
-            if (!$hasVirtualState) {
+            if (! $hasVirtualState) {
                 continue;
             }
 
@@ -92,7 +92,7 @@ test('virtual filament table columns override default SQL sorting', function ():
                 || (bool) preg_match('/->sortable\s*\(\s*query\s*:/', $body)
                 || (bool) preg_match('/->sortable\s*\(\s*fn\b/', $body);
 
-            if (!$hasSortOverride) {
+            if (! $hasSortOverride) {
                 $violations[] = "{$relative} :: {$name} (sortable)";
             }
 
@@ -100,13 +100,13 @@ test('virtual filament table columns override default SQL sorting', function ():
                 || (bool) preg_match('/->searchable\s*\(\s*query\s*:/', $body)
                 || (bool) preg_match('/->searchable\s*\(\s*fn\b/', $body);
 
-            if (!$hasSearchOverride) {
+            if (! $hasSearchOverride) {
                 $violations[] = "{$relative} :: {$name} (searchable)";
             }
         }
     }
 
     expect($violations)->toBeEmpty(
-        "Virtual columns must override default SQL sortable/searchable.\n" . implode("\n", $violations),
+        "Virtual columns must override default SQL sortable/searchable.\n".implode("\n", $violations),
     );
 });

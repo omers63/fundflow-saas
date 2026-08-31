@@ -32,16 +32,16 @@ class MyTenants extends BaseWidget
                     ->label('Tenant name')
                     ->searchable()
                     ->sortable()
-                    ->url(fn(Tenant $record): string => TenantResource::getUrl('view', ['record' => $record])),
+                    ->url(fn (Tenant $record): string => TenantResource::getUrl('view', ['record' => $record])),
                 Tables\Columns\TextColumn::make('id')
                     ->label('Subdomain')
                     ->searchable()
                     ->sortable()
-                    ->formatStateUsing(fn(string $state): string => $state . '.' . config('tenancy.central_domain')),
+                    ->formatStateUsing(fn (string $state): string => $state.'.'.config('tenancy.central_domain')),
                 Tables\Columns\BadgeColumn::make('is_provisioned')
                     ->label('Status')
-                    ->formatStateUsing(fn(bool $state): string => $state ? 'Provisioned' : 'Pending')
-                    ->color(fn(bool $state): string => $state ? 'success' : 'danger'),
+                    ->formatStateUsing(fn (bool $state): string => $state ? 'Provisioned' : 'Pending')
+                    ->color(fn (bool $state): string => $state ? 'success' : 'danger'),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -55,7 +55,7 @@ class MyTenants extends BaseWidget
                 Action::make('viewTenant')
                     ->label(__('View'))
                     ->icon('heroicon-o-eye')
-                    ->url(fn(Tenant $record): string => TenantResource::getUrl('view', ['record' => $record])),
+                    ->url(fn (Tenant $record): string => TenantResource::getUrl('view', ['record' => $record])),
             ]))
             ->toolbarActions([
                 BulkActionGroup::make([

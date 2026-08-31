@@ -62,11 +62,11 @@ class MySupportRequestsTableWidget extends TableWidget
                     TextColumn::make('category')
                         ->label(__('Category'))
                         ->badge()
-                        ->formatStateUsing(fn(string $state): string => SupportRequest::categoryLabel($state)),
+                        ->formatStateUsing(fn (string $state): string => SupportRequest::categoryLabel($state)),
                     TextColumn::make('status')
                         ->badge()
-                        ->formatStateUsing(fn(string $state): string => SupportRequest::statusOptions()[$state] ?? $state)
-                        ->color(fn(string $state): string => SupportRequest::statusColor($state)),
+                        ->formatStateUsing(fn (string $state): string => SupportRequest::statusOptions()[$state] ?? $state)
+                        ->color(fn (string $state): string => SupportRequest::statusColor($state)),
                     TextColumn::make('created_at')
                         ->label(__('Submitted'))
                         ->dateTime()

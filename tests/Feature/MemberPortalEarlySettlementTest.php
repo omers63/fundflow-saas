@@ -25,7 +25,7 @@ beforeEach(function () {
     $tenant = Tenant::find('testing');
     $this->domain = 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $this->domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $this->domain)->exists()) {
         $tenant->domains()->create(['domain' => $this->domain]);
     }
 

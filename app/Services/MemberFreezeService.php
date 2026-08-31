@@ -97,7 +97,7 @@ final class MemberFreezeService
      */
     public function isWithinFreezePlan(Member $member): bool
     {
-        if (!$this->isFrozen($member) || $member->freeze_plan_ended_at !== null) {
+        if (! $this->isFrozen($member) || $member->freeze_plan_ended_at !== null) {
             return false;
         }
 
@@ -114,7 +114,7 @@ final class MemberFreezeService
      */
     public function isFreezePlanExhausted(Member $member): bool
     {
-        if (!$this->isFrozen($member) || $this->isIndefiniteFreeze($member)) {
+        if (! $this->isFrozen($member) || $this->isIndefiniteFreeze($member)) {
             return false;
         }
 

@@ -129,7 +129,7 @@ final class MasterInvestHeaderActions
      */
     private static function investOutFormSchema(): array
     {
-        $currency = fn(): string => Setting::get('general', 'currency', 'USD');
+        $currency = fn (): string => Setting::get('general', 'currency', 'USD');
 
         return [
             DateTimePicker::make('transacted_at')
@@ -147,8 +147,8 @@ final class MasterInvestHeaderActions
                     if (blank($transactedAt)) {
                         return new HtmlString(
                             '<span class="text-sm text-gray-500 dark:text-gray-400">'
-                            . e(__('Select a transaction date.'))
-                            . '</span>'
+                            .e(__('Select a transaction date.'))
+                            .'</span>'
                         );
                     }
 
@@ -158,11 +158,11 @@ final class MasterInvestHeaderActions
 
                     return new HtmlString(
                         '<div class="flex flex-col gap-1.5">'
-                        . '<span class="text-base font-semibold tabular-nums break-words">' . e($formatted) . '</span>'
-                        . '<span class="text-sm text-gray-500 dark:text-gray-400">'
-                        . e(__('as of :date', ['date' => $at->format('M j, Y g:i A')]))
-                        . '</span>'
-                        . '</div>'
+                        .'<span class="text-base font-semibold tabular-nums break-words">'.e($formatted).'</span>'
+                        .'<span class="text-sm text-gray-500 dark:text-gray-400">'
+                        .e(__('as of :date', ['date' => $at->format('M j, Y g:i A')]))
+                        .'</span>'
+                        .'</div>'
                     );
                 }),
             TextInput::make('amount')

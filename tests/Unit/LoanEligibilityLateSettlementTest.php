@@ -34,7 +34,7 @@ test('late contribution settlements block new loan applications using contributi
     Carbon::setTestNow(Carbon::create(2026, 6, 15));
 
     $member = Member::create([
-        'member_number' => 'MEM-ELIG-LATE-' . uniqid(),
+        'member_number' => 'MEM-ELIG-LATE-'.uniqid(),
         'name' => 'Late Contribution Eligible',
         'monthly_contribution_amount' => 1000,
         'joined_at' => Carbon::create(2026, 3, 1),

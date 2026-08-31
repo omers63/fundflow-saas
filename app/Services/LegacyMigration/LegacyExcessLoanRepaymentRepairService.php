@@ -165,7 +165,7 @@ final class LegacyExcessLoanRepaymentRepairService
                 break;
             }
 
-            if (!$repayment instanceof LoanRepayment) {
+            if (! $repayment instanceof LoanRepayment) {
                 continue;
             }
 

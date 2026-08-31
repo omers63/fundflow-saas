@@ -15,7 +15,7 @@ class ListTenants extends ListRecords
         return [
             CreateAction::make()
                 ->icon('heroicon-o-plus-circle')
-                ->visible(fn() => auth()->user()->hasRole('super_admin')),
+                ->visible(fn () => auth()->user()->hasRole('super_admin')),
         ];
     }
 }

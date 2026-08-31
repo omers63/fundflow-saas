@@ -86,14 +86,14 @@ final class MasterExpenseDisbursementService
                 $this->accounting->credit(
                     $masterCash,
                     $amount,
-                    $ledgerDescription . ' ' . __('(from expense reserve)'),
+                    $ledgerDescription.' '.__('(from expense reserve)'),
                     $disbursement,
                     $transactedAt,
                 );
                 $this->accounting->debit(
                     $masterCash,
                     $amount,
-                    $ledgerDescription . ' ' . __('(check out)'),
+                    $ledgerDescription.' '.__('(check out)'),
                     $disbursement,
                     $transactedAt,
                 );

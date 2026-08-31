@@ -36,8 +36,8 @@ final class BankTransactionWorkflow
     public static function canPostToCash(BankTransaction $transaction): bool
     {
         return $transaction->status === 'imported'
-            && !self::isLinkedToOperationalRequest($transaction)
-            && !self::isSyntheticOperationalStatement($transaction);
+            && ! self::isLinkedToOperationalRequest($transaction)
+            && ! self::isSyntheticOperationalStatement($transaction);
     }
 
     /**
@@ -46,7 +46,7 @@ final class BankTransactionWorkflow
     public static function canPostToMember(BankTransaction $transaction): bool
     {
         return in_array($transaction->status, ['imported', 'mirrored'], true)
-            && !self::isLinkedToOperationalRequest($transaction)
-            && !self::isSyntheticOperationalStatement($transaction);
+            && ! self::isLinkedToOperationalRequest($transaction)
+            && ! self::isSyntheticOperationalStatement($transaction);
     }
 }

@@ -15,8 +15,7 @@ final class BankTransactionDeletion
 {
     public function __construct(
         private AccountingService $accounting,
-    ) {
-    }
+    ) {}
 
     public static function canDelete(BankTransaction $bankTransaction): bool
     {
@@ -78,13 +77,13 @@ final class BankTransactionDeletion
         $base = __('This permanently removes the statement line from the import.');
 
         if ($ledgerCount > 0) {
-            return $base . ' ' . __(':count linked ledger transaction(s) will be removed and account balances adjusted.', [
+            return $base.' '.__(':count linked ledger transaction(s) will be removed and account balances adjusted.', [
                 'count' => $ledgerCount,
             ]);
         }
 
         if ($bankTransaction->status === 'duplicate') {
-            return $base . ' ' . __('Other lines marked as duplicates of this one will be unlinked.');
+            return $base.' '.__('Other lines marked as duplicates of this one will be unlinked.');
         }
 
         return $base;

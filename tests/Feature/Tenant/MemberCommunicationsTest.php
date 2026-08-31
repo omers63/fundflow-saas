@@ -54,7 +54,7 @@ test('help page renders communications tabs including faq and alerts', function 
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');
 
-    $this->get('http://' . $this->domain . '/member/messages')
+    $this->get('http://'.$this->domain.'/member/messages')
         ->assertSuccessful()
         ->assertSee('ff-member-communications', false)
         ->assertSee(__('Alerts'), false)
@@ -67,7 +67,7 @@ test('legacy help path redirects to messages hub', function () {
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');
 
-    $this->get('http://' . $this->domain . '/member/help?tab=alerts')
+    $this->get('http://'.$this->domain.'/member/help?tab=alerts')
         ->assertRedirect('/member/messages?tab=alerts');
 });
 
@@ -75,7 +75,7 @@ test('messages tab embeds inbox table', function () {
     Filament::setCurrentPanel('member');
     $this->actingAs($this->memberUser, 'tenant');
 
-    $this->get('http://' . $this->domain . '/member/messages?tab=messages')
+    $this->get('http://'.$this->domain.'/member/messages?tab=messages')
         ->assertSuccessful()
         ->assertSee(__('Inbox'), false);
 });
@@ -89,7 +89,7 @@ test('faq tab shows localized entries', function () {
 
     expect($firstQuestion)->toBe('When is my contribution collected?');
 
-    $this->get('http://' . $this->domain . '/member/messages?tab=faq')
+    $this->get('http://'.$this->domain.'/member/messages?tab=faq')
         ->assertSuccessful()
         ->assertSee('ff-member-faq', false)
         ->assertSee($firstQuestion, false);
@@ -108,7 +108,7 @@ test('alert history tab lists member notification logs', function () {
         'sent_at' => now(),
     ]);
 
-    $this->get('http://' . $this->domain . '/member/messages?tab=alerts')
+    $this->get('http://'.$this->domain.'/member/messages?tab=alerts')
         ->assertSuccessful()
         ->assertSee(__('Alerts'), false)
         ->assertSee('Contribution reminder', false);

@@ -63,7 +63,7 @@ class DatabaseMaintenanceService
 
     public function tenantMigrationIsApplied(string $migrationName): bool
     {
-        if (!Schema::hasTable('migrations')) {
+        if (! Schema::hasTable('migrations')) {
             return false;
         }
 

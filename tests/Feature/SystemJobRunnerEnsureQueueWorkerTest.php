@@ -51,8 +51,8 @@ test('system job runner parses command flags before calling artisan', function (
         'fund:reconcile',
         ['--daily' => true],
     ])->and($method->invoke($runner, 'statements:generate --notify'))->toBe([
-                'statements:generate',
-                ['--notify' => true],
+        'statements:generate',
+        ['--notify' => true],
     ]);
 });
 

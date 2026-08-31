@@ -191,9 +191,9 @@ final class LoanApplicationFundingFields
                 foreach ($rows as [$label, $value]) {
                     $body .= '<div class="flex items-center justify-between gap-3 border-b border-gray-100 py-1.5 last:border-0 dark:border-white/10">'
                         .'<span class="text-xs text-gray-500 dark:text-gray-400">'.e($label).'</span>'
-                                                . '<span class="text-xs font-semibold tabular-nums text-gray-900 dark:text-white">'
-                                                . MoneyDisplay::markupForDisplay($value, $currency)
-                                                . '</span>'
+                                                .'<span class="text-xs font-semibold tabular-nums text-gray-900 dark:text-white">'
+                                                .MoneyDisplay::markupForDisplay($value, $currency)
+                                                .'</span>'
                         .'</div>';
                 }
 

@@ -23,8 +23,7 @@ final class LegacyMigrationCashSupplementRepairService
     public function __construct(
         private readonly AccountingService $accounting,
         private readonly LegacyPaymentImportService $paymentImport,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{repaired: int, skipped: int, errors: list<string>}
@@ -41,8 +40,8 @@ final class LegacyMigrationCashSupplementRepairService
 
         $transactions = Transaction::query()
             ->where('type', 'credit')
-            ->where('description', 'like', self::LEGACY_CASH_PREFIX . '%')
-            ->whereHas('account', fn($query) => $query->where('type', 'cash')->where('is_master', false))
+            ->where('description', 'like', self::LEGACY_CASH_PREFIX.'%')
+            ->whereHas('account', fn ($query) => $query->where('type', 'cash')->where('is_master', false))
             ->orderBy('transacted_at')
             ->orderBy('id')
             ->get();
@@ -132,10 +131,10 @@ final class LegacyMigrationCashSupplementRepairService
                     ->where('type', 'credit')
                     ->where('transacted_at', $transaction->transacted_at)
                     ->where('amount', $transaction->amount)
-                    ->where('description', 'like', '%' . self::LEGACY_CASH_PREFIX . '%')
+                    ->where('description', 'like', '%'.self::LEGACY_CASH_PREFIX.'%')
                     ->when(
                         $transaction->member_id !== null,
-                        fn($query) => $query->where('member_id', $transaction->member_id),
+                        fn ($query) => $query->where('member_id', $transaction->member_id),
                     )
                     ->whereNull('reference_type')
                     ->limit(1)
@@ -160,14 +159,14 @@ final class LegacyMigrationCashSupplementRepairService
 
             foreach ($parts as $part) {
                 if (preg_match('/^\d{4}-\d{2}$/', trim($part)) === 1) {
-                    $date = Carbon::parse(trim($part) . '-01');
+                    $date = Carbon::parse(trim($part).'-01');
 
                     return [(int) $date->month, (int) $date->year];
                 }
             }
         }
 
-        if (preg_match('/' . preg_quote(self::LEGACY_CASH_PREFIX, '/') . '\s*([A-Za-z]{3}\s+\d{4})/', $description, $matches) === 1) {
+        if (preg_match('/'.preg_quote(self::LEGACY_CASH_PREFIX, '/').'\s*([A-Za-z]{3}\s+\d{4})/', $description, $matches) === 1) {
             $date = Carbon::parse($matches[1]);
 
             return [(int) $date->month, (int) $date->year];

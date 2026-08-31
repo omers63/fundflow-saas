@@ -118,8 +118,8 @@ test('dependents insights set contributions sums parent and funded contribution 
         ))
         ->and($kpis[__('Set EMI repayments')]['value'])->toBe('—')
         ->and($snapshot['kpis'][0]['sub'])->toBe(__(':funded funded · :self self-funded', [
-        'funded' => 1,
-        'self' => 1,
+            'funded' => 1,
+            'self' => 1,
         ]))
         ->and($snapshot['open_period']['funded_dependents'])->toBe(1)
         ->and($snapshot['open_period']['total'])->toBe(1);
@@ -171,8 +171,8 @@ test('dependents insights splits contribution and emi set amounts for household'
         ->and($kpis[__('Cash to transfer')]['value'])->toBe(InsightFormatter::compactAmount(1000))
         ->and($kpis[__('Contributions posted')]['value'])->toBe('—')
         ->and($kpis[__('EMI repayments posted')]['value'])->toBe(__(':posted/:total', [
-        'posted' => 0,
-        'total' => 1,
+            'posted' => 0,
+            'total' => 1,
         ]))
         ->and($snapshot['open_period']['total'])->toBe(0);
 });
@@ -220,8 +220,8 @@ test('dependents insights includes parent emi and funded dependent contributions
         ->and($kpis[__('Set EMI repayments')]['value'])->toBe(InsightFormatter::compactAmount(1100))
         ->and($kpis[__('Set EMI repayments')]['sub'])->toBe(__('Your scheduled EMI'))
         ->and($kpis[__('EMI repayments posted')]['value'])->toBe(__(':posted/:total', [
-        'posted' => 0,
-        'total' => 1,
+            'posted' => 0,
+            'total' => 1,
         ]));
 });
 

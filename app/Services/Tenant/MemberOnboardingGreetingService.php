@@ -62,7 +62,7 @@ final class MemberOnboardingGreetingService
 
         try {
             $user->notify(new MemberOnboardingGreetingNotification($member, $plainPassword));
-                        $this->markSent($member);
+            $this->markSent($member);
 
             return true;
         } catch (Throwable $exception) {
@@ -81,7 +81,7 @@ final class MemberOnboardingGreetingService
             return true;
         }
 
-        if (!Schema::hasTable('notifications')) {
+        if (! Schema::hasTable('notifications')) {
             return false;
         }
 

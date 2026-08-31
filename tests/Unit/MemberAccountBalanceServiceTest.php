@@ -48,10 +48,10 @@ test('member account balance service returns ledger balance as of date', functio
 
     expect($this->balances->balanceAtDate($member, 'fund', $asOf))->toBe(1000.0)
         ->and($this->balances->positiveFreezeCashOutBalances($member, $asOf))->toBe([
-                'fund' => 1000.0,
-                'cash' => 0.0,
-                'total' => 1000.0,
-            ]);
+            'fund' => 1000.0,
+            'cash' => 0.0,
+            'total' => 1000.0,
+        ]);
 });
 
 test('member account balance service uses live account balances for todays freeze date', function () {

@@ -107,7 +107,7 @@ final class LegacyPaymentImportService
             return AccountingService::withoutMemberCashCollection(
                 fn (): array => ContributionService::withoutPostedNotifications(
                     fn (): array => ContributionService::withoutLiveCollectionGuards(
-                        fn(): array => $this->importRows($absolutePath, $rebuildBalances),
+                        fn (): array => $this->importRows($absolutePath, $rebuildBalances),
                     ),
                 ),
             );
@@ -149,7 +149,7 @@ final class LegacyPaymentImportService
             $result = AccountingService::withoutMemberCashCollection(
                 fn (): array => ContributionService::withoutPostedNotifications(
                     fn (): array => ContributionService::withoutLiveCollectionGuards(
-                        fn(): array => $this->importRows($absolutePath, false),
+                        fn (): array => $this->importRows($absolutePath, false),
                     ),
                 ),
             );
@@ -301,7 +301,7 @@ final class LegacyPaymentImportService
             $this->zeroBalanceLoanCompletion->completeAll();
         }
 
-        if ($rebuildBalances && !$this->simulationMode) {
+        if ($rebuildBalances && ! $this->simulationMode) {
             $this->accounting->rebuildAllLedgerAccountBalancesFromTransactionLines(reconcileLineBalances: false);
         }
 
@@ -435,7 +435,7 @@ final class LegacyPaymentImportService
         if (! $this->memberPeriodOccupied((int) $member->id, $month, $year)) {
             $this->postLegacyContribution($member, $month, $year, $amount, $postedAt, $notes);
         } else {
-            if (!$this->simulationMode && $this->legacyContributionRowAlreadyImported($member, $month, $year, $amount, $postedAt)) {
+            if (! $this->simulationMode && $this->legacyContributionRowAlreadyImported($member, $month, $year, $amount, $postedAt)) {
                 return false;
             }
 
@@ -618,7 +618,7 @@ final class LegacyPaymentImportService
             return 'no_loan';
         }
 
-        if (!in_array($explicitLoan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
+        if (! in_array($explicitLoan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
             throw new InvalidArgumentException(__('Loan must be active or settled to receive imported repayments.'));
         }
 
@@ -763,7 +763,7 @@ final class LegacyPaymentImportService
             return 'no_loan';
         }
 
-        if (!in_array($explicitLoan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
+        if (! in_array($explicitLoan->status, ['active', 'transferred', 'completed', 'early_settled'], true)) {
             throw new InvalidArgumentException(__('Loan must be active or settled to receive imported repayments.'));
         }
 
@@ -800,7 +800,7 @@ final class LegacyPaymentImportService
      */
     private function persistImportOutcomeRows(string $absolutePath, array $rows, bool $allowCanonical = false): void
     {
-        if (self::isCanonicalClassifiedPaymentsPath($absolutePath) && !$allowCanonical) {
+        if (self::isCanonicalClassifiedPaymentsPath($absolutePath) && ! $allowCanonical) {
             return;
         }
 
@@ -966,8 +966,8 @@ final class LegacyPaymentImportService
         if (
             Contribution::query()
                 ->where('member_id', $member->id)
-                ->where('notes', 'like', '%' . $sourceNotes . '%')
-                ->where('notes', 'like', '%' . $fingerprint . '%')
+                ->where('notes', 'like', '%'.$sourceNotes.'%')
+                ->where('notes', 'like', '%'.$fingerprint.'%')
                 ->exists()
         ) {
             return true;
@@ -976,17 +976,17 @@ final class LegacyPaymentImportService
         if (
             Transaction::query()
                 ->where('member_id', $member->id)
-                ->where('description', 'like', '%' . $sourceNotes . '%')
-                ->where('description', 'like', '%' . $fingerprint . '%')
+                ->where('description', 'like', '%'.$sourceNotes.'%')
+                ->where('description', 'like', '%'.$fingerprint.'%')
                 ->exists()
         ) {
             return true;
         }
 
         return LoanRepayment::query()
-            ->whereHas('loan', fn($query) => $query->where('member_id', $member->id))
-            ->where('notes', 'like', '%' . $sourceNotes . '%')
-            ->where('notes', 'like', '%' . $fingerprint . '%')
+            ->whereHas('loan', fn ($query) => $query->where('member_id', $member->id))
+            ->where('notes', 'like', '%'.$sourceNotes.'%')
+            ->where('notes', 'like', '%'.$fingerprint.'%')
             ->exists();
     }
 
@@ -995,7 +995,7 @@ final class LegacyPaymentImportService
         if (
             Contribution::query()
                 ->where('member_id', $member->id)
-                ->where('notes', 'like', '%' . $fingerprint . '%')
+                ->where('notes', 'like', '%'.$fingerprint.'%')
                 ->exists()
         ) {
             return true;
@@ -1004,15 +1004,15 @@ final class LegacyPaymentImportService
         if (
             Transaction::query()
                 ->where('member_id', $member->id)
-                ->where('description', 'like', '%' . $fingerprint . '%')
+                ->where('description', 'like', '%'.$fingerprint.'%')
                 ->exists()
         ) {
             return true;
         }
 
         return LoanRepayment::query()
-            ->whereHas('loan', fn($query) => $query->where('member_id', $member->id))
-            ->where('notes', 'like', '%' . $fingerprint . '%')
+            ->whereHas('loan', fn ($query) => $query->where('member_id', $member->id))
+            ->where('notes', 'like', '%'.$fingerprint.'%')
             ->exists();
     }
 
@@ -1038,17 +1038,17 @@ final class LegacyPaymentImportService
             $this->cell($row, 'period'),
         ];
 
-        if (!$legacy) {
+        if (! $legacy) {
             $parts[] = $this->cell($row, 'loan_number') ?: $this->cell($row, 'suggested_loan_number');
             $parts[] = $this->cell($row, 'notes');
         }
 
-        return 'legacy-import:' . implode('|', $parts);
+        return 'legacy-import:'.implode('|', $parts);
     }
 
     private function resolveMemberForImportRow(string $email, string $memberNumber): ?Member
     {
-        $cacheKey = $memberNumber !== '' ? 'n:' . $memberNumber : 'e:' . $email;
+        $cacheKey = $memberNumber !== '' ? 'n:'.$memberNumber : 'e:'.$email;
 
         if (array_key_exists($cacheKey, $this->memberImportCache)) {
             return $this->memberImportCache[$cacheKey];
@@ -1169,7 +1169,7 @@ final class LegacyPaymentImportService
             $newAmount = round((float) $contribution->amount + $amount, 2);
             $newDue = round((float) ($contribution->amount_due ?? $contribution->amount) + $amount, 2);
             $newCollected = round((float) ($contribution->amount_collected ?? 0) + $amount, 2);
-            $mergedNotes = trim(($contribution->notes ?? '') . ($notes !== '' ? "\n" . $notes : ''));
+            $mergedNotes = trim(($contribution->notes ?? '').($notes !== '' ? "\n".$notes : ''));
 
             $contribution->update([
                 'amount' => $newAmount,
@@ -1202,7 +1202,7 @@ final class LegacyPaymentImportService
         foreach ($rows as $row) {
             $type = strtolower($this->cell($row, 'payment_type'));
 
-            if (!in_array($type, ['contribution', 'loan_repayment', 'loan', 'repayment', 'ignore', 'skipped', 'skip'], true)) {
+            if (! in_array($type, ['contribution', 'loan_repayment', 'loan', 'repayment', 'ignore', 'skipped', 'skip'], true)) {
                 return false;
             }
         }

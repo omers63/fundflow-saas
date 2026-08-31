@@ -168,9 +168,9 @@ test('yearly history defers cross-year paid contributions to the payment year', 
     expect($row2025)->not->toBeNull();
     expect($row2025['contributions'])->toEqual(0);
     expect($row2025['fund_balance'])->toEqual(30000);
-        expect($row2025['through'])->toBe(
-            app(ContributionCycleService::class)->cycleDueEndAt(10, 2025)->toDateString()
-        );
+    expect($row2025['through'])->toBe(
+        app(ContributionCycleService::class)->cycleDueEndAt(10, 2025)->toDateString()
+    );
 });
 
 test('october statement year row matches fund credits through october not full calendar year', function () {

@@ -48,7 +48,7 @@ test('collected emi cash sum uses actual repayment cash not schedule amount', fu
     $query = LoanInstallment::query()->whereKey($installment->id);
 
     expect(
-        $query->clone()->get()->sum(fn(LoanInstallment $row): float => $row->collectedCashAmount()),
+        $query->clone()->get()->sum(fn (LoanInstallment $row): float => $row->collectedCashAmount()),
     )->toBe(900.0)
         ->and((float) $query->sum('amount'))->toBe(1000.0);
 });

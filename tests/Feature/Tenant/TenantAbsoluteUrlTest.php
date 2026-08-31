@@ -9,7 +9,7 @@ test('tenant absolute url rewrites central app host to tenant domain', function 
     $tenant = $this->initializeTenancy();
     $domain = $tenant->domains()->first()?->domain ?? 'testing.localhost';
 
-    if (!$tenant->domains()->where('domain', $domain)->exists()) {
+    if (! $tenant->domains()->where('domain', $domain)->exists()) {
         $tenant->domains()->create(['domain' => $domain]);
     }
 

@@ -144,7 +144,7 @@ class MemberLatePaymentHistoryEvaluator
                 break;
             }
 
-            if (!($latePeriods[$this->monthKey($month, $year)] ?? false)) {
+            if (! ($latePeriods[$this->monthKey($month, $year)] ?? false)) {
                 break;
             }
 

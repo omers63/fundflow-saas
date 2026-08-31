@@ -33,7 +33,7 @@ class LoanInstallmentLateFeeService
         LoanInstallment::query()
             ->where('status', 'overdue')
             ->whereNotNull('overdue_since')
-            ->whereHas('loan', fn($q) => $q->whereIn('status', ['active', 'transferred']))
+            ->whereHas('loan', fn ($q) => $q->whereIn('status', ['active', 'transferred']))
             ->with('loan.member')
             ->each(function (LoanInstallment $installment) use (&$updated): void {
                 if ($this->applyLateFeeTierForInstallment($installment)) {

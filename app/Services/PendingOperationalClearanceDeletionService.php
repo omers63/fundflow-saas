@@ -24,8 +24,7 @@ final class PendingOperationalClearanceDeletionService
 
     public function __construct(
         private AccountingService $accounting,
-    ) {
-    }
+    ) {}
 
     public static function canDelete(BankTransaction $bankTransaction): bool
     {
@@ -51,7 +50,7 @@ final class PendingOperationalClearanceDeletionService
 
         $filename = $bankTransaction->bankStatement?->filename;
 
-        if ($filename === null || !in_array($filename, BankStatementBuckets::OPERATIONAL_CLEARANCE, true)) {
+        if ($filename === null || ! in_array($filename, BankStatementBuckets::OPERATIONAL_CLEARANCE, true)) {
             return __('This line is not on a pending bank match statement.');
         }
 
@@ -101,7 +100,7 @@ final class PendingOperationalClearanceDeletionService
         $base = __('This removes the pending bank match line and cancels the linked operation.');
 
         if ($ledgerCount > 0) {
-            return $base . ' ' . __(':count linked ledger transaction(s) will be reversed and balances adjusted.', [
+            return $base.' '.__(':count linked ledger transaction(s) will be reversed and balances adjusted.', [
                 'count' => $ledgerCount,
             ]);
         }
@@ -278,7 +277,7 @@ final class PendingOperationalClearanceDeletionService
             return;
         }
 
-        if (!$account->is_master && $account->type === 'cash') {
+        if (! $account->is_master && $account->type === 'cash') {
             $amount = round((float) $entry->amount, 2);
             $description = __('Reversal of #:id: :original — :reason', [
                 'id' => $entry->id,
@@ -315,7 +314,7 @@ final class PendingOperationalClearanceDeletionService
             ->where('type', 'credit')
             ->where('amount', $posting->amount)
             ->whereDate('transacted_at', $posting->posting_date)
-            ->where('description', 'like', '%' . $mirrorSuffix . '%')
+            ->where('description', 'like', '%'.$mirrorSuffix.'%')
             ->get();
 
         foreach ($mirrors as $mirror) {

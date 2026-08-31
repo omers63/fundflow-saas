@@ -41,7 +41,7 @@ final class SmsImportTemplateSyncService
                 'member_match_field' => $templateData['member_match_field'] ?? 'member_number',
             ];
 
-            if (!empty($templateData['id'])) {
+            if (! empty($templateData['id'])) {
                 $template = SmsImportTemplate::query()->find($templateData['id']);
                 if ($template !== null) {
                     $template->update($attrs);
@@ -66,8 +66,8 @@ final class SmsImportTemplateSyncService
                 ->where('id', '!=', $defaultTemplate->id)
                 ->when(
                     filled($defaultTemplate->bank_name),
-                    fn($query) => $query->where('bank_name', $defaultTemplate->bank_name),
-                    fn($query) => $query->whereNull('bank_name'),
+                    fn ($query) => $query->where('bank_name', $defaultTemplate->bank_name),
+                    fn ($query) => $query->whereNull('bank_name'),
                 )
                 ->where('is_default', true)
                 ->update(['is_default' => false]);

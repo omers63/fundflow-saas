@@ -105,7 +105,7 @@ class MemberActivityTableWidget extends TableWidget
                         ->label(__('Type'))
                         ->state(fn (Transaction $record): string => $record->memberActivityCategoryLabel())
                         ->badge()
-                        ->color(fn(Transaction $record): string => $record->type === 'credit' ? 'success' : 'danger')
+                        ->color(fn (Transaction $record): string => $record->type === 'credit' ? 'success' : 'danger')
                         ->searchable(false)
                         ->sortable(false),
                 ])

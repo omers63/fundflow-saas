@@ -16,13 +16,13 @@ test('contribution exemption does not use legacy SQL scopes', function (): void 
     ];
 
     $paths = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($root . '/app', FilesystemIterator::SKIP_DOTS),
+        new RecursiveDirectoryIterator($root.'/app', FilesystemIterator::SKIP_DOTS),
     );
 
     $violations = [];
 
     foreach ($paths as $file) {
-        if (!$file->isFile() || $file->getExtension() !== 'php') {
+        if (! $file->isFile() || $file->getExtension() !== 'php') {
             continue;
         }
 
@@ -34,13 +34,13 @@ test('contribution exemption does not use legacy SQL scopes', function (): void 
 
         foreach ($forbidden as $needle) {
             if (str_contains($contents, $needle)) {
-                $violations[] = str_replace($root . '/', '', $file->getPathname()) . ": references {$needle}";
+                $violations[] = str_replace($root.'/', '', $file->getPathname()).": references {$needle}";
             }
         }
     }
 
     expect($violations)->toBeEmpty(
         "Use ContributionExemptionPolicy via Member::isExemptFromContributions() or ContributionCycleService::pendingMembersQueryForPeriod().\n"
-        . implode("\n", $violations),
+        .implode("\n", $violations),
     );
 });

@@ -21,8 +21,7 @@ final class LegacyLoanRepaymentInstallmentTracker
 
     public function __construct(
         private readonly LegacyMigrationDatabaseLoanResolver $loanResolver,
-    ) {
-    }
+    ) {}
 
     public function registerWindow(LegacyLoanRepaymentWindow $window): void
     {

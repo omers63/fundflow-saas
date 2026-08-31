@@ -5,7 +5,7 @@ use App\Support\Notifications\FundPostingNotificationFormatter;
 
 test('notification plain text strips html markup', function () {
     $html = '<p class="ff-notification-lead">Deposit accepted</p>'
-        . '<dl class="ff-notification-details"><dt>Amount</dt><dd><strong>500.00</strong></dd></dl>';
+        .'<dl class="ff-notification-details"><dt>Amount</dt><dd><strong>500.00</strong></dd></dl>';
 
     expect(NotificationPlainText::from($html))
         ->toBe("Deposit accepted\nAmount\n500.00");

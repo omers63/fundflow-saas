@@ -199,7 +199,7 @@ final class MemberListTableHeaderActions
 
     private static function helpPlaceholder(string $section): Placeholder
     {
-        return Placeholder::make('import_help_' . $section)
+        return Placeholder::make('import_help_'.$section)
             ->hiddenLabel()
             ->content(new HtmlString(
                 view('filament.tenant.member-import-csv-help', [

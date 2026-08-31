@@ -289,7 +289,7 @@ it('upgrades plain SAR format strings to svg markup in arabic html', function ()
 it('upgrades middle segments of hero-style subtitles with money in arabic', function (): void {
     app()->setLocale('ar');
 
-    $subtitle = '3 pending · ' . MoneyDisplay::format(2500, 'SAR', precision: 0) . ' · 1 late';
+    $subtitle = '3 pending · '.MoneyDisplay::format(2500, 'SAR', precision: 0).' · 1 late';
     $html = MoneyDisplay::markupForDisplay($subtitle);
 
     expect($html)

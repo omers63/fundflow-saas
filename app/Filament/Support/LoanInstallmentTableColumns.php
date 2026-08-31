@@ -14,7 +14,7 @@ final class LoanInstallmentTableColumns
     {
         return TextColumn::make('contribution_cycle')
             ->label($label ?? __('Cycle'))
-            ->state(fn(LoanInstallment $record): ?string => self::cycleLabel($record))
+            ->state(fn (LoanInstallment $record): ?string => self::cycleLabel($record))
             ->placeholder(__('—'))
             ->searchable(false)
             ->sortable(false);

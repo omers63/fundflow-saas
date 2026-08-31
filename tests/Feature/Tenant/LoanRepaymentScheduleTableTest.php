@@ -9,6 +9,7 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
+use App\Services\ContributionCycleService;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
@@ -57,7 +58,7 @@ beforeEach(function () {
 });
 
 test('repayment schedule table shows contribution cycle for each installment', function () {
-    $cycles = app(\App\Services\ContributionCycleService::class);
+    $cycles = app(ContributionCycleService::class);
 
     Livewire::test(InstallmentsRelationManager::class, [
         'ownerRecord' => $this->loan,

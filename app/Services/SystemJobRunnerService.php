@@ -147,7 +147,7 @@ class SystemJobRunnerService
         $parameters = [];
 
         foreach ($parts as $part) {
-            if (!str_starts_with($part, '--')) {
+            if (! str_starts_with($part, '--')) {
                 continue;
             }
 
@@ -155,12 +155,12 @@ class SystemJobRunnerService
             $eqPos = strpos($flag, '=');
 
             if ($eqPos === false) {
-                $parameters['--' . $flag] = true;
+                $parameters['--'.$flag] = true;
 
                 continue;
             }
 
-            $parameters['--' . substr($flag, 0, $eqPos)] = substr($flag, $eqPos + 1);
+            $parameters['--'.substr($flag, 0, $eqPos)] = substr($flag, $eqPos + 1);
         }
 
         return [$name, $parameters];

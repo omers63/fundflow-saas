@@ -38,7 +38,7 @@ final class LegacyMigrationFundingStrategySettings
     {
         $stored = Setting::get(self::GROUP, self::KEY);
 
-        if (!is_string($stored) || $stored === '') {
+        if (! is_string($stored) || $stored === '') {
             return self::defaultFundingStrategy();
         }
 

@@ -25,7 +25,7 @@ class MyStatementsTable
             ->columns([
                 TextColumn::make('period')
                     ->label(__('Period'))
-                    ->formatStateUsing(fn(MonthlyStatement $record): string => $record->period_formatted)
+                    ->formatStateUsing(fn (MonthlyStatement $record): string => $record->period_formatted)
                     ->sortable(),
                 TextColumn::make('total_contributions')
                     ->label(__('Contributions'))
@@ -47,7 +47,7 @@ class MyStatementsTable
                 Action::make('download')
                     ->label(__('Download PDF'))
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->url(fn(MonthlyStatement $record): string => route('tenant.member.statement.pdf', $record))
+                    ->url(fn (MonthlyStatement $record): string => route('tenant.member.statement.pdf', $record))
                     ->openUrlInNewTab(),
             ]))
             ->toolbarActions([

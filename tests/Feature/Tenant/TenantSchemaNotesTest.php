@@ -20,7 +20,7 @@ it('catalogs notable tenant migrations that exist on disk', function () {
 
     foreach ($catalog as $note) {
         expect($note)->toHaveKeys(['migration', 'title', 'body'])
-            ->and(database_path('migrations/tenant/' . $note['migration'] . '.php'))
+            ->and(database_path('migrations/tenant/'.$note['migration'].'.php'))
             ->toBeFile();
     }
 

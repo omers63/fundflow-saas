@@ -20,24 +20,24 @@ class CollectedEmiCashSum extends Sum
     {
         parent::setUp();
 
-        $currency = fn(): string => Setting::get('general', 'currency', 'USD');
+        $currency = fn (): string => Setting::get('general', 'currency', 'USD');
 
         $this
             ->using(function (): float {
                 $query = $this->getQuery();
 
-                if (!$query instanceof Builder) {
+                if (! $query instanceof Builder) {
                     return 0.0;
                 }
 
                 return round(
                     $query->clone()
                         ->get()
-                        ->sum(fn(LoanInstallment $installment): float => $installment->collectedCashAmount()),
+                        ->sum(fn (LoanInstallment $installment): float => $installment->collectedCashAmount()),
                     2,
                 );
             })
-            ->formatStateUsing(fn($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency()))
+            ->formatStateUsing(fn ($state): ?string => MoneyDisplay::tableSummaryHtml($state, $currency()))
             ->html();
     }
 
