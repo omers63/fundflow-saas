@@ -448,6 +448,40 @@ test('rollback unmatches a deposit cleared against an imported bank line', funct
         ->and((float) Account::masterBank()->fresh()->balance)->toBe(0.0);
 });
 
+test('rollback unmatches an entire N-to-1 bank clearance group when undoing a non-anchor deposit', function () {
+    Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 0, 'is_master' => true]);
+
+    $memberA = rollbackWindowMember($this->accounting, 100, ['monthly_contribution_amount' => 0, 'name' => 'Member A']);
+    $memberB = rollbackWindowMember($this->accounting, 100, ['monthly_contribution_amount' => 0, 'name' => 'Member B']);
+
+    $postingA = app(FundPostingService::class)->submit($memberA, 1500, '2026-02-20');
+    app(FundPostingService::class)->accept($postingA);
+    $postingB = app(FundPostingService::class)->submit($memberB, 1000, '2026-02-20');
+    app(FundPostingService::class)->accept($postingB);
+
+    $imported = rollbackImportedBankLine(['amount' => 2500, 'description' => 'Combined deposit']);
+    app(BankClearingMatchService::class)->clearMatchGroup(
+        collect([$postingA->bankTransaction->fresh(), $postingB->bankTransaction->fresh()]),
+        collect([$imported]),
+    );
+
+    $report = $this->rollback->execute(
+        Carbon::parse('2026-02-06'),
+        [BusinessDayWindowRollbackEventInventory::modelKey('deposits', $postingB->fresh())],
+    );
+
+    $imported = $imported->fresh();
+
+    expect($report->deposits)->toBe(1)
+        ->and($imported->is_cleared)->toBeFalse()
+        ->and($imported->fund_posting_id)->toBeNull()
+        ->and($imported->master_bank_transaction_id)->toBeNull()
+        ->and($postingA->fresh()->bankTransaction?->is_cleared)->toBeFalse()
+        ->and($postingB->fresh()->status)->toBe('pending')
+        ->and($postingA->fresh()->status)->toBe('accepted')
+        ->and((float) Account::masterBank()->fresh()->balance)->toBe(0.0);
+});
+
 test('rollback unmatches a cash-out cleared against an imported bank line', function () {
     Notification::fake();
     Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 0, 'is_master' => true]);

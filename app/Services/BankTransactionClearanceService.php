@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Tenant\BankTransaction;
 use App\Support\BusinessDay;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -58,5 +59,45 @@ final class BankTransactionClearanceService
 
             $uncleared->update($updates);
         });
+    }
+
+    /**
+     * Mark an additional imported bank line cleared as part of a 1→N group match.
+     */
+    public function markImportedClearedInGroup(
+        BankTransaction $imported,
+        BankTransaction $anchorImported,
+        int $groupId,
+        CarbonInterface $clearedAt,
+    ): void {
+        $imported->update([
+            'is_cleared' => true,
+            'cleared_at' => $clearedAt,
+            'bank_clearance_match_group_id' => $groupId,
+            'fund_posting_id' => $anchorImported->fund_posting_id,
+            'membership_application_id' => $anchorImported->membership_application_id,
+            'cash_out_request_id' => $anchorImported->cash_out_request_id,
+            'expense_disbursement_id' => $anchorImported->expense_disbursement_id,
+            'fee_disbursement_id' => $anchorImported->fee_disbursement_id,
+            'invest_disbursement_id' => $anchorImported->invest_disbursement_id,
+            'invest_return_id' => $anchorImported->invest_return_id,
+            'status' => 'posted',
+            'member_id' => $anchorImported->member_id,
+        ]);
+    }
+
+    /**
+     * Mark an additional operational row cleared as part of an N→1 group match.
+     */
+    public function markOperationalClearedInGroup(
+        BankTransaction $operational,
+        int $groupId,
+        CarbonInterface $clearedAt,
+    ): void {
+        $operational->update([
+            'is_cleared' => true,
+            'cleared_at' => $clearedAt,
+            'bank_clearance_match_group_id' => $groupId,
+        ]);
     }
 }

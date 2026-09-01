@@ -30,6 +30,7 @@ class ReconciliationCorrectionService
         protected FundAuditLogService $audit,
         protected ReconciliationSuspenseService $suspense,
         protected ContributionCollectionCycleService $contributionCollection,
+        protected BankClearingMatchService $bankMatching,
     ) {}
 
     /**
@@ -230,13 +231,21 @@ class ReconciliationCorrectionService
             throw new InvalidArgumentException(__('The selected pending entry is already cleared.'));
         }
 
+        if (! $this->bankMatching->isPendingClearance($uncleared)) {
+            throw new InvalidArgumentException(__('The selected pending entry is not eligible for bank clearance.'));
+        }
+
+        if (! $this->bankMatching->isImportedMatchCandidate($imported)) {
+            throw new InvalidArgumentException(__('The selected bank import line is not eligible for matching.'));
+        }
+
         $tolerance = ContributionPolicySettings::reconTolerance();
 
         if (abs((float) $imported->amount - (float) $uncleared->amount) > $tolerance) {
             throw new InvalidArgumentException(__('Bank line amounts do not match within tolerance.'));
         }
 
-        $this->fundPostings->clearTransaction($uncleared, $imported);
+        $this->bankMatching->clearMatchPair($uncleared, $imported);
 
         $this->audit->log('RECON_MANUAL_CORRECTION', 'reconciliation', $exception, null, [
             'action' => 'ambiguous_bank_match',

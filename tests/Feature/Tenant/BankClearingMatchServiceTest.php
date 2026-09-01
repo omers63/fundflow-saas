@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Tenant\Account;
+use App\Models\Tenant\BankClearanceMatchGroup;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
@@ -23,6 +24,7 @@ beforeEach(function () {
     Account::query()->delete();
     Member::query()->delete();
     BankTransaction::query()->delete();
+    BankClearanceMatchGroup::query()->delete();
 
     Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
     Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 0, 'is_master' => true]);
@@ -63,8 +65,7 @@ test('auto match selected pairs a manual two-line selection', function () {
         'amount' => 2500,
         'status' => 'imported',
         'hash' => md5('bulk-manual-pair'),
-        'is_cleared' => true,
-        'cleared_at' => now(),
+        'is_cleared' => false,
     ]);
 
     $stats = $this->matching->autoMatchSelected(Collection::make([$uncleared, $imported]));
@@ -105,8 +106,7 @@ test('auto match selected matches uncleared lines with a unique imported counter
         'amount' => 900,
         'status' => 'imported',
         'hash' => md5('bulk-auto-match'),
-        'is_cleared' => true,
-        'cleared_at' => now(),
+        'is_cleared' => false,
     ]);
 
     $stats = $this->matching->autoMatchSelected(Collection::make([$uncleared]));
@@ -182,8 +182,7 @@ test('mirrored bank statement lines are eligible match targets', function () {
         'amount' => 750,
         'status' => 'mirrored',
         'hash' => md5('mirrored-target'),
-        'is_cleared' => true,
-        'cleared_at' => now(),
+        'is_cleared' => false,
     ]);
 
     expect($this->matching->isImportedMatchCandidate($imported))->toBeTrue();
@@ -513,8 +512,7 @@ test('auto match selected reports ambiguous when multiple imported lines share a
             'amount' => 1200,
             'status' => 'imported',
             'hash' => md5("ambiguous-{$suffix}"),
-            'is_cleared' => true,
-            'cleared_at' => now(),
+            'is_cleared' => false,
         ]);
     }
 
@@ -611,4 +609,214 @@ test('find unique candidate returns the only imported match', function () {
         ->and($this->matching->autoMatchWhenUnique($uncleared))->toBeTrue()
         ->and($uncleared->fresh()->is_cleared)->toBeTrue()
         ->and($imported->fresh()->fund_posting_id)->toBe($posting->id);
+});
+
+test('clearMatchGroup matches one operational row to multiple imported bank lines', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BM-GRP1',
+        'name' => 'Group Match Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->fundPostings->submit($member, 3000, '2026-06-01');
+    $this->fundPostings->accept($posting);
+
+    $uncleared = $posting->bankTransaction->fresh();
+    $statement = BankStatement::create([
+        'filename' => 'group-match.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 3,
+        'imported_rows' => 3,
+        'duplicate_rows' => 0,
+    ]);
+
+    $importedLines = collect([1200, 900, 900])->map(function (int $amount, int $index) use ($statement) {
+        return BankTransaction::create([
+            'bank_statement_id' => $statement->id,
+            'transaction_date' => '2026-06-01',
+            'description' => "Split deposit {$index}",
+            'amount' => $amount,
+            'status' => 'imported',
+            'hash' => md5("group-match-{$index}"),
+            'is_cleared' => false,
+        ]);
+    });
+
+    $masterBank = Account::masterBank();
+    $bankBefore = (float) $masterBank->balance;
+
+    $this->matching->clearMatchGroup(collect([$uncleared]), $importedLines);
+
+    $uncleared = $uncleared->fresh();
+    $importedLines = $importedLines->map->fresh();
+
+    expect($uncleared->is_cleared)->toBeTrue()
+        ->and($uncleared->bank_clearance_match_group_id)->not->toBeNull()
+        ->and($importedLines->every(fn (BankTransaction $line): bool => $line->is_cleared))->toBeTrue()
+        ->and($importedLines->every(fn (BankTransaction $line): bool => $line->fund_posting_id === $posting->id))->toBeTrue()
+        ->and($importedLines->pluck('bank_clearance_match_group_id')->unique()->count())->toBe(1)
+        ->and((float) $masterBank->fresh()->balance)->toBe($bankBefore + 3000);
+
+    $this->matching->unmatchClearedGroup($importedLines->first());
+
+    expect($uncleared->fresh()->is_cleared)->toBeFalse()
+        ->and($importedLines->every(fn (BankTransaction $line): bool => ! $line->fresh()->is_cleared))->toBeTrue()
+        ->and($importedLines->every(fn (BankTransaction $line): bool => $line->fresh()->fund_posting_id === null))->toBeTrue()
+        ->and((float) $masterBank->fresh()->balance)->toBe($bankBefore);
+});
+
+test('clearMatchGroup matches multiple operational rows to one imported bank line', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BM-GRP2',
+        'name' => 'Group Ops Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $postingA = $this->fundPostings->submit($member, 1500, '2026-06-02');
+    $this->fundPostings->accept($postingA);
+    $postingB = $this->fundPostings->submit($member, 500, '2026-06-02');
+    $this->fundPostings->accept($postingB);
+
+    $operational = collect([
+        $postingA->bankTransaction->fresh(),
+        $postingB->bankTransaction->fresh(),
+    ]);
+
+    $statement = BankStatement::create([
+        'filename' => 'group-ops-match.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-06-02',
+        'description' => 'Combined deposit',
+        'amount' => 2000,
+        'status' => 'imported',
+        'hash' => md5('group-ops-match'),
+        'is_cleared' => false,
+    ]);
+
+    $this->matching->clearMatchGroup($operational, collect([$imported]));
+
+    $imported = $imported->fresh();
+    $operational = $operational->map->fresh();
+
+    expect($imported->is_cleared)->toBeTrue()
+        ->and($imported->fund_posting_id)->toBe($postingA->id)
+        ->and($operational->every(fn (BankTransaction $line): bool => $line->is_cleared))->toBeTrue()
+        ->and($operational->pluck('bank_clearance_match_group_id')->unique()->count())->toBe(1);
+});
+
+test('unmatchClearedGroup resets an N-to-1 bank clearance group', function () {
+    $memberA = Member::create([
+        'member_number' => 'MEM-BM-GRP2A',
+        'name' => 'Group Ops Member A',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $memberB = Member::create([
+        'member_number' => 'MEM-BM-GRP2B',
+        'name' => 'Group Ops Member B',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($memberA);
+    $this->accounting->createMemberAccounts($memberB);
+
+    $postingA = $this->fundPostings->submit($memberA, 1500, '2026-06-12');
+    $this->fundPostings->accept($postingA);
+    $postingB = $this->fundPostings->submit($memberB, 500, '2026-06-12');
+    $this->fundPostings->accept($postingB);
+
+    $operational = collect([
+        $postingA->bankTransaction->fresh(),
+        $postingB->bankTransaction->fresh(),
+    ]);
+
+    $statement = BankStatement::create([
+        'filename' => 'group-ops-unmatch.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-06-12',
+        'description' => 'Combined deposit',
+        'amount' => 2000,
+        'status' => 'imported',
+        'hash' => md5('group-ops-unmatch'),
+        'is_cleared' => false,
+    ]);
+
+    $masterBank = Account::masterBank();
+    $bankBefore = (float) $masterBank->balance;
+
+    $this->matching->clearMatchGroup($operational, collect([$imported]));
+
+    $this->matching->unmatchClearedGroup($operational->last());
+
+    $imported = $imported->fresh();
+    $operational = $operational->map->fresh();
+
+    expect($imported->is_cleared)->toBeFalse()
+        ->and($imported->fund_posting_id)->toBeNull()
+        ->and($operational->every(fn (BankTransaction $line): bool => ! $line->is_cleared))->toBeTrue()
+        ->and((float) $masterBank->fresh()->balance)->toBe($bankBefore);
+});
+
+test('clearMatchGroup rejects unbalanced selections', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BM-GRP3',
+        'name' => 'Unbalanced Group Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->fundPostings->submit($member, 1000, '2026-06-03');
+    $this->fundPostings->accept($posting);
+
+    $uncleared = $posting->bankTransaction->fresh();
+    $statement = BankStatement::create([
+        'filename' => 'unbalanced-group.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 2,
+        'imported_rows' => 2,
+        'duplicate_rows' => 0,
+    ]);
+
+    $importedLines = collect([400, 500])->map(function (int $amount, int $index) use ($statement) {
+        return BankTransaction::create([
+            'bank_statement_id' => $statement->id,
+            'transaction_date' => '2026-06-03',
+            'description' => "Partial {$index}",
+            'amount' => $amount,
+            'status' => 'imported',
+            'hash' => md5("unbalanced-group-{$index}"),
+            'is_cleared' => false,
+        ]);
+    });
+
+    expect(fn () => $this->matching->clearMatchGroup(collect([$uncleared]), $importedLines))
+        ->toThrow(InvalidArgumentException::class);
 });

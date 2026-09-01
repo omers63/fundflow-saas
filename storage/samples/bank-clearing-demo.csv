@@ -1,0 +1,43 @@
+date,description,amount,reference
+2026-06-01,Member deposit — Ahmed (auto-match unique),2500.00,BC-AUTO-01
+2026-06-02,Member deposit — Sara (auto-match unique),1800.00,BC-AUTO-02
+2026-06-03,Cash-out transfer — Khalid (auto-match unique),-450.00,BC-AUTO-03
+2026-06-04,Vendor check — office supplies (auto-match unique),-320.00,BC-AUTO-04
+2026-06-05,Member deposit — Layla (auto-match unique),990.00,BC-AUTO-05
+2026-06-06,Cash-out transfer — Omar (auto-match unique),-175.00,BC-AUTO-06
+2026-06-07,Incoming transfer (ambiguous pair A),1200.00,BC-AMB-01A
+2026-06-07,Incoming transfer (ambiguous pair B),1200.00,BC-AMB-01B
+2026-06-08,Outgoing transfer (ambiguous pair A),-600.00,BC-AMB-02A
+2026-06-08,Outgoing transfer (ambiguous pair B),-600.00,BC-AMB-02B
+2026-06-10,Split deposit part 1 of 3 (group 1→N),2000.00,BC-1M-01A
+2026-06-10,Split deposit part 2 of 3 (group 1→N),1500.00,BC-1M-01B
+2026-06-10,Split deposit part 3 of 3 (group 1→N),1500.00,BC-1M-01C
+2026-06-11,Combined deposit — two postings (group N→1),3500.00,BC-M1-01
+2026-06-12,Split cash-out part 1 of 2 (group 1→N),-800.00,BC-1M-02A
+2026-06-12,Split cash-out part 2 of 2 (group 1→N),-700.00,BC-1M-02B
+2026-06-13,Combined cash-out — two requests (group N→1),-900.00,BC-M1-02
+2026-06-14,Unknown credit — Post as member deposit,2750.00,BC-POST-01
+2026-06-15,Unknown debit — Post as expense out,-890.00,BC-POST-02
+2026-06-16,Unknown credit — Post as invest return,420.00,BC-POST-03
+2026-06-17,Bank service charge (ignore candidate),-0.50,BC-IGN-01
+2026-06-17,Statement fee (ignore candidate),-1.25,BC-IGN-02
+2026-06-20,Deposit outside auto date window,775.00,BC-DATE-01
+2026-06-21,Deposit inside auto date window,665.00,BC-DATE-02
+2026-06-22,Misc incoming — no operational row,1100.00,BC-OPEN-01
+2026-06-22,Misc incoming — no operational row,850.00,BC-OPEN-02
+2026-06-23,Misc outgoing — no operational row,-240.00,BC-OPEN-03
+2026-06-23,Misc outgoing — no operational row,-510.00,BC-OPEN-04
+2026-06-24,Standing order credit,1320.00,BC-OPEN-05
+2026-06-24,ATM deposit,560.00,BC-OPEN-06
+2026-06-25,Utility payment,-380.00,BC-OPEN-07
+2026-06-25,Refund credit,95.00,BC-OPEN-08
+2026-06-26,Internal transfer in,2200.00,BC-OPEN-09
+2026-06-26,Internal transfer out,-2200.00,BC-OPEN-10
+2026-06-27,Salary allocation in,4800.00,BC-OPEN-11
+2026-06-27,Petty cash top-up,-150.00,BC-OPEN-12
+2026-06-28,Member top-up (manual match only),1440.00,BC-MAN-01
+2026-06-28,Member top-up duplicate amount,1440.00,BC-MAN-02
+2026-06-29,End-of-month sweep in,3675.00,BC-OPEN-13
+2026-06-29,End-of-month sweep out,-1250.00,BC-OPEN-14
+2026-06-30,Closing balance adjustment in,50.00,BC-OPEN-15
+2026-06-30,Closing balance adjustment out,-50.00,BC-OPEN-16

@@ -27,6 +27,7 @@ use App\Services\BankClearingMatchService;
 use App\Services\ContributionCollectionCycleService;
 use App\Services\ContributionService;
 use App\Services\MasterFeeDisbursementService;
+use App\Services\MemberCashOutService;
 use App\Services\MemberInvariantService;
 use App\Services\MemberOpeningBalanceService;
 use App\Services\ReconciliationCorrectionService;
@@ -211,6 +212,93 @@ test('reconciliation raises ambiguous bank match from scan', function () {
         ->where('exception_code', 'RECON_AMBIGUOUS_MATCH')
         ->open()
         ->exists())->toBeTrue();
+});
+
+test('resolve ambiguous bank match clears cash-out pairs through bank clearing service', function () {
+    Account::query()->delete();
+    Member::query()->delete();
+    BankTransaction::query()->delete();
+    BankStatement::query()->delete();
+    ReconciliationException::query()->delete();
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 10_000, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 10_000, 'is_master' => true]);
+    Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 0, 'is_master' => true]);
+
+    $member = Member::create([
+        'member_number' => 'RECON-CO-01',
+        'name' => 'Cash Out Recon Member',
+        'monthly_contribution_amount' => 0,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+    AccountingService::withoutMemberCashCollection(
+        fn () => app(AccountingService::class)->creditMemberCashWithMasterMirror(
+            $member->cashAccount,
+            2_000,
+            'Seed cash',
+            __('(seed mirror)'),
+            null,
+            null,
+            $member->id,
+        ),
+    );
+
+    $cashOuts = app(MemberCashOutService::class);
+    $request = $cashOuts->submit($member->fresh(), 350, 'Need funds', bypassAvailabilityGuard: true);
+    $cashOuts->accept($request, reviewedBy: null, bypassAvailabilityGuard: true);
+
+    $uncleared = $request->fresh()->bankTransaction;
+
+    $statement = BankStatement::create([
+        'filename' => 'recon-cash-out.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => now()->toDateString(),
+        'description' => 'Withdrawal',
+        'amount' => -350,
+        'status' => 'imported',
+        'hash' => md5('recon-cash-out-import'),
+        'is_cleared' => false,
+    ]);
+
+    $exception = ReconciliationException::create([
+        'exception_code' => 'RECON_AMBIGUOUS_MATCH',
+        'domain' => 'bank',
+        'severity' => 'medium',
+        'status' => ReconciliationException::STATUS_OPEN,
+        'raised_at' => now(),
+        'sla_deadline' => now()->addDay(),
+        'affected_entities' => [
+            'imported_bank_transaction_id' => $imported->id,
+            'uncleared_bank_transaction_id' => $uncleared->id,
+        ],
+    ]);
+
+    app(ReconciliationCorrectionService::class)->resolveAmbiguousBankMatch(
+        $exception,
+        $imported->id,
+        $uncleared->id,
+        'Matched during reconciliation review',
+    );
+
+    $imported = $imported->fresh();
+    $uncleared = $uncleared->fresh();
+
+    expect($exception->fresh()->status)->toBe(ReconciliationException::STATUS_RESOLVED)
+        ->and($imported->is_cleared)->toBeTrue()
+        ->and($imported->cash_out_request_id)->toBe($request->id)
+        ->and($imported->master_bank_transaction_id)->not->toBeNull()
+        ->and($uncleared->is_cleared)->toBeTrue()
+        ->and((float) Account::masterBank()->fresh()->balance)->toBe(-350.0);
 });
 
 test('correction service reverses a linked transaction', function () {

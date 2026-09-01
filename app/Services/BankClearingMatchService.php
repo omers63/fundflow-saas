@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\Account;
+use App\Models\Tenant\BankClearanceMatchGroup;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Transaction;
 use App\Support\BankStatementBuckets;
+use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -439,10 +441,104 @@ class BankClearingMatchService
     }
 
     /**
+     * Clear a 1:N or N:1 match group (one row on one side, multiple on the other).
+     *
+     * @param  Collection<int, BankTransaction>  $operational
+     * @param  Collection<int, BankTransaction>  $imported
+     */
+    public function clearMatchGroup(Collection $operational, Collection $imported): void
+    {
+        $operational = $operational->values();
+        $imported = $imported->values();
+
+        if ($operational->isEmpty() || $imported->isEmpty()) {
+            throw new InvalidArgumentException(__('Select at least one operational row and one bank import line.'));
+        }
+
+        $oneOperational = $operational->count() === 1 && $imported->count() >= 2;
+        $oneImported = $imported->count() === 1 && $operational->count() >= 2;
+
+        if (! $oneOperational && ! $oneImported) {
+            throw new InvalidArgumentException(__('Group match requires one row on one side and two or more on the other.'));
+        }
+
+        foreach ($operational as $row) {
+            if (! $row instanceof BankTransaction || ! $this->isPendingClearance($row)) {
+                throw new InvalidArgumentException(__('One or more operational rows are not eligible for clearance.'));
+            }
+        }
+
+        foreach ($imported as $row) {
+            if (! $row instanceof BankTransaction || ! $this->isImportedMatchCandidate($row)) {
+                throw new InvalidArgumentException(__('One or more bank import lines are not eligible for matching.'));
+            }
+        }
+
+        if (! $this->groupAmountsMatch($operational, $imported)) {
+            throw new InvalidArgumentException(__('Selected amounts do not balance within tolerance.'));
+        }
+
+        DB::transaction(function () use ($operational, $imported, $oneOperational): void {
+            $clearedAt = BusinessDay::now();
+            $group = BankClearanceMatchGroup::query()->create(['cleared_at' => $clearedAt]);
+            $clearance = app(BankTransactionClearanceService::class);
+
+            if ($oneOperational) {
+                $uncleared = $operational->first();
+                $firstImported = $imported->first();
+                $skipMasterBankLedger = $this->shouldSkipMasterBankLedgerForOperational($uncleared);
+
+                $this->clearMatchPair($uncleared, $firstImported);
+
+                $uncleared->refresh()->update(['bank_clearance_match_group_id' => $group->id]);
+                $anchorImported = $firstImported->fresh();
+                $anchorImported->update(['bank_clearance_match_group_id' => $group->id]);
+
+                foreach ($imported->slice(1) as $additionalImported) {
+                    $clearance->markImportedClearedInGroup(
+                        $additionalImported,
+                        $anchorImported,
+                        $group->id,
+                        $clearedAt,
+                    );
+
+                    if (! $skipMasterBankLedger) {
+                        $this->postMatchedImportToMasterBankLedger($additionalImported->fresh());
+                    }
+                }
+
+                return;
+            }
+
+            $importedLine = $imported->first();
+            $firstOperational = $operational->first();
+
+            $this->clearMatchPair($firstOperational, $importedLine);
+
+            $importedLine->refresh()->update(['bank_clearance_match_group_id' => $group->id]);
+            $firstOperational->refresh()->update(['bank_clearance_match_group_id' => $group->id]);
+
+            foreach ($operational->slice(1) as $additionalOperational) {
+                $clearance->markOperationalClearedInGroup(
+                    $additionalOperational,
+                    $group->id,
+                    $clearedAt,
+                );
+            }
+        });
+    }
+
+    /**
      * Undo a clearance pair: reverse the master-bank ledger line and return both rows to uncleared.
      */
     public function unmatchClearedPair(BankTransaction $imported): void
     {
+        if ($imported->bank_clearance_match_group_id !== null) {
+            $this->unmatchClearedGroup($imported);
+
+            return;
+        }
+
         if (! $imported->is_cleared) {
             throw new InvalidArgumentException(__('This bank line is not cleared.'));
         }
@@ -466,6 +562,7 @@ class BankClearingMatchService
             $imported->update([
                 'is_cleared' => false,
                 'cleared_at' => null,
+                'bank_clearance_match_group_id' => null,
                 'fund_posting_id' => null,
                 'cash_out_request_id' => null,
                 'membership_application_id' => null,
@@ -481,6 +578,76 @@ class BankClearingMatchService
                 $partner->update([
                     'is_cleared' => false,
                     'cleared_at' => null,
+                    'bank_clearance_match_group_id' => null,
+                ]);
+            }
+        });
+    }
+
+    /**
+     * Undo an entire N:M clearance group.
+     */
+    public function unmatchClearedGroup(BankTransaction $anyMember): void
+    {
+        $groupId = $anyMember->bank_clearance_match_group_id;
+
+        if ($groupId === null) {
+            $this->unmatchClearedPair($anyMember);
+
+            return;
+        }
+
+        $members = BankTransaction::query()
+            ->where('bank_clearance_match_group_id', $groupId)
+            ->get();
+
+        if ($members->isEmpty()) {
+            throw new InvalidArgumentException(__('This match group could not be found.'));
+        }
+
+        DB::transaction(function () use ($members): void {
+            $importedLines = $members->filter(
+                fn (BankTransaction $row): bool => ! $this->isSyntheticOperationalStatement($row),
+            );
+            $operationalLines = $members->filter(
+                fn (BankTransaction $row): bool => $this->isSyntheticOperationalStatement($row),
+            );
+
+            foreach ($importedLines as $imported) {
+                if ($imported->master_bank_transaction_id !== null) {
+                    $ledger = Transaction::query()->find($imported->master_bank_transaction_id);
+
+                    if ($ledger !== null && ! $this->accounting->hasExistingReversal($ledger)) {
+                        AccountingService::withoutMemberCashCollection(
+                            fn () => $this->accounting->createReversalEntry(
+                                $ledger,
+                                __('Unmatch bank clearance'),
+                            ),
+                        );
+                    }
+                }
+
+                $imported->update([
+                    'is_cleared' => false,
+                    'cleared_at' => null,
+                    'bank_clearance_match_group_id' => null,
+                    'fund_posting_id' => null,
+                    'cash_out_request_id' => null,
+                    'membership_application_id' => null,
+                    'expense_disbursement_id' => null,
+                    'fee_disbursement_id' => null,
+                    'invest_disbursement_id' => null,
+                    'invest_return_id' => null,
+                    'master_bank_transaction_id' => null,
+                    'status' => 'imported',
+                ]);
+            }
+
+            foreach ($operationalLines as $operational) {
+                $operational->update([
+                    'is_cleared' => false,
+                    'cleared_at' => null,
+                    'bank_clearance_match_group_id' => null,
                 ]);
             }
         });
@@ -582,6 +749,10 @@ class BankClearingMatchService
     public function isImportedMatchCandidate(BankTransaction $transaction): bool
     {
         if ($transaction->duplicate_of_id !== null) {
+            return false;
+        }
+
+        if ($transaction->is_cleared) {
             return false;
         }
 
@@ -798,12 +969,138 @@ class BankClearingMatchService
     }
 
     /**
+     * Imported bank lines eligible for a 1→N group match (no single-line amount filter).
+     *
+     * @return EloquentCollection<int, BankTransaction>
+     */
+    public function findGroupMatchImportedCandidates(
+        BankTransaction $uncleared,
+        ?int $dayRange = null,
+    ): EloquentCollection {
+        $dayRange ??= ContributionPolicySettings::bankMatchManualDateRangeDays();
+        $anchor = $uncleared->transaction_date
+            ? Carbon::parse((string) $uncleared->transaction_date)->startOfDay()
+            : null;
+
+        $candidates = $this->bankStatementMatchTargetQuery()
+            ->when(
+                $dayRange > 0 && $anchor !== null,
+                function ($query) use ($anchor, $dayRange): void {
+                    $query->whereBetween('transaction_date', [
+                        $anchor->copy()->subDays($dayRange)->toDateString(),
+                        $anchor->copy()->addDays($dayRange)->toDateString(),
+                    ]);
+                },
+            )
+            ->get();
+
+        if ($anchor === null) {
+            return $candidates;
+        }
+
+        return $candidates
+            ->sortBy(function (BankTransaction $candidate) use ($anchor): int {
+                $candidateDate = $candidate->transaction_date
+                    ? Carbon::parse((string) $candidate->transaction_date)->startOfDay()
+                    : $anchor;
+
+                return (int) abs($anchor->diffInDays($candidateDate));
+            })
+            ->values();
+    }
+
+    /**
+     * Operational rows eligible for an N→1 group match (no single-line amount filter).
+     *
+     * @return EloquentCollection<int, BankTransaction>
+     */
+    public function findGroupMatchOperationalCandidates(
+        BankTransaction $imported,
+        ?int $dayRange = null,
+    ): EloquentCollection {
+        $dayRange ??= ContributionPolicySettings::bankMatchManualDateRangeDays();
+        $anchor = $imported->transaction_date
+            ? Carbon::parse((string) $imported->transaction_date)->startOfDay()
+            : null;
+
+        $candidates = BankTransaction::query()
+            ->uncleared()
+            ->where(function ($query): void {
+                $query->whereNotNull('fund_posting_id')
+                    ->orWhereNotNull('cash_out_request_id')
+                    ->orWhereNotNull('expense_disbursement_id')
+                    ->orWhereNotNull('fee_disbursement_id')
+                    ->orWhereNotNull('invest_disbursement_id')
+                    ->orWhereNotNull('invest_return_id')
+                    ->orWhereNotNull('membership_application_id');
+            })
+            ->whereDoesntHave('bankStatement', function ($query): void {
+                $query->whereIn('filename', BankStatementBuckets::MEMBERSHIP_IMPORT_PLACEHOLDERS);
+            })
+            ->whereHas('bankStatement', function (Builder $statementQuery): void {
+                $statementQuery->whereIn('filename', BankStatementBuckets::OPERATIONAL_CLEARANCE);
+            })
+            ->when(
+                $dayRange > 0 && $anchor !== null,
+                function ($query) use ($anchor, $dayRange): void {
+                    $query->whereBetween('transaction_date', [
+                        $anchor->copy()->subDays($dayRange)->toDateString(),
+                        $anchor->copy()->addDays($dayRange)->toDateString(),
+                    ]);
+                },
+            )
+            ->get();
+
+        if ($anchor === null) {
+            return $candidates;
+        }
+
+        return $candidates
+            ->sortBy(function (BankTransaction $candidate) use ($anchor): int {
+                $candidateDate = $candidate->transaction_date
+                    ? Carbon::parse((string) $candidate->transaction_date)->startOfDay()
+                    : $anchor;
+
+                return (int) abs($anchor->diffInDays($candidateDate));
+            })
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, BankTransaction>  $operational
+     * @param  Collection<int, BankTransaction>  $imported
+     */
+    public function groupAmountsMatch(Collection $operational, Collection $imported, ?float $tolerance = null): bool
+    {
+        $tolerance ??= ContributionPolicySettings::reconTolerance();
+
+        return abs($this->sumTransactionAmounts($operational) - $this->sumTransactionAmounts($imported)) <= $tolerance;
+    }
+
+    /**
+     * @param  Collection<int, BankTransaction>  $transactions
+     */
+    public function sumTransactionAmounts(Collection $transactions): float
+    {
+        return (float) $transactions->sum(fn (BankTransaction $transaction): float => (float) $transaction->amount);
+    }
+
+    protected function shouldSkipMasterBankLedgerForOperational(BankTransaction $uncleared): bool
+    {
+        return $uncleared->expense_disbursement_id !== null
+            || $uncleared->fee_disbursement_id !== null
+            || $uncleared->invest_disbursement_id !== null
+            || $uncleared->invest_return_id !== null;
+    }
+
+    /**
      * @return Builder<BankTransaction>
      */
     protected function bankStatementMatchTargetQuery(): Builder
     {
         return BankTransaction::query()
             ->with('bankStatement')
+            ->uncleared()
             ->whereIn('status', ['imported', 'mirrored', 'posted'])
             ->whereNull('fund_posting_id')
             ->whereNull('membership_application_id')

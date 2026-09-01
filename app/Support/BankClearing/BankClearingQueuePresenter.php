@@ -88,6 +88,19 @@ final class BankClearingQueuePresenter
             $items[] = ['label' => __('Suggested next step'), 'value' => $suggested];
         }
 
+        if ($record->bank_clearance_match_group_id !== null) {
+            $groupCount = BankTransaction::query()
+                ->where('bank_clearance_match_group_id', $record->bank_clearance_match_group_id)
+                ->count();
+
+            if ($groupCount > 2) {
+                $items[] = [
+                    'label' => __('Match group'),
+                    'value' => __(':count rows in group', ['count' => $groupCount]),
+                ];
+            }
+        }
+
         $sections[] = [
             'title' => __('Work queue context'),
             'columns' => 1,

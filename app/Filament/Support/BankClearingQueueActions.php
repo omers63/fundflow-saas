@@ -21,12 +21,15 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\HtmlString;
 use Throwable;
 
 final class BankClearingQueueActions
@@ -53,6 +56,7 @@ final class BankClearingQueueActions
 
         if ($includeBankFile) {
             array_push($actions, ...self::bankFileResolveActions());
+            $actions[] = self::matchToMultipleOperations();
         }
 
         if ($includeOperations) {
@@ -61,6 +65,7 @@ final class BankClearingQueueActions
             }
 
             $actions[] = self::matchToBankLine();
+            $actions[] = self::matchToMultipleBankLines();
             $actions[] = self::clearWithoutEvidence();
         }
 
@@ -120,6 +125,7 @@ final class BankClearingQueueActions
         return [
             self::autoMatch(),
             self::matchToBankLine(),
+            self::matchToMultipleBankLines(),
             self::clearWithoutEvidence(),
         ];
     }
@@ -319,6 +325,223 @@ final class BankClearingQueueActions
                 $matching->clearMatchPair($record, $imported);
 
                 Notification::make()->title(__('Matched to bank import line'))->success()->send();
+            });
+    }
+
+    public static function matchToMultipleBankLines(): Action
+    {
+        return Action::make('matchToMultipleBankLines')
+            ->label(__('Match to multiple'))
+            ->icon('heroicon-o-squares-plus')
+            ->color('primary')
+            ->requiresConfirmation()
+            ->modalHeading(__('Match to multiple bank lines'))
+            ->modalDescription(__('Pair this operational row with several imported statement lines whose amounts sum to the same total.'))
+            ->visible(fn (BankTransaction $record, BankClearingQueueService $queue): bool => $queue->isOperationsItem($record))
+            ->form([
+                Placeholder::make('target_amount')
+                    ->label(__('Operational amount'))
+                    ->content(fn (BankTransaction $record): string => number_format((float) $record->amount, 2, '.', ',')),
+                CheckboxList::make('imported_transaction_ids')
+                    ->label(__('Bank statement lines'))
+                    ->options(function (BankTransaction $record, BankClearingMatchService $matching): array {
+                        return $matching->findGroupMatchImportedCandidates($record)
+                            ->mapWithKeys(fn (BankTransaction $txn): array => [
+                                $txn->id => $matching->formatMatchOptionLabel($txn),
+                            ])
+                            ->all();
+                    })
+                    ->live()
+                    ->required()
+                    ->minItems(2)
+                    ->columns(1),
+                Placeholder::make('selected_total')
+                    ->label(__('Selected total'))
+                    ->content(function (BankTransaction $record, Get $get, BankClearingMatchService $matching): HtmlString {
+                        $selectedIds = array_map('intval', (array) ($get('imported_transaction_ids') ?? []));
+                        $selected = BankTransaction::query()->whereIn('id', $selectedIds)->get();
+                        $target = (float) $record->amount;
+                        $total = $matching->sumTransactionAmounts($selected);
+                        $tolerance = ContributionPolicySettings::reconTolerance();
+                        $balanced = abs($total - $target) <= $tolerance;
+                        $delta = number_format(abs($total - $target), 2, '.', ',');
+
+                        $message = $balanced
+                            ? __('Selected lines balance within tolerance.')
+                            : __('Difference: :delta (tolerance :tolerance).', [
+                                'delta' => $delta,
+                                'tolerance' => number_format($tolerance, 2, '.', ','),
+                            ]);
+
+                        return new HtmlString(
+                            '<div class="space-y-1">'
+                            .'<div><strong>'.e(number_format($total, 2, '.', ',')).'</strong></div>'
+                            .'<div class="text-sm '.($balanced ? 'text-success-600 dark:text-success-400' : 'text-warning-600 dark:text-warning-400').'">'
+                            .e($message)
+                            .'</div></div>'
+                        );
+                    }),
+            ])
+            ->action(function (BankTransaction $record, array $data, Action $action, BankClearingMatchService $matching): void {
+                $imported = BankTransaction::query()
+                    ->whereIn('id', (array) ($data['imported_transaction_ids'] ?? []))
+                    ->get();
+
+                if ($imported->count() < 2) {
+                    ActionModalFailure::present(
+                        $action,
+                        __('Select at least two bank import lines.'),
+                        __('Could not match group'),
+                    );
+
+                    return;
+                }
+
+                foreach ($imported as $line) {
+                    if (! $matching->isImportedMatchCandidate($line)) {
+                        ActionModalFailure::present(
+                            $action,
+                            __('One or more bank import lines are no longer eligible.'),
+                            __('Could not match group'),
+                        );
+
+                        return;
+                    }
+                }
+
+                if (! $matching->groupAmountsMatch(collect([$record]), $imported)) {
+                    ActionModalFailure::present(
+                        $action,
+                        __('Selected amounts do not balance within tolerance.'),
+                        __('Could not match group'),
+                    );
+
+                    return;
+                }
+
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $matching->clearMatchGroup(collect([$record]), $imported),
+                        __('Could not match group'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Matched to :count bank import lines', ['count' => $imported->count()]))
+                    ->success()
+                    ->send();
+            });
+    }
+
+    public static function matchToMultipleOperations(): Action
+    {
+        return Action::make('matchToMultipleOperations')
+            ->label(__('Match to multiple'))
+            ->icon('heroicon-o-squares-plus')
+            ->color('primary')
+            ->requiresConfirmation()
+            ->modalHeading(__('Match to multiple operations'))
+            ->modalDescription(__('Pair this bank import line with several operational rows whose amounts sum to the same total.'))
+            ->visible(fn (BankTransaction $record, BankClearingQueueService $queue, BankClearingMatchService $matching): bool => $queue->isBankFileItem($record)
+                && $matching->isImportedMatchCandidate($record))
+            ->form([
+                Placeholder::make('target_amount')
+                    ->label(__('Bank line amount'))
+                    ->content(fn (BankTransaction $record): string => number_format((float) $record->amount, 2, '.', ',')),
+                CheckboxList::make('operational_transaction_ids')
+                    ->label(__('Operational rows'))
+                    ->options(function (BankTransaction $record, BankClearingMatchService $matching): array {
+                        return $matching->findGroupMatchOperationalCandidates($record)
+                            ->mapWithKeys(fn (BankTransaction $txn): array => [
+                                $txn->id => $matching->formatMatchOptionLabel($txn),
+                            ])
+                            ->all();
+                    })
+                    ->live()
+                    ->required()
+                    ->minItems(2)
+                    ->columns(1),
+                Placeholder::make('selected_total')
+                    ->label(__('Selected total'))
+                    ->content(function (BankTransaction $record, Get $get, BankClearingMatchService $matching): HtmlString {
+                        $selectedIds = array_map('intval', (array) ($get('operational_transaction_ids') ?? []));
+                        $selected = BankTransaction::query()->whereIn('id', $selectedIds)->get();
+                        $target = (float) $record->amount;
+                        $total = $matching->sumTransactionAmounts($selected);
+                        $tolerance = ContributionPolicySettings::reconTolerance();
+                        $balanced = abs($total - $target) <= $tolerance;
+                        $delta = number_format(abs($total - $target), 2, '.', ',');
+
+                        $message = $balanced
+                            ? __('Selected lines balance within tolerance.')
+                            : __('Difference: :delta (tolerance :tolerance).', [
+                                'delta' => $delta,
+                                'tolerance' => number_format($tolerance, 2, '.', ','),
+                            ]);
+
+                        return new HtmlString(
+                            '<div class="space-y-1">'
+                            .'<div><strong>'.e(number_format($total, 2, '.', ',')).'</strong></div>'
+                            .'<div class="text-sm '.($balanced ? 'text-success-600 dark:text-success-400' : 'text-warning-600 dark:text-warning-400').'">'
+                            .e($message)
+                            .'</div></div>'
+                        );
+                    }),
+            ])
+            ->action(function (BankTransaction $record, array $data, Action $action, BankClearingMatchService $matching): void {
+                $operational = BankTransaction::query()
+                    ->whereIn('id', (array) ($data['operational_transaction_ids'] ?? []))
+                    ->get();
+
+                if ($operational->count() < 2) {
+                    ActionModalFailure::present(
+                        $action,
+                        __('Select at least two operational rows.'),
+                        __('Could not match group'),
+                    );
+
+                    return;
+                }
+
+                foreach ($operational as $line) {
+                    if (! $matching->isPendingClearance($line)) {
+                        ActionModalFailure::present(
+                            $action,
+                            __('One or more operational rows are no longer eligible.'),
+                            __('Could not match group'),
+                        );
+
+                        return;
+                    }
+                }
+
+                if (! $matching->groupAmountsMatch($operational, collect([$record]))) {
+                    ActionModalFailure::present(
+                        $action,
+                        __('Selected amounts do not balance within tolerance.'),
+                        __('Could not match group'),
+                    );
+
+                    return;
+                }
+
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $matching->clearMatchGroup($operational, collect([$record])),
+                        __('Could not match group'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Matched to :count operational rows', ['count' => $operational->count()]))
+                    ->success()
+                    ->send();
             });
     }
 

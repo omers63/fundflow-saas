@@ -847,6 +847,8 @@ final class BusinessDayWindowRollbackService
 
     private function reverseCashOut(CashOutRequest $request): int
     {
+        $this->unmatchBankClearanceGroupIfNeeded($this->bankTransactionFor($request));
+
         $this->unmatchImportedPartnersFor($request);
 
         $reversed = 0;
@@ -874,6 +876,8 @@ final class BusinessDayWindowRollbackService
 
     private function reverseDeposit(FundPosting $posting, Carbon $cutoff): int
     {
+        $this->unmatchBankClearanceGroupIfNeeded($this->bankTransactionFor($posting));
+
         $partnerIds = BankTransaction::query()
             ->where('fund_posting_id', $posting->id)
             ->pluck('id')
@@ -919,6 +923,8 @@ final class BusinessDayWindowRollbackService
 
     private function reverseDisbursement(Model $disbursement): int
     {
+        $this->unmatchBankClearanceGroupIfNeeded($this->bankTransactionFor($disbursement));
+
         $this->unmatchImportedPartnersFor($disbursement);
 
         $reversed = 0;
@@ -1242,6 +1248,12 @@ final class BusinessDayWindowRollbackService
             return;
         }
 
+        if ($line->bank_clearance_match_group_id !== null) {
+            $this->bankMatching->unmatchClearedGroup($line);
+
+            return;
+        }
+
         if ($this->bankMatching->isSyntheticOperationalStatement($line)) {
             $line->update([
                 'is_cleared' => false,
@@ -1252,6 +1264,15 @@ final class BusinessDayWindowRollbackService
         }
 
         $this->bankMatching->unmatchClearedPair($line);
+    }
+
+    private function unmatchBankClearanceGroupIfNeeded(?BankTransaction $line): void
+    {
+        if ($line === null || $line->bank_clearance_match_group_id === null) {
+            return;
+        }
+
+        $this->bankMatching->unmatchClearedGroup($line);
     }
 
     private function operationalBankFkColumn(Model $source): ?string
@@ -1270,6 +1291,10 @@ final class BusinessDayWindowRollbackService
 
     private function hasClearedImportedPartner(BankTransaction $line): bool
     {
+        if ($line->bank_clearance_match_group_id !== null) {
+            return true;
+        }
+
         $column = $this->operationalBankFkColumnFromLine($line);
 
         if ($column === null) {
