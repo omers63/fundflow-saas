@@ -242,6 +242,11 @@ Common causes: deleted transactions without balance adjustment; legacy import re
 | `RECON_AMBIGUOUS_MATCH` | Multiple candidates | Manual match |
 | `UNMATCHED_CASH_ENTRY` | Operational line stale | Match or clear |
 | `CASH_DEPOSIT_UNBANKED` | Accepted deposit, no bank evidence | Import + match |
+| `CASH_DEPOSIT_UNEVIDENCED` | Accepted deposit, no SMS ops evidence (SMS-only tenants) | SMS clearing → Match ops |
+| `SMS_OPS_UNMATCHED` | Posted SMS, no ops link | SMS clearing → Match ops |
+| `OPS_RECON_UNMATCHED_SMS` | Uncleared ops row, no SMS link | SMS clearing → Match ops |
+| `SMS_OPS_AMBIGUOUS_MATCH` | Multiple ops candidates | Pick correct ops row |
+| `SMS_OPS_AMOUNT_MISMATCH` | Linked SMS ↔ ops totals diverge | Rematch or correct |
 | `AMOUNT_MISMATCH` | Linked amounts differ | Adjust link or posting |
 | `STALE_PENDING` | Old uncleared line | Review and match/ignore |
 
@@ -269,7 +274,16 @@ Available per code (see `ReconciliationExceptionActions`):
 
 **Workspace:** Finance → Bank clearing
 
-### 8.1 Queue filters
+### 8.1 SMS-only evidence channel
+
+When **Settings → Reconciliation → Evidence channel** is **SMS alerts only**:
+
+- Bank statement CSV import is hidden; **Finance → SMS clearing** is the treasury workspace.
+- Deposits and cash-outs still create **operational rows** (synthetic bank lines). Clear them by matching **posted SMS alerts** (ops ↔ SMS), not bank imports.
+- On match, the system posts **master bank** from the SMS evidence (credit for deposit SMS, debit for cash-out SMS). Member cash was already posted when the SMS row was posted — clearance does **not** duplicate cash.
+- Channel switch runbook: `php artisan fund:migrate-evidence-channel sms --dry-run` (per tenant) reports open ops rows, unlinked SMS, and orphan bank imports before applying `--force`.
+
+### 8.2 Queue filters
 
 | Filter | Shows |
 |--------|-------|
@@ -277,15 +291,17 @@ Available per code (see `ReconciliationExceptionActions`):
 | From bank file | Imported statement lines needing action |
 | From operations | Uncleared deposit/cash-out placeholders |
 
-### 8.2 Expected lifecycle
+### 8.3 Expected lifecycle
 
 ```
-Deposit accept     → uncleared operational line → import CSV → match → cleared
-Cash-out accept    → uncleared operational line → bank transfer → match → cleared
-Bank import only   → mirror to cash → post to member → (optional) auto-collection
+Deposit accept (SMS-only) → uncleared ops row → post SMS → ops↔SMS match → cleared + master bank
+Cash-out accept (SMS-only) → uncleared ops row → post debit SMS → ops↔SMS match → cleared + master bank debit
+Deposit accept (bank CSV)  → uncleared operational line → import CSV → match → cleared
+Cash-out accept (bank CSV)   → uncleared operational line → bank transfer → match → cleared
+Bank import only           → mirror to cash → post to member → (optional) auto-collection
 ```
 
-### 8.3 Common mistakes
+### 8.4 Common mistakes
 
 | Mistake | Symptom |
 |---------|---------|

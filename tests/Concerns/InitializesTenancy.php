@@ -6,6 +6,7 @@ use App\Models\Central\Tenant;
 use App\Models\Tenant\Setting;
 use App\Support\AutomationScheduleSettings;
 use App\Support\BusinessDaySettings;
+use App\Support\EvidenceChannelSettings;
 use Stancl\Tenancy\Bootstrappers\DatabaseTenancyBootstrapper;
 
 trait InitializesTenancy
@@ -25,8 +26,8 @@ trait InitializesTenancy
             }
 
             BusinessDaySettings::saveFromForm(null);
-            // Keep deposit submit → pending unless a test enables auto-accept.
             Setting::set(AutomationScheduleSettings::GROUP, 'auto_accept_deposits', '0');
+            EvidenceChannelSettings::save(EvidenceChannelSettings::CHANNEL_BANK_CSV);
 
             return $tenant;
         }
@@ -57,6 +58,7 @@ trait InitializesTenancy
 
         BusinessDaySettings::saveFromForm(null);
         Setting::set(AutomationScheduleSettings::GROUP, 'auto_accept_deposits', '0');
+        EvidenceChannelSettings::save(EvidenceChannelSettings::CHANNEL_BANK_CSV);
 
         return $tenant;
     }

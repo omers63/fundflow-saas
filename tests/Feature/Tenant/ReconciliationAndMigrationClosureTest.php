@@ -26,6 +26,7 @@ use App\Services\AccountingService;
 use App\Services\BankClearingMatchService;
 use App\Services\ContributionCollectionCycleService;
 use App\Services\ContributionService;
+use App\Services\FundPostingService;
 use App\Services\MasterFeeDisbursementService;
 use App\Services\MemberCashOutService;
 use App\Services\MemberInvariantService;
@@ -212,6 +213,152 @@ test('reconciliation raises ambiguous bank match from scan', function () {
         ->where('exception_code', 'RECON_AMBIGUOUS_MATCH')
         ->open()
         ->exists())->toBeTrue();
+});
+
+test('nightly batch raises splittable bank match when imported lines sum to one operational row', function () {
+    Account::query()->delete();
+    Member::query()->delete();
+    BankTransaction::query()->delete();
+    BankStatement::query()->delete();
+    ReconciliationException::query()->delete();
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 0, 'is_master' => true]);
+    Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 0, 'is_master' => true]);
+
+    $member = Member::create([
+        'member_number' => 'RECON-SPLIT-01',
+        'name' => 'Splittable Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $posting = app(FundPostingService::class)->submit($member, 2000, '2026-06-26');
+    app(FundPostingService::class)->accept($posting);
+
+    $statement = BankStatement::create([
+        'filename' => 'recon-split.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 2,
+        'imported_rows' => 2,
+        'duplicate_rows' => 0,
+    ]);
+
+    BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-06-26',
+        'description' => 'Split A',
+        'amount' => 750,
+        'status' => 'imported',
+        'hash' => md5('recon-split-a'),
+        'is_cleared' => false,
+    ]);
+
+    BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-06-26',
+        'description' => 'Split B',
+        'amount' => 1250,
+        'status' => 'imported',
+        'hash' => md5('recon-split-b'),
+        'is_cleared' => false,
+    ]);
+
+    app(ReconciliationService::class)->runNightlyBatch();
+
+    $exception = ReconciliationException::query()
+        ->where('exception_code', 'RECON_SPLITTABLE_BANK_MATCH')
+        ->open()
+        ->first();
+
+    expect($exception)->not->toBeNull()
+        ->and($exception->affected_entities['direction'] ?? null)->toBe('one_to_many')
+        ->and($exception->affected_entities['imported_bank_transaction_ids'] ?? [])->toHaveCount(2);
+});
+
+test('resolve splittable bank match clears a one-to-many group from reconciliation', function () {
+    Account::query()->delete();
+    Member::query()->delete();
+    BankTransaction::query()->delete();
+    BankStatement::query()->delete();
+    ReconciliationException::query()->delete();
+
+    Account::create(['type' => 'cash', 'name' => 'Master Cash', 'balance' => 0, 'is_master' => true]);
+    Account::create(['type' => 'fund', 'name' => 'Master Fund', 'balance' => 0, 'is_master' => true]);
+    Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 0, 'is_master' => true]);
+
+    $member = Member::create([
+        'member_number' => 'RECON-SPLIT-02',
+        'name' => 'Resolve Split Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $posting = app(FundPostingService::class)->submit($member, 2000, '2026-06-27');
+    app(FundPostingService::class)->accept($posting);
+
+    $uncleared = $posting->bankTransaction->fresh();
+
+    $statement = BankStatement::create([
+        'filename' => 'recon-split-resolve.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 2,
+        'imported_rows' => 2,
+        'duplicate_rows' => 0,
+    ]);
+
+    $importedA = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-06-27',
+        'description' => 'Split A',
+        'amount' => 750,
+        'status' => 'imported',
+        'hash' => md5('recon-split-resolve-a'),
+        'is_cleared' => false,
+    ]);
+
+    $importedB = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-06-27',
+        'description' => 'Split B',
+        'amount' => 1250,
+        'status' => 'imported',
+        'hash' => md5('recon-split-resolve-b'),
+        'is_cleared' => false,
+    ]);
+
+    $exception = ReconciliationException::create([
+        'exception_code' => 'RECON_SPLITTABLE_BANK_MATCH',
+        'domain' => 'bank_clearing',
+        'severity' => 'high',
+        'status' => ReconciliationException::STATUS_OPEN,
+        'raised_at' => now(),
+        'sla_deadline' => now()->addDay(),
+        'affected_entities' => [
+            'direction' => 'one_to_many',
+            'uncleared_bank_transaction_id' => $uncleared->id,
+            'imported_bank_transaction_ids' => [$importedA->id, $importedB->id],
+        ],
+    ]);
+
+    app(ReconciliationCorrectionService::class)->resolveSplittableBankMatch(
+        $exception,
+        [$importedA->id, $importedB->id],
+        [$uncleared->id],
+        'Resolved split deposit during reconciliation',
+    );
+
+    expect($exception->fresh()->status)->toBe(ReconciliationException::STATUS_RESOLVED)
+        ->and($uncleared->fresh()->is_cleared)->toBeTrue()
+        ->and($importedA->fresh()->is_cleared)->toBeTrue()
+        ->and($importedB->fresh()->is_cleared)->toBeTrue()
+        ->and($importedA->fresh()->bank_clearance_match_group_id)->not->toBeNull();
 });
 
 test('resolve ambiguous bank match clears cash-out pairs through bank clearing service', function () {

@@ -1,10 +1,10 @@
 # Reconciliation + 1:M / M:1 Bank & SMS Clearing — Implementation Plan
 
 **Audience:** Tenant admins / implementers  
-**Status:** Planned  
+**Status:** Phases 0–6 implemented; **Phase 7 (SMS-only)** — 7a–7d shipped (see §3 Phase 7)  
 **Related:** [bank-clearing-work-queue-actions.md](bank-clearing-work-queue-actions.md), [bank-clearing-workspace-implementation-plan.md](bank-clearing-workspace-implementation-plan.md)
 
-This plan closes gaps identified after bank clearance **1→N / N→1** group matching was added, and extends the same model to **Bank SMS clearing**, with full reconciliation coverage for both channels.
+This plan closes gaps identified after bank clearance **1→N / N→1** group matching was added, extends the same model to **Bank SMS clearing**, with full reconciliation coverage for both channels, and defines an optional **Phase 7** for tenants that use **SMS-only evidence** instead of bank statement CSV import.
 
 ---
 
@@ -52,6 +52,8 @@ This plan closes gaps identified after bank clearance **1→N / N→1** group ma
 
 SMS and bank CSV are **parallel evidence channels** for the same real-world transfer. Matching should link them, not post cash twice.
 
+**Phases 0–6** assume both channels may coexist. **Phase 7** is a separate product mode where bank CSV import is disabled and SMS becomes the sole external evidence for clearance.
+
 ---
 
 ## 2. Target architecture
@@ -72,6 +74,28 @@ SMS and bank CSV are **parallel evidence channels** for the same real-world tran
 ┌───────────────────────────────▼─────────────────────────────────┐
 │ Reconciliation                                                   │
 │   Nightly batch exceptions · Snapshot integrity · Resolution UI  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Phase 7 (SMS-only tenants)** — bank CSV import disabled; operational clearance uses SMS instead of imported statement lines:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Evidence channel setting: sms                                    │
+│   Bank CSV import · mirror-to-cash · post-as · bank:auto-match   │
+│   → hidden / gated off                                           │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+┌───────────────────────────────▼─────────────────────────────────┐
+│ SMS clearing (primary evidence)                                  │
+│   SMS import → member match → post to cash (+ master bank rule)  │
+│   Synthetic operational rows ←→ SmsTransaction rows              │
+│   sms_ops_clearance_match_groups (1:1 / 1:N / N:1)              │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+┌───────────────────────────────▼─────────────────────────────────┐
+│ Reconciliation (channel-aware)                                   │
+│   SMS ops backlog · deposit evidence · outbound clearance       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -267,6 +291,85 @@ Only if business requires (e.g. 2 SMS alerts ↔ 2 bank lines in one settlement)
 
 ---
 
+### Phase 7 — SMS-only workflows (replace bank statement import)
+
+**Goal:** Allow a tenant to operate without bank statement CSV import. SMS alerts become the **sole external evidence** for matching synthetic operational rows (deposits, cash-outs, fees, etc.). Depends on **Phases 0–6** (group matching patterns, SMS recon foundation, rollback/audit).
+
+**Prerequisite:** Phases 2–5 minimum (SMS recon live; group unmatch/rollback patterns proven). Phase 3–4 cross-channel SMS↔bank work remains valid for `evidence_channel = both` tenants only.
+
+#### 7a. Evidence channel setting & UI gating
+
+| # | Task | Details |
+|---|------|---------|
+| 7a.1 | **`evidence_channel` tenant setting** | Values: `bank_csv` (default) \| `sms` \| `both`. Store in `Setting` (e.g. group `system` or `reconciliation`). |
+| 7a.2 | **`EvidenceChannelSettings` helper** | `usesBankCsv()`, `usesSms()`, `isSmsOnly()` — gate services, scheduler, Filament visibility. |
+| 7a.3 | **Settings UI** | Radio/select on Automation or Reconciliation settings; conditional sections for `BankTemplate` vs `SmsImportTemplate`. |
+| 7a.4 | **Hide bank CSV surfaces when `sms`** | `BankWorkspaceImportTableHeaderActions::bankStatementImportAction()`, bank-file queue tab, Post as…, `bank:auto-match` registry row — not rendered / not runnable. |
+| 7a.5 | **Architecture test** | SMS-only fixture tenant must not expose bank CSV import actions. |
+
+**Exit criteria:** Setting persists; bank import hidden for SMS-only; no behavior change to ledger yet.
+
+#### 7b. Operational ↔ SMS clearance & master bank
+
+| # | Task | Details |
+|---|------|---------|
+| 7b.1 | **Schema** | `sms_ops_clearance_match_groups` + FK on `sms_transactions` and synthetic `bank_transactions` (ops rows). Optional `sms_transaction_id` on domain rows (`fund_postings`, `cash_out_requests`, …). |
+| 7b.2 | **`SmsOperationalClearingMatchService`** (new) | Mirror `BankClearingMatchService` API but match **ops ↔ SMS** (not ops ↔ CSV import). Methods: `clearMatchPair`, `clearMatchGroup`, `unmatchClearedGroup`, candidate queries, `scanMatchExceptions`, `scanGroupMatchHints`. |
+| 7b.3 | **Master bank posting rule** | **Default:** on ops↔SMS clearance, post **master bank** leg (same semantics as `postMatchedImportToMasterBankLedger`, anchored to SMS evidence not CSV). Document in accounting rules. |
+| 7b.4 | **No double cash** | SMS already posted → clearance is **link + ops cleared + master bank** only; never second `creditMemberCash`. |
+| 7b.5 | **Extend `SmsImportService`** | Optional auto-link to pending ops row on post when exactly one candidate (1:1). |
+| 7b.6 | **`SmsClearingQueueService` filters** | Add `UnmatchedOps`, `ReadyToClearOps`; hide `UnmatchedBank` when `isSmsOnly()`. |
+| 7b.7 | **Gate legacy paths** | `FundFlowService::mirrorToCash`, `BankImportPostAsService`, `BankImportService` — throw or skip when `isSmsOnly()`. |
+
+**Exit criteria:** Deposit accept → uncleared ops row → SMS post → ops↔SMS match clears ops and posts master bank; tests prove no duplicate cash.
+
+#### 7c. Reconciliation, scheduler & reporting (channel-aware)
+
+| # | Task | Details |
+|---|------|---------|
+| 7c.1 | **Branch nightly batch** | Skip `reconcileBankClearing()` and SMS↔bank cross-channel checks when `isSmsOnly()`. Run new `reconcileSmsOperationalClearing()`. |
+| 7c.2 | **New exception codes** | See table below. Retire or suppress bank-import-centric codes for SMS-only tenants. |
+| 7c.3 | **`ReconciliationCorrectionService`** | `resolveSmsOpsMatch`, `resolveSmsOpsMatchGroup`; deep-links to SMS clearing workspace. |
+| 7c.4 | **Replace deposit evidence check** | Successor to `CASH_DEPOSIT_UNBANKED`: e.g. `CASH_DEPOSIT_UNEVIDENCED` — accepted `FundPosting` with no SMS ops link past `cash_deposit_unevidenced_days` (rename or alias `cash_deposit_unbanked_days`). |
+| 7c.5 | **`ReconciliationReportService`** | Replace `bank_uncleared_*` pipeline metrics with `sms_ops_uncleared_*` when SMS-only. |
+| 7c.6 | **Scheduler** | Gate `bank:auto-match`. Add `sms:auto-match-ops` (1:1 only) or extend nightly recon auto-resolve for unique ops↔SMS pairs. |
+| 7c.7 | **Dashboard / fiscal close** | `TreasuryForecastService`, `FiscalCloseReadinessService`, `BankAccountsInsightsService` — SMS backlog gauges instead of bank import post-rate. |
+
+**Nightly SMS-only exception codes (Phase 7c):**
+
+| Code | Trigger |
+|------|---------|
+| `SMS_OPS_UNMATCHED` | Posted SMS, no ops link, past stale window |
+| `OPS_RECON_UNMATCHED_SMS` | Uncleared ops row, SMS channel expected, no SMS candidate |
+| `SMS_OPS_AMBIGUOUS_MATCH` | Multiple 1:1 SMS candidates for one ops row |
+| `SMS_OPS_SPLITTABLE_MATCH` | Combinatorial sum hint (N SMS ↔ 1 ops or vice versa) |
+| `SMS_OPS_AMOUNT_MISMATCH` | Linked pair/group totals diverge beyond tolerance |
+| `CASH_DEPOSIT_UNEVIDENCED` | Accepted deposit with no SMS ops evidence (replaces `CASH_DEPOSIT_UNBANKED` for SMS-only) |
+
+**Exit criteria:** Nightly batch and snapshot are meaningful without bank imports; resolver clears ops↔SMS exceptions; `bank:auto-match` does not run for SMS-only.
+
+#### 7d. Outbound flows, migration & docs
+
+| # | Task | Details |
+|---|------|---------|
+| 7d.1 | **Outbound clearance policy** | Cash-outs, expense/fee/invest disbursements: define SMS evidence rules (debit-shaped SMS alerts, manual match, or retain ops rows with extended stale windows). Implement per `MemberCashOutService` and disbursement services. |
+| 7d.2 | **Rollback** | `BusinessDayWindowRollbackService`: ops↔SMS group unmatch; undo SMS post unmatch ops group first. |
+| 7d.3 | **Channel switch migration** | Backfill plan for tenant moving `bank_csv` → `sms` or `both` → `sms`: open ops rows, posted SMS without links, orphan bank imports. |
+| 7d.4 | **UI consolidation (optional)** | Single “Treasury clearing” nav entry merging SMS queue + ops-match tabs; redirect legacy `/bank-accounts?tab=imports` for SMS-only. |
+| 7d.5 | **Docs & operator SOP** | Update `manual-accountant.md`, `fund-flow-user-guide.md`, `accounting-master-member-sync.mdc` for SMS-only path. |
+
+**Exit criteria:** Outbound flows documented and tested for at least cash-out; migration runbook exists; user guides describe SMS-only SOP.
+
+**Explicitly out of scope (Phase 7 v1):**
+
+- True N:M ops↔SMS (reuse Phase 6 machinery if needed later)
+- Replacing **manual** master bank adjustments or external `bank_statement_vs_book` declared balance checks
+- Twilio / member notification SMS
+
+**Estimate:** ~3–5 weeks after Phases 0–6, depending on outbound scope.
+
+---
+
 ## 4. Product decisions (defaults)
 
 | # | Decision | Default |
@@ -277,10 +380,21 @@ Only if business requires (e.g. 2 SMS alerts ↔ 2 bank lines in one settlement)
 
 Alternatives:
 
-- 1B: SMS matches operational synthetic rows  
-- 1C: Both  
+- 1B: SMS matches operational synthetic rows — **Phase 7 default for `evidence_channel = sms`**
+- 1C: Both — **`evidence_channel = both`**
 - 2B: Combined “Match & post SMS + clear bank” one-step action  
 - 3A: Never auto-resolve cross-channel matches  
+
+**Phase 7 decisions (SMS-only tenants):**
+
+| # | Decision | Default |
+|---|----------|---------|
+| 7.1 | **Evidence channel** | **`bank_csv`** for new tenants; per-tenant override |
+| 7.2 | **Master bank on SMS evidence** | **Post master bank on ops↔SMS clearance** (not on SMS cash post alone) |
+| 7.3 | **Inbound deposit path** | Accept posting → uncleared ops row → SMS import/post → ops↔SMS match (no bank CSV) |
+| 7.4 | **Outbound evidence** | **Manual ops↔SMS match** for cash-outs in v1; auto-match 1:1 where unique |
+| 7.5 | **Cross-channel SMS↔bank** | **Disabled** when `evidence_channel = sms` |
+| 7.6 | **External statement check** | Keep optional `bank_statement_vs_book` (declared balance) — orthogonal to import channel |
 
 ---
 
@@ -296,6 +410,10 @@ Alternatives:
 | Feature | Extend `BankTransactionPostingIntegrityTest` — no double master bank / cash |
 | Architecture | `ReconciliationExceptionPresenterTest` — new codes + actions |
 | Demo data | Extend `storage/samples/bank-clearing-demo.csv` manifest OR add SMS demo + seed command |
+| Feature (Phase 7) | `SmsOperationalClearingMatchServiceTest` — ops↔SMS 1:1, 1→N, N→1, unmatch, master bank leg |
+| Feature (Phase 7) | `ReconciliationSmsOnlyChannelTest` — nightly exceptions, channel gating, no bank import |
+| Feature (Phase 7) | `EvidenceChannelSettingsTest` — UI/service gates per channel |
+| Architecture (Phase 7) | SMS-only tenant exposes no bank CSV import actions |
 
 ---
 
@@ -310,20 +428,26 @@ Alternatives:
 | 4 | SMS↔bank recon exceptions + resolution | 2–3 days |
 | 5 | Rollback, audit, reporting | ~2 days |
 | 6 | True N:M (optional) | Defer |
+| 7a | Evidence channel setting + UI gating | 2–3 days |
+| 7b | Ops↔SMS clearance + master bank | 1–2 weeks |
+| 7c | Channel-aware recon + scheduler + reporting | 3–5 days |
+| 7d | Outbound flows + migration + docs | 3–5 days |
 
 **Total (Phases 0–5):** ~2–3 weeks with tests.
 
-**Suggested start:** Phase 0 + Phase 2 in parallel, then Phase 3.
+**Total (Phase 7, after 0–6):** ~3–5 weeks with tests.
+
+**Suggested start:** Phase 0 + Phase 2 in parallel, then Phase 3. Phase 7 only after a tenant commits to SMS-only; start with 7a (gating) before 7b (ledger).
 
 ---
 
-## 7. Out of scope (v1)
+## 7. Out of scope (Phases 0–6)
 
 - Auto-match beyond **1:1** for bank and SMS
 - Partial amount allocation on either channel
 - Twilio / notification SMS (different subsystem)
 - Expense/fee/invest bank paths that skip master-bank ledger on match — unchanged
-- Replacing bank statement import with SMS-only workflows
+- SMS-only workflows — **Phase 7** (this plan)
 
 ---
 
@@ -335,7 +459,12 @@ Alternatives:
 | SMS recon | `ReconciliationReportService`, `ReconciliationService`, `ReconciliationExceptionPresenter`, `ReconciliationExceptionActions`, `ReconciliationHealthSummary` |
 | Bank gaps | `BankClearingQueueActions`, `BankClearingMatchService`, `ReconciliationCorrectionService` |
 | Rollback | `BusinessDayWindowRollbackService` |
-| Tests | New feature tests per phase; update `ReconciliationSnapshotTest` |
+| Phase 7 — channel | New `EvidenceChannelSettings`, `Setting` keys, `Settings.php` (Filament), `ScheduledJobRegistry` gates |
+| Phase 7 — ops↔SMS | New `SmsOperationalClearingMatchService`, `SmsOpsClearanceMatchGroup` model, migration, extend `SmsClearingQueueService`, `SmsClearingQueueActions` |
+| Phase 7 — clearance hooks | `FundPostingService`, `MemberCashOutService`, disbursement services, `FundFlowService`, `BankImportService` (gates) |
+| Phase 7 — recon | `ReconciliationService`, `ReconciliationCorrectionService`, `ReconciliationReportService`, `TreasuryForecastService`, `FiscalCloseReadinessService` |
+| Phase 7 — jobs | New `SmsAutoMatchOpsCommand` (or extend nightly recon), gate `BankAutoMatchCommand` |
+| Tests | New feature tests per phase; update `ReconciliationSnapshotTest`; Phase 7 channel + ops↔SMS suites |
 
 ---
 
@@ -345,3 +474,7 @@ Alternatives:
 - Demo sample: `storage/samples/bank-clearing-demo.csv`, `bank-clearing:seed-demo` command
 - SMS workspace: `app/Filament/Tenant/Resources/SmsClearing/`
 - Reconciliation skipped SMS check: `ReconciliationReportService` (~L425–430)
+- Evidence channel (Phase 7): new `EvidenceChannelSettings`; gate pattern in `TenantAwareScheduledCommand` + `AutomationSchedulerGate`
+- Ops clearance today: synthetic rows from `FundPostingService`, `MemberCashOutService`, disbursement services → `BankClearingMatchService`
+- SMS post today: `AccountingService::postSmsTransactionToCash()` (member + master cash only)
+- Operator guides to update for Phase 7: `docs/manual-accountant.md`, `docs/fund-flow-user-guide.md`

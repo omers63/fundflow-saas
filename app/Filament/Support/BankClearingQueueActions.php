@@ -9,11 +9,13 @@ use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Filament\Tenant\Support\TenantPortalViewModal;
 use App\Filament\Tenant\Support\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\SmsTransaction;
 use App\Services\BankClearingMatchService;
 use App\Services\BankClearingQueueService;
 use App\Services\BankImportPostAsService;
 use App\Services\FundFlowService;
 use App\Services\PendingOperationalClearanceDeletionService;
+use App\Services\SmsBankClearingMatchService;
 use App\Support\BankClearing\BankClearingQueuePresenter;
 use App\Support\BankTransactionDeletion;
 use App\Support\ContributionPolicySettings;
@@ -57,6 +59,8 @@ final class BankClearingQueueActions
         if ($includeBankFile) {
             array_push($actions, ...self::bankFileResolveActions());
             $actions[] = self::matchToMultipleOperations();
+            $actions[] = self::matchToSms();
+            $actions[] = self::matchToMultipleSms();
         }
 
         if ($includeOperations) {
@@ -161,6 +165,63 @@ final class BankClearingQueueActions
                 BankClearingTabRegistry::TAB_QUEUE,
                 queueFilter: $queueFilter,
             ));
+    }
+
+    public static function clearedRecordActions(): array
+    {
+        return TableRecordActionGroups::wrap([
+            self::view(),
+            self::unmatchCleared(),
+            self::unmatchSmsBankLink(),
+        ]);
+    }
+
+    public static function unmatchCleared(): Action
+    {
+        return Action::make('unmatchCleared')
+            ->label(fn (BankTransaction $record): string => $record->bank_clearance_match_group_id !== null
+                ? __('Unmatch group')
+                : __('Unmatch'))
+            ->icon('heroicon-o-link-slash')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalHeading(fn (BankTransaction $record): string => $record->bank_clearance_match_group_id !== null
+                ? __('Unmatch clearance group')
+                : __('Unmatch bank clearance'))
+            ->modalDescription(function (BankTransaction $record): string {
+                if ($record->bank_clearance_match_group_id !== null) {
+                    $groupCount = BankTransaction::query()
+                        ->where('bank_clearance_match_group_id', $record->bank_clearance_match_group_id)
+                        ->count();
+
+                    return __('Reverse the entire :count-row match group, restore uncleared status, and reverse master-bank ledger entries.', [
+                        'count' => $groupCount,
+                    ]);
+                }
+
+                return __('Reverse this match, restore uncleared status, and reverse the master-bank ledger entry.');
+            })
+            ->visible(fn (BankTransaction $record): bool => $record->is_cleared && $record->duplicate_of_id === null)
+            ->action(function (BankTransaction $record, BankClearingMatchService $matching, Action $action): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $matching->unmatchClearedRow($record),
+                        __('Could not unmatch bank clearance'),
+                    )
+                ) {
+                    return;
+                }
+
+                $isGroup = $record->bank_clearance_match_group_id !== null;
+
+                Notification::make()
+                    ->title($isGroup
+                        ? __('Match group reversed')
+                        : __('Bank clearance unmatched'))
+                    ->success()
+                    ->send();
+            });
     }
 
     public static function view(): Action
@@ -545,6 +606,156 @@ final class BankClearingQueueActions
             });
     }
 
+    public static function matchToSms(): Action
+    {
+        return Action::make('matchToSms')
+            ->label(__('Match to SMS'))
+            ->icon('heroicon-o-device-phone-mobile')
+            ->color('primary')
+            ->requiresConfirmation()
+            ->modalHeading(__('Match to SMS row'))
+            ->modalDescription(__('Link this bank import line to an SMS transaction as evidence.'))
+            ->visible(fn (BankTransaction $record, BankClearingQueueService $queue, SmsBankClearingMatchService $smsMatching): bool => $queue->isBankFileItem($record)
+                && $smsMatching->isBankMatchEligible($record))
+            ->form([
+                Select::make('sms_transaction_id')
+                    ->label(__('SMS row'))
+                    ->options(function (BankTransaction $record, SmsBankClearingMatchService $smsMatching): array {
+                        return $smsMatching->findManualSmsCandidates($record)
+                            ->mapWithKeys(fn (SmsTransaction $sms): array => [
+                                $sms->id => $smsMatching->formatSmsMatchOptionLabel($sms),
+                            ])
+                            ->all();
+                    })
+                    ->searchable()
+                    ->preload()
+                    ->required(),
+            ])
+            ->action(function (BankTransaction $record, array $data, Action $action, SmsBankClearingMatchService $smsMatching): void {
+                $sms = SmsTransaction::findOrFail($data['sms_transaction_id']);
+
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $smsMatching->clearMatchPair($sms, $record),
+                        __('Could not match to SMS row'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()->title(__('Linked to SMS row'))->success()->send();
+            });
+    }
+
+    public static function matchToMultipleSms(): Action
+    {
+        return Action::make('matchToMultipleSms')
+            ->label(__('Match to multiple SMS'))
+            ->icon('heroicon-o-squares-plus')
+            ->color('primary')
+            ->requiresConfirmation()
+            ->modalHeading(__('Match to multiple SMS rows'))
+            ->modalDescription(__('Link this bank import line to several SMS rows whose amounts sum to the same total.'))
+            ->visible(fn (BankTransaction $record, BankClearingQueueService $queue, SmsBankClearingMatchService $smsMatching): bool => $queue->isBankFileItem($record)
+                && $smsMatching->isBankMatchEligible($record))
+            ->form([
+                Placeholder::make('target_amount')
+                    ->label(__('Bank line amount'))
+                    ->content(fn (BankTransaction $record): string => number_format((float) $record->amount, 2, '.', ',')),
+                CheckboxList::make('sms_transaction_ids')
+                    ->label(__('SMS rows'))
+                    ->options(function (BankTransaction $record, SmsBankClearingMatchService $smsMatching): array {
+                        return $smsMatching->findGroupMatchSmsCandidates($record)
+                            ->mapWithKeys(fn (SmsTransaction $sms): array => [
+                                $sms->id => $smsMatching->formatSmsMatchOptionLabel($sms),
+                            ])
+                            ->all();
+                    })
+                    ->live()
+                    ->required()
+                    ->minItems(2)
+                    ->columns(1),
+                Placeholder::make('selected_total')
+                    ->label(__('Selected total'))
+                    ->content(function (BankTransaction $record, Get $get, SmsBankClearingMatchService $smsMatching): HtmlString {
+                        $selectedIds = array_map('intval', (array) ($get('sms_transaction_ids') ?? []));
+                        $selected = SmsTransaction::query()->whereIn('id', $selectedIds)->get();
+                        $target = (float) $record->amount;
+                        $total = $smsMatching->sumSmsAmounts($selected);
+                        $tolerance = ContributionPolicySettings::reconTolerance();
+                        $balanced = abs($total - $target) <= $tolerance;
+
+                        return new HtmlString(
+                            '<div class="space-y-1">'
+                            .'<div><strong>'.e(number_format($total, 2, '.', ',')).'</strong></div>'
+                            .'<div class="text-sm '.($balanced ? 'text-success-600 dark:text-success-400' : 'text-warning-600 dark:text-warning-400').'">'
+                            .e($balanced
+                                ? __('Selected rows balance within tolerance.')
+                                : __('Difference: :delta (tolerance :tolerance).', [
+                                    'delta' => number_format(abs($total - $target), 2, '.', ','),
+                                    'tolerance' => number_format($tolerance, 2, '.', ','),
+                                ]))
+                            .'</div></div>'
+                        );
+                    }),
+            ])
+            ->action(function (BankTransaction $record, array $data, Action $action, SmsBankClearingMatchService $smsMatching): void {
+                $smsRows = SmsTransaction::query()
+                    ->whereIn('id', (array) ($data['sms_transaction_ids'] ?? []))
+                    ->get();
+
+                if ($smsRows->count() < 2) {
+                    ActionModalFailure::present($action, __('Select at least two SMS rows.'), __('Could not match group'));
+
+                    return;
+                }
+
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $smsMatching->clearMatchGroup($smsRows, collect([$record])),
+                        __('Could not match group'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()
+                    ->title(__('Linked to :count SMS rows', ['count' => $smsRows->count()]))
+                    ->success()
+                    ->send();
+            });
+    }
+
+    public static function unmatchSmsBankLink(): Action
+    {
+        return Action::make('unmatchSmsBankLink')
+            ->label(fn (BankTransaction $record): string => $record->sms_clearance_match_group_id !== null
+                && (SmsTransaction::query()->where('sms_clearance_match_group_id', $record->sms_clearance_match_group_id)->count()
+                    + BankTransaction::query()->where('sms_clearance_match_group_id', $record->sms_clearance_match_group_id)->count()) > 2
+                ? __('Unmatch SMS group')
+                : __('Unmatch SMS link'))
+            ->icon('heroicon-o-link-slash')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalHeading(__('Unmatch SMS ↔ bank link'))
+            ->visible(fn (BankTransaction $record): bool => $record->sms_clearance_match_group_id !== null)
+            ->action(function (BankTransaction $record, SmsBankClearingMatchService $smsMatching, Action $action): void {
+                if (
+                    ! ActionModalFailure::attemptThrowable(
+                        $action,
+                        fn () => $smsMatching->unmatchClearedRow($record),
+                        __('Could not unmatch SMS link'),
+                    )
+                ) {
+                    return;
+                }
+
+                Notification::make()->title(__('SMS link removed'))->success()->send();
+            });
+    }
+
     public static function clearWithoutEvidence(): Action
     {
         return Action::make('clearWithoutEvidence')
@@ -607,7 +818,7 @@ final class BankClearingQueueActions
             ->icon('heroicon-o-link')
             ->color('primary')
             ->requiresConfirmation()
-            ->modalDescription(__('Pair pending operational rows with imported statement lines, or choose one pending and one imported row to match directly.'))
+            ->modalDescription(__('Pair pending operational rows with imported statement lines, match one pending row to several imports, or select at least two rows on each side when totals balance.'))
             ->action(function (Collection $records, BankClearingMatchService $matching): void {
                 $stats = $matching->autoMatchSelected($records);
 

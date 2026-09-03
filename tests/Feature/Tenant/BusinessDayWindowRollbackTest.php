@@ -20,6 +20,9 @@ use App\Models\Tenant\MonthlyStatement;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
+use App\Models\Tenant\SmsImportSession;
+use App\Models\Tenant\SmsImportTemplate;
+use App\Models\Tenant\SmsTransaction;
 use App\Models\Tenant\Transaction;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
@@ -40,11 +43,14 @@ use App\Services\MemberFreezeService;
 use App\Services\MemberFundOutService;
 use App\Services\MembershipApplicationApprovalService;
 use App\Services\MemberStatusService;
+use App\Services\SmsBankClearingMatchService;
+use App\Services\SmsOperationalClearingMatchService;
 use App\Support\AutomationSchedulerGate;
 use App\Support\BusinessDay;
 use App\Support\BusinessDaySettings;
 use App\Support\BusinessDayWindowRollbackEventInventory;
 use App\Support\ContributionCollectionStatus;
+use App\Support\EvidenceChannelSettings;
 use App\Support\LoanRepaymentNote;
 use Carbon\Carbon;
 use Filament\Facades\Filament;
@@ -671,6 +677,163 @@ test('rollback undoes a clear-without-evidence after the as-of date', function (
         ->and($posting->fresh()->status)->toBe('accepted')
         ->and($operational->fresh()->is_cleared)->toBeFalse()
         ->and((float) $member->fresh()->cashAccount->balance)->toBe(350.0);
+});
+
+test('rollback unmatches an sms to bank link cleared after the as-of date', function () {
+    $member = rollbackWindowMember($this->accounting, 500);
+
+    $admin = User::create([
+        'name' => 'Rollback SMS Admin',
+        'email' => 'rollback-sms-bank@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $template = SmsImportTemplate::create([
+        'name' => 'Rollback SMS Template',
+        'bank_name' => 'SNB',
+        'sms_column' => 'message',
+        'has_header' => true,
+        'delimiter' => ',',
+        'amount_pattern' => '/SAR\s*(?P<amount>[\d,]+\.?\d*)/i',
+        'member_match_pattern' => '/Member[:\s]+(?P<member>M\d+)/',
+        'member_match_field' => 'member_number',
+        'credit_keywords' => ['credited'],
+        'debit_keywords' => ['debited'],
+        'is_default' => true,
+    ]);
+
+    $session = SmsImportSession::create([
+        'bank_name' => 'SNB',
+        'template_id' => $template->id,
+        'imported_by' => $admin->id,
+        'filename' => 'rollback-sms.csv',
+        'file_path' => 'sms-imports/rollback-sms.csv',
+        'status' => 'completed',
+    ]);
+
+    $sms = SmsTransaction::create([
+        'import_session_id' => $session->id,
+        'bank_name' => 'SNB',
+        'member_id' => $member->id,
+        'transaction_date' => '2026-02-10',
+        'amount' => 300,
+        'transaction_type' => 'credit',
+        'reference' => 'RB-SMS-BANK',
+        'raw_sms' => 'Rollback SMS bank link',
+        'is_duplicate' => false,
+    ]);
+
+    AccountingService::withoutMemberCashCollection(function () use ($sms, $member): void {
+        app(AccountingService::class)->postSmsTransactionToCash($sms, $member);
+    });
+
+    $bank = rollbackImportedBankLine([
+        'amount' => 300,
+        'transaction_date' => '2026-02-10',
+        'description' => 'SMS bank rollback import',
+    ]);
+
+    app(SmsBankClearingMatchService::class)->clearMatchPair($sms->fresh(), $bank);
+
+    expect($sms->fresh()->is_bank_cleared)->toBeTrue();
+
+    $report = $this->rollback->execute(Carbon::parse('2026-02-06'));
+
+    expect($report->bankMatches)->toBeGreaterThanOrEqual(1)
+        ->and($sms->fresh()->is_bank_cleared)->toBeFalse()
+        ->and($sms->fresh()->sms_clearance_match_group_id)->toBeNull()
+        ->and($bank->fresh()->sms_clearance_match_group_id)->toBeNull();
+});
+
+test('rollback unmatches an sms to ops link cleared after the as-of date', function () {
+    EvidenceChannelSettings::save(EvidenceChannelSettings::CHANNEL_SMS);
+
+    Account::create(['type' => 'bank', 'name' => 'Master Bank', 'balance' => 0, 'is_master' => true]);
+
+    BusinessDaySettings::saveFromForm('2026-02-05');
+    Carbon::setTestNow('2026-02-05 12:00:00');
+
+    $member = Member::create([
+        'member_number' => 'RW-SMS-OPS-'.uniqid(),
+        'name' => 'Rollback SMS Ops Member',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+    AccountingService::withoutMemberCashCollection(
+        fn () => $this->accounting->credit($member->cashAccount, 500, 'Seed cash'),
+    );
+
+    $posting = app(FundPostingService::class)->submit($member->fresh(), 300, '2026-02-05');
+    app(FundPostingService::class)->accept($posting);
+    $ops = $posting->fresh()->bankTransaction;
+
+    $admin = User::create([
+        'name' => 'Rollback SMS Ops Admin',
+        'email' => 'rollback-sms-ops@fund.test',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $template = SmsImportTemplate::create([
+        'name' => 'Rollback SMS Ops Template',
+        'bank_name' => 'SNB',
+        'sms_column' => 'message',
+        'has_header' => true,
+        'delimiter' => ',',
+        'amount_pattern' => '/SAR\s*(?P<amount>[\d,]+\.?\d*)/i',
+        'member_match_pattern' => '/Member[:\s]+(?P<member>M\d+)/',
+        'member_match_field' => 'member_number',
+        'credit_keywords' => ['credited'],
+        'debit_keywords' => ['debited'],
+        'is_default' => true,
+    ]);
+
+    $session = SmsImportSession::create([
+        'bank_name' => 'SNB',
+        'template_id' => $template->id,
+        'imported_by' => $admin->id,
+        'filename' => 'rollback-sms-ops.csv',
+        'file_path' => 'sms-imports/rollback-sms-ops.csv',
+        'status' => 'completed',
+    ]);
+
+    $sms = SmsTransaction::create([
+        'import_session_id' => $session->id,
+        'bank_name' => 'SNB',
+        'member_id' => $member->id,
+        'transaction_date' => '2026-02-05',
+        'amount' => 300,
+        'transaction_type' => 'credit',
+        'reference' => 'RB-SMS-OPS',
+        'raw_sms' => 'Rollback SMS ops link',
+        'is_duplicate' => false,
+    ]);
+
+    AccountingService::withoutMemberCashCollection(function () use ($sms, $member): void {
+        app(AccountingService::class)->postSmsTransactionToCash($sms, $member);
+    });
+
+    BusinessDaySettings::saveFromForm('2026-02-10');
+    Carbon::setTestNow('2026-02-10 12:00:00');
+
+    app(SmsOperationalClearingMatchService::class)->clearMatchPair($ops, $sms->fresh());
+
+    expect($sms->fresh()->is_ops_cleared)->toBeTrue()
+        ->and($ops->fresh()->is_cleared)->toBeTrue();
+
+    $report = $this->rollback->execute(Carbon::parse('2026-02-06'));
+
+    expect($report->bankMatches)->toBeGreaterThanOrEqual(1)
+        ->and($sms->fresh()->is_ops_cleared)->toBeFalse()
+        ->and($sms->fresh()->sms_ops_clearance_match_group_id)->toBeNull()
+        ->and($ops->fresh()->is_cleared)->toBeFalse()
+        ->and($ops->fresh()->sms_ops_clearance_match_group_id)->toBeNull()
+        ->and($posting->fresh()->status)->toBe('accepted');
 });
 
 test('rollback resumes a scheduler left paused by a previous window undo', function () {

@@ -217,3 +217,16 @@ test('row actions sit in a single Actions group with short labels', function () 
         Lang::formatUiLabel(__('Post member')),
     );
 });
+
+test('cleared record actions expose view and unmatch', function () {
+    $actions = BankClearingQueueActions::clearedRecordActions();
+
+    expect($actions)->toHaveCount(1)
+        ->and($actions[0])->toBeInstanceOf(ActionGroup::class);
+
+    $names = collect($actions[0]->getActions())
+        ->map(fn (Action $action): string => $action->getName())
+        ->all();
+
+    expect($names)->toContain('view', 'unmatchCleared');
+});

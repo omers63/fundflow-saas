@@ -15,6 +15,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\Transaction;
 use App\Services\BankAccountsInsightsService;
 use App\Services\BankClearingQueueService;
+use App\Support\EvidenceChannelSettings;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Resources\Pages\ListRecords;
@@ -53,6 +54,12 @@ class ListBankAccounts extends ListRecords
 
     public function mount(): void
     {
+        if (EvidenceChannelSettings::isSmsOnly()) {
+            $this->redirect(SmsClearingResource::getUrl('index'), navigate: true);
+
+            return;
+        }
+
         if (request()->string('channel')->toString() === 'sms') {
             $parameters = [];
 

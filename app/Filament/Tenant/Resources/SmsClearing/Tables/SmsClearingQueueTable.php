@@ -88,6 +88,7 @@ final class SmsClearingQueueTable
                     BulkActionGroup::make([
                         SmsClearingQueueActions::bulkAutoPost(),
                         SmsClearingQueueActions::bulkPostToCash(),
+                        SmsClearingQueueActions::bulkMatchManyToManyBank(),
                         SmsClearingQueueActions::deleteBulk(),
                     ]),
                     TableToolbar::refreshBulkAction(),

@@ -11,8 +11,10 @@ use App\Filament\Support\MoneyDisplay;
 use App\Filament\Tenant\Concerns\EmbedsAsAuditWorkspacePanel;
 use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\ReconciliationExceptions\Tables\ReconciliationExceptionsTable;
+use App\Filament\Tenant\Resources\SmsClearing\SmsClearingResource;
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
 use App\Filament\Tenant\Support\ReconciliationTabRegistry;
+use App\Filament\Tenant\Support\SmsClearingTabRegistry;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Jobs\Tenant\RunReconciliationJob;
 use App\Models\Tenant\FundAuditLog;
@@ -21,6 +23,8 @@ use App\Models\Tenant\ReconciliationSnapshot;
 use App\Services\BankClearingMatchService;
 use App\Services\ReconciliationPdfService;
 use App\Services\ReconciliationReportService;
+use App\Services\SmsBankClearingMatchService;
+use App\Services\SmsClearingQueueService;
 use App\Support\AutomationScheduleSettings;
 use App\Support\BatchPostingGate;
 use App\Support\ContributionPolicySettings;
@@ -389,11 +393,48 @@ class ReconciliationOverviewPage extends Page implements HasTable
         }
     }
 
+    public function getPendingSmsPipelineCount(): int
+    {
+        try {
+            $queue = app(SmsClearingQueueService::class);
+
+            return $queue->openCount() + $queue->postedUnlinkedBankCount();
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    public function getBankClearanceGroupCount(): int
+    {
+        try {
+            return app(BankClearingMatchService::class)->clearanceMatchGroupCount();
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    public function getSmsBankLinkGroupCount(): int
+    {
+        try {
+            return app(SmsBankClearingMatchService::class)->linkMatchGroupCount();
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
     public function getBankClearingUrl(): string
     {
         return BankAccountsResource::listUrl(
             BankClearingTabRegistry::TAB_QUEUE,
             queueFilter: BankClearingTabRegistry::FILTER_OPERATIONS,
+        );
+    }
+
+    public function getSmsClearingUrl(): string
+    {
+        return SmsClearingResource::listUrl(
+            SmsClearingTabRegistry::TAB_QUEUE,
+            queueFilter: SmsClearingTabRegistry::FILTER_UNMATCHED_BANK,
         );
     }
 
@@ -470,6 +511,9 @@ class ReconciliationOverviewPage extends Page implements HasTable
             $summary->openCriticalCount(),
             $summary->openWarningCount(),
             $this->getPendingBankClearanceCount(),
+            $this->getBankClearanceGroupCount(),
+            $this->getPendingSmsPipelineCount(),
+            $this->getSmsBankLinkGroupCount(),
             $this->getLastNightlyBatch(),
         );
     }

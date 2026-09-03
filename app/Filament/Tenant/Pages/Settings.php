@@ -26,6 +26,7 @@ use App\Support\CommunicationSettings;
 use App\Support\ContributionAmountSettings;
 use App\Support\ContributionPolicySettings;
 use App\Support\DefaultTenantSettings;
+use App\Support\EvidenceChannelSettings;
 use App\Support\FiscalSettings;
 use App\Support\ImportDateFormats;
 use App\Support\Lang;
@@ -212,6 +213,7 @@ class Settings extends Page implements HasForms
             'business_day_banner_admin' => BusinessDaySettings::showBannerOnAdmin(),
             'business_day_banner_member' => BusinessDaySettings::showBannerOnMember(),
             ...ReconciliationDigestSettings::allForForm(),
+            ...EvidenceChannelSettings::allForForm(),
             'fiscal_year_start_month' => $fiscal['fiscal_year_start_month'],
             'fiscal_year_start_day' => $fiscal['fiscal_year_start_day'],
             'fiscal_current_year_label' => $fiscal['current_fiscal_year_label']
@@ -931,6 +933,15 @@ class Settings extends Page implements HasForms
                     ]),
             ],
             'reconciliation::tab' => [
+                Section::make(__('Evidence channel'))
+                    ->description(__('Choose how treasury transfers are evidenced. SMS-only tenants skip bank statement CSV import and clear operational rows against SMS alerts.'))
+                    ->schema([
+                        Select::make('reconciliation_evidence_channel')
+                            ->label(__('Evidence channel'))
+                            ->options(EvidenceChannelSettings::options())
+                            ->required()
+                            ->native(false),
+                    ]),
                 Section::make(__('Digest notifications'))
                     ->description(__('Database alerts always go to admins when reconciliation digests are enabled under Collection → Automation notifications. Push can be turned off separately here.'))
                     ->schema([
@@ -941,6 +952,11 @@ class Settings extends Page implements HasForms
                     ]),
                 Section::make(__('Bank clearing match'))
                     ->description(__('Controls how Work queue Auto-match and Match pair operational rows with imported CSV lines. Amount tolerance is shared with reconciliation auto-resolve.'))
+                    ->visible(fn (Get $get): bool => in_array(
+                        (string) ($get('reconciliation_evidence_channel') ?? EvidenceChannelSettings::channel()),
+                        [EvidenceChannelSettings::CHANNEL_BANK_CSV, EvidenceChannelSettings::CHANNEL_BOTH],
+                        true,
+                    ))
                     ->columns(3)
                     ->schema([
                         TextInput::make('collection_recon_tolerance')
@@ -1414,6 +1430,7 @@ class Settings extends Page implements HasForms
         LocalizationSettings::saveFromForm($state);
         LedgerSettings::saveFromForm($state);
         ReconciliationDigestSettings::saveFromForm($state);
+        EvidenceChannelSettings::saveFromForm($state);
         BusinessDaySettings::saveFromForm($state);
         FiscalSettings::saveFromForm([
             'fiscal_year_start_month' => $state['fiscal_year_start_month'],

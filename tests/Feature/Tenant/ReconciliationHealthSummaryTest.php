@@ -30,6 +30,9 @@ test('health summary reports critical when open critical exceptions exist', func
         1,
         0,
         0,
+        0,
+        0,
+        0,
         null,
     );
 
@@ -54,6 +57,9 @@ test('health summary reports pass when snapshot passes and queue is clear', func
         0,
         0,
         0,
+        0,
+        0,
+        0,
         null,
     );
 
@@ -67,6 +73,9 @@ test('health summary reports attention when warnings exist without critical issu
         2,
         0,
         2,
+        0,
+        0,
+        0,
         0,
         null,
     );

@@ -13,6 +13,10 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
+use App\Models\Tenant\SmsClearanceMatchGroup;
+use App\Models\Tenant\SmsImportSession;
+use App\Models\Tenant\SmsOpsClearanceMatchGroup;
+use App\Models\Tenant\SmsTransaction;
 use App\Models\Tenant\Transaction;
 use App\Notifications\Tenant\ReconciliationExceptionRaisedNotification;
 use App\Services\Loans\LateFeeService;
@@ -21,6 +25,7 @@ use App\Support\BatchPostingGate;
 use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\ContributionPolicySettings;
+use App\Support\EvidenceChannelSettings;
 use App\Support\InstallmentCollectionStatus;
 use App\Support\LegacyImportedContribution;
 use Carbon\Carbon;
@@ -63,6 +68,8 @@ class ReconciliationService
         protected ReconciliationSuspenseService $suspense,
         protected ContributionCycleService $contributionCycles,
         protected BankClearingMatchService $bankClearing,
+        protected SmsBankClearingMatchService $smsBankMatching,
+        protected SmsOperationalClearingMatchService $smsOpsMatching,
         protected LoanLedgerService $loanLedger,
         protected LateFeeService $lateFees,
         protected ContributionCollectionCycleService $contributionCollection,
@@ -101,7 +108,16 @@ class ReconciliationService
         $raised += $this->reconcileContributions();
         $raised += $this->reconcileLoansAndEmi();
         $raised += $this->reconcileFundTiers();
-        $raised += $this->reconcileBankClearing();
+        if (EvidenceChannelSettings::usesBankCsv()) {
+            $raised += $this->reconcileBankClearing();
+        }
+        $raised += $this->reconcileSmsClearing();
+        if (EvidenceChannelSettings::usesBankCsv() && EvidenceChannelSettings::usesSms()) {
+            $raised += $this->reconcileSmsBankCrossChannel();
+        }
+        if (EvidenceChannelSettings::usesSms()) {
+            $raised += $this->reconcileSmsOperationalClearing();
+        }
         $raised += $this->reconcileLateFees();
         $raised += $this->reconcileMemberInvariants();
 
@@ -754,6 +770,45 @@ class ReconciliationService
             $count++;
         }
 
+        $groupHints = $this->bankClearing->scanGroupMatchHints();
+        $splittableImportedIds = array_fill_keys(
+            array_map('intval', $groupHints['hint_imported_ids'] ?? []),
+            true,
+        );
+
+        foreach ($groupHints['one_to_many'] as $row) {
+            $this->raiseOnce('RECON_SPLITTABLE_BANK_MATCH', 'bank_clearing', 'high', null, [
+                'direction' => 'one_to_many',
+                'uncleared_bank_transaction_id' => $row['uncleared_bank_transaction_id'],
+                'imported_bank_transaction_ids' => $row['imported_bank_transaction_ids'],
+            ]);
+            $count++;
+        }
+
+        foreach ($groupHints['many_to_one'] as $row) {
+            $this->raiseOnce('RECON_SPLITTABLE_BANK_MATCH', 'bank_clearing', 'high', null, [
+                'direction' => 'many_to_one',
+                'imported_bank_transaction_id' => $row['imported_bank_transaction_id'],
+                'uncleared_bank_transaction_ids' => $row['uncleared_bank_transaction_ids'],
+            ]);
+            $count++;
+
+            $splittableImportedIds[(int) $row['imported_bank_transaction_id']] = true;
+        }
+
+        foreach ($groupHints['many_to_many'] ?? [] as $row) {
+            $this->raiseOnce('RECON_SPLITTABLE_BANK_MATCH', 'bank_clearing', 'high', null, [
+                'direction' => 'many_to_many',
+                'uncleared_bank_transaction_ids' => $row['uncleared_bank_transaction_ids'],
+                'imported_bank_transaction_ids' => $row['imported_bank_transaction_ids'],
+            ]);
+            $count++;
+
+            foreach ($row['imported_bank_transaction_ids'] as $importedId) {
+                $splittableImportedIds[(int) $importedId] = true;
+            }
+        }
+
         $unmatchedImportedIds = array_values(array_unique(array_map('intval', $scan['unmatched_imported'])));
         $unmatchedImportedAmounts = BankTransaction::query()
             ->whereIn('id', $unmatchedImportedIds)
@@ -762,6 +817,10 @@ class ReconciliationService
             ->all();
 
         foreach ($unmatchedImportedIds as $importedId) {
+            if (isset($splittableImportedIds[$importedId])) {
+                continue;
+            }
+
             $this->raiseOnce('RECON_UNMATCHED_BANK_LINE', 'bank_clearing', 'high', $unmatchedImportedAmounts[$importedId] ?? null, [
                 'bank_transaction_id' => $importedId,
             ]);
@@ -825,9 +884,31 @@ class ReconciliationService
                 'fund_postings.amount as posting_amount',
                 'bank_transactions.id as bank_transaction_id',
                 'bank_transactions.amount as bank_amount',
+                'bank_transactions.bank_clearance_match_group_id as bank_clearance_match_group_id',
+                'bank_transactions.is_cleared as bank_is_cleared',
             ])
             ->whereRaw('ABS(fund_postings.amount - bank_transactions.amount) > ?', [$tolerance])
             ->get()
+            ->reject(function ($row) use ($tolerance): bool {
+                $groupId = $row->bank_clearance_match_group_id;
+
+                if ($groupId === null || ! (bool) $row->bank_is_cleared) {
+                    return false;
+                }
+
+                $members = BankTransaction::query()
+                    ->where('bank_clearance_match_group_id', $groupId)
+                    ->get();
+
+                $operational = $members->filter(
+                    fn (BankTransaction $member): bool => $this->bankClearing->isSyntheticOperationalStatement($member),
+                );
+                $imported = $members->reject(
+                    fn (BankTransaction $member): bool => $this->bankClearing->isSyntheticOperationalStatement($member),
+                );
+
+                return $this->bankClearing->groupAmountsMatch($operational, $imported, $tolerance);
+            })
             ->each(function ($row) use (&$count): void {
                 $postingAmount = (float) $row->posting_amount;
                 $bankAmount = (float) $row->bank_amount;
@@ -840,6 +921,357 @@ class ReconciliationService
             });
 
         return $count;
+    }
+
+    protected function reconcileSmsClearing(): int
+    {
+        $count = 0;
+        $staleDays = ContributionPolicySettings::stalePendingDays();
+        $staleCutoff = BusinessDay::now()->subDays($staleDays);
+
+        SmsTransaction::query()
+            ->whereNull('posted_at')
+            ->where('is_duplicate', false)
+            ->where(function ($query) use ($staleCutoff): void {
+                $query->where('created_at', '<', $staleCutoff)
+                    ->orWhere(function ($dateQuery) use ($staleCutoff): void {
+                        $dateQuery->whereNotNull('transaction_date')
+                            ->where('transaction_date', '<', $staleCutoff->toDateString());
+                    });
+            })
+            ->get(['id', 'amount', 'member_id'])
+            ->each(function (SmsTransaction $tx) use (&$count): void {
+                $this->raiseOnce('SMS_UNPOSTED_BACKLOG', 'sms_clearing', 'medium', (float) $tx->amount, [
+                    'sms_transaction_id' => $tx->id,
+                    'member_id' => $tx->member_id,
+                ]);
+                $count++;
+            });
+
+        SmsTransaction::query()
+            ->whereNull('posted_at')
+            ->whereNull('member_id')
+            ->where('is_duplicate', false)
+            ->where(function ($query) use ($staleCutoff): void {
+                $query->where('created_at', '<', $staleCutoff)
+                    ->orWhere(function ($dateQuery) use ($staleCutoff): void {
+                        $dateQuery->whereNotNull('transaction_date')
+                            ->where('transaction_date', '<', $staleCutoff->toDateString());
+                    });
+            })
+            ->get(['id', 'amount'])
+            ->each(function (SmsTransaction $tx) use (&$count): void {
+                $this->raiseOnce('SMS_MEMBER_UNMATCHED', 'sms_clearing', 'high', (float) $tx->amount, [
+                    'sms_transaction_id' => $tx->id,
+                ]);
+                $count++;
+            });
+
+        [, $integrityIssues] = app(ReconciliationReportService::class)->collectSmsTransactionPostingIntegrityIssues();
+
+        foreach ($integrityIssues as $issue) {
+            $this->raiseOnce('SMS_POSTED_WITHOUT_LEDGER', 'sms_clearing', 'critical', null, [
+                'sms_transaction_id' => (int) ($issue['sms_transaction_id'] ?? 0),
+                'member_id' => $issue['member_id'] ?? null,
+                'issue' => $issue['issue'] ?? null,
+            ]);
+            $count++;
+        }
+
+        SmsTransaction::query()
+            ->whereNull('posted_at')
+            ->where('is_duplicate', false)
+            ->select(['id', 'amount', 'transaction_date', 'bank_name'])
+            ->orderBy('id')
+            ->get()
+            ->groupBy(fn (SmsTransaction $tx): string => implode('|', [
+                (string) $tx->bank_name,
+                (string) $tx->transaction_date?->toDateString(),
+                number_format((float) $tx->amount, 2, '.', ''),
+            ]))
+            ->filter(fn ($group): bool => $group->count() >= 2)
+            ->each(function ($group) use (&$count): void {
+                $ids = $group->pluck('id')->map(fn (mixed $id): int => (int) $id)->all();
+
+                $this->raiseOnce('SMS_DUPLICATE_RISK', 'sms_clearing', 'medium', null, [
+                    'sms_transaction_ids' => $ids,
+                    'count' => count($ids),
+                ]);
+                $count++;
+            });
+
+        return $count;
+    }
+
+    protected function reconcileSmsBankCrossChannel(): int
+    {
+        if (! EvidenceChannelSettings::usesBankCsv() || ! EvidenceChannelSettings::usesSms()) {
+            return 0;
+        }
+
+        if (! $this->tenantUsesSmsChannel()) {
+            return 0;
+        }
+
+        $count = 0;
+        $staleDays = ContributionPolicySettings::stalePendingDays();
+        $staleCutoff = BusinessDay::now()->subDays($staleDays);
+        $tolerance = ContributionPolicySettings::reconTolerance();
+
+        $scan = $this->smsBankMatching->scanMatchExceptions();
+
+        foreach ($scan['ambiguous'] as $row) {
+            $this->raiseOnce('SMS_RECON_AMBIGUOUS_BANK_MATCH', 'sms_clearing', 'high', null, [
+                'sms_transaction_id' => $row['sms_transaction_id'],
+                'candidate_ids' => $row['candidate_ids'],
+            ]);
+            $count++;
+        }
+
+        $groupHints = $this->smsBankMatching->scanGroupMatchHints();
+        $splittableBankIds = array_fill_keys(
+            array_map('intval', $groupHints['hint_bank_ids'] ?? []),
+            true,
+        );
+        $splittableSmsIds = [];
+
+        foreach ($groupHints['one_to_many'] as $row) {
+            $this->raiseOnce('SMS_RECON_SPLITTABLE_BANK_MATCH', 'sms_clearing', 'high', null, [
+                'direction' => 'one_to_many',
+                'sms_transaction_id' => $row['sms_transaction_id'],
+                'bank_transaction_ids' => $row['bank_transaction_ids'],
+            ]);
+            $splittableSmsIds[(int) $row['sms_transaction_id']] = true;
+            $count++;
+        }
+
+        foreach ($groupHints['many_to_one'] as $row) {
+            $this->raiseOnce('SMS_RECON_SPLITTABLE_BANK_MATCH', 'sms_clearing', 'high', null, [
+                'direction' => 'many_to_one',
+                'bank_transaction_id' => $row['bank_transaction_id'],
+                'sms_transaction_ids' => $row['sms_transaction_ids'],
+            ]);
+            $splittableBankIds[(int) $row['bank_transaction_id']] = true;
+            $count++;
+        }
+
+        foreach ($groupHints['many_to_many'] ?? [] as $row) {
+            $this->raiseOnce('SMS_RECON_SPLITTABLE_BANK_MATCH', 'sms_clearing', 'high', null, [
+                'direction' => 'many_to_many',
+                'sms_transaction_ids' => $row['sms_transaction_ids'],
+                'bank_transaction_ids' => $row['bank_transaction_ids'],
+            ]);
+
+            foreach ($row['sms_transaction_ids'] as $smsId) {
+                $splittableSmsIds[(int) $smsId] = true;
+            }
+
+            foreach ($row['bank_transaction_ids'] as $bankId) {
+                $splittableBankIds[(int) $bankId] = true;
+            }
+
+            $count++;
+        }
+
+        foreach ($scan['unmatched_sms'] as $smsId) {
+            if (isset($splittableSmsIds[(int) $smsId])) {
+                continue;
+            }
+
+            $sms = SmsTransaction::query()->find($smsId);
+
+            if ($sms === null || $sms->posted_at === null || $sms->posted_at->gte($staleCutoff)) {
+                continue;
+            }
+
+            $this->raiseOnce('SMS_RECON_UNMATCHED_BANK_LINE', 'sms_clearing', 'high', (float) $sms->amount, [
+                'sms_transaction_id' => $sms->id,
+                'member_id' => $sms->member_id,
+            ]);
+            $count++;
+        }
+
+        $this->bankClearing
+            ->applyRealBankStatementLinesScope(BankTransaction::query())
+            ->whereNull('sms_clearance_match_group_id')
+            ->whereNull('duplicate_of_id')
+            ->where(function ($query) use ($staleCutoff): void {
+                $query->where('created_at', '<', $staleCutoff)
+                    ->orWhere('transaction_date', '<', $staleCutoff->toDateString());
+            })
+            ->get(['id', 'amount'])
+            ->each(function (BankTransaction $bank) use (&$count, $splittableBankIds): void {
+                if (isset($splittableBankIds[$bank->id])) {
+                    return;
+                }
+
+                $this->raiseOnce('BANK_RECON_UNMATCHED_SMS_LINE', 'bank_clearing', 'medium', (float) $bank->amount, [
+                    'bank_transaction_id' => $bank->id,
+                ]);
+                $count++;
+            });
+
+        SmsClearanceMatchGroup::query()
+            ->orderBy('id')
+            ->pluck('id')
+            ->each(function (int $groupId) use (&$count, $tolerance): void {
+                $smsRows = SmsTransaction::query()
+                    ->where('sms_clearance_match_group_id', $groupId)
+                    ->get();
+                $bankRows = BankTransaction::query()
+                    ->where('sms_clearance_match_group_id', $groupId)
+                    ->get();
+
+                if ($smsRows->isEmpty() || $bankRows->isEmpty()) {
+                    return;
+                }
+
+                if (! $this->smsBankMatching->groupAmountsMatch($smsRows, $bankRows, $tolerance)) {
+                    $this->raiseOnce('SMS_BANK_AMOUNT_MISMATCH', 'sms_clearing', 'high', null, [
+                        'sms_clearance_match_group_id' => $groupId,
+                        'sms_transaction_ids' => $smsRows->pluck('id')->all(),
+                        'bank_transaction_ids' => $bankRows->pluck('id')->all(),
+                    ]);
+                    $count++;
+
+                    return;
+                }
+
+                if ($smsRows->count() !== 1 || $bankRows->count() !== 1) {
+                    return;
+                }
+
+                $sms = $smsRows->first();
+                $bank = $bankRows->first();
+
+                if ($sms === null || $bank === null || ! $sms->isPosted()) {
+                    return;
+                }
+
+                $memberDrift = $bank->member_id !== null
+                    && $sms->member_id !== null
+                    && (int) $bank->member_id !== (int) $sms->member_id;
+
+                if ($memberDrift) {
+                    $this->raiseOnce('SMS_BANK_CROSS_POSTED_DRIFT', 'sms_clearing', 'high', null, [
+                        'sms_transaction_id' => $sms->id,
+                        'bank_transaction_id' => $bank->id,
+                        'sms_member_id' => $sms->member_id,
+                        'bank_member_id' => $bank->member_id,
+                    ]);
+                    $count++;
+                }
+            });
+
+        return $count;
+    }
+
+    protected function reconcileSmsOperationalClearing(): int
+    {
+        if (! EvidenceChannelSettings::usesSms()) {
+            return 0;
+        }
+
+        $count = 0;
+        $staleDays = ContributionPolicySettings::stalePendingDays();
+        $staleCutoff = BusinessDay::now()->subDays($staleDays);
+        $tolerance = ContributionPolicySettings::reconTolerance();
+        $scan = $this->smsOpsMatching->scanMatchExceptions();
+
+        foreach ($scan['ambiguous'] as $row) {
+            $this->raiseOnce('SMS_OPS_AMBIGUOUS_MATCH', 'sms_clearing', 'high', null, [
+                'sms_transaction_id' => $row['sms_transaction_id'],
+                'candidate_ids' => $row['candidate_ids'],
+            ]);
+            $count++;
+        }
+
+        foreach ($scan['unmatched_sms'] as $smsId) {
+            $sms = SmsTransaction::query()->find($smsId);
+
+            if ($sms === null || $sms->posted_at === null || $sms->posted_at->gte($staleCutoff)) {
+                continue;
+            }
+
+            $this->raiseOnce('SMS_OPS_UNMATCHED', 'sms_clearing', 'high', (float) $sms->amount, [
+                'sms_transaction_id' => $sms->id,
+                'member_id' => $sms->member_id,
+            ]);
+            $count++;
+        }
+
+        $this->bankClearing
+            ->applyPendingOperationalClearanceScope(BankTransaction::query())
+            ->whereNull('sms_ops_clearance_match_group_id')
+            ->where(function ($query) use ($staleCutoff): void {
+                $query->where('created_at', '<', $staleCutoff)
+                    ->orWhere('transaction_date', '<', $staleCutoff->toDateString());
+            })
+            ->get(['id', 'amount'])
+            ->each(function (BankTransaction $ops) use (&$count): void {
+                $this->raiseOnce('OPS_RECON_UNMATCHED_SMS', 'sms_clearing', 'high', (float) $ops->amount, [
+                    'operational_bank_transaction_id' => $ops->id,
+                ]);
+                $count++;
+            });
+
+        if (EvidenceChannelSettings::isSmsOnly()) {
+            FundPosting::query()
+                ->where('status', 'accepted')
+                ->whereNull('bank_transaction_id')
+                ->where('reviewed_at', '<', BusinessDay::now()->subDays(ContributionPolicySettings::cashDepositUnbankedDays()))
+                ->get(['id', 'member_id', 'amount'])
+                ->each(function (FundPosting $posting) use (&$count): void {
+                    $hasSmsEvidence = SmsTransaction::query()
+                        ->where('member_id', $posting->member_id)
+                        ->where('is_ops_cleared', true)
+                        ->where('is_duplicate', false)
+                        ->exists();
+
+                    if ($hasSmsEvidence) {
+                        return;
+                    }
+
+                    $this->raiseOnce('CASH_DEPOSIT_UNEVIDENCED', 'sms_clearing', 'medium', (float) $posting->amount, [
+                        'fund_posting_id' => $posting->id,
+                        'member_id' => $posting->member_id,
+                    ]);
+                    $count++;
+                });
+        }
+
+        SmsOpsClearanceMatchGroup::query()
+            ->orderBy('id')
+            ->pluck('id')
+            ->each(function (int $groupId) use (&$count, $tolerance): void {
+                $smsRows = SmsTransaction::query()
+                    ->where('sms_ops_clearance_match_group_id', $groupId)
+                    ->get();
+                $opsRows = BankTransaction::query()
+                    ->where('sms_ops_clearance_match_group_id', $groupId)
+                    ->get();
+
+                if ($smsRows->isEmpty() || $opsRows->isEmpty()) {
+                    return;
+                }
+
+                if (! $this->smsOpsMatching->groupAmountsMatch($opsRows, $smsRows, $tolerance)) {
+                    $this->raiseOnce('SMS_OPS_AMOUNT_MISMATCH', 'sms_clearing', 'high', null, [
+                        'sms_ops_clearance_match_group_id' => $groupId,
+                        'sms_transaction_ids' => $smsRows->pluck('id')->all(),
+                        'operational_bank_transaction_ids' => $opsRows->pluck('id')->all(),
+                    ]);
+                    $count++;
+                }
+            });
+
+        return $count;
+    }
+
+    protected function tenantUsesSmsChannel(): bool
+    {
+        return SmsTransaction::query()->where('is_duplicate', false)->exists()
+            || SmsImportSession::query()->exists();
     }
 
     protected function reconcileLateFees(): int
@@ -1115,6 +1547,66 @@ class ReconciliationService
 
         if ($allowLedgerMutations && $exception->exception_code === 'REPLACEMENT_PRIOR_TIER_NOT_REVERSED') {
             return $this->autoCorrectFeeTier($exception);
+        }
+
+        if (
+            $allowLedgerMutations && in_array($exception->exception_code, [
+                'SMS_RECON_UNMATCHED_BANK_LINE',
+                'SMS_RECON_AMBIGUOUS_BANK_MATCH',
+                'BANK_RECON_UNMATCHED_SMS_LINE',
+            ], true)
+        ) {
+            return $this->autoResolveSmsBankMatch($exception);
+        }
+
+        return false;
+    }
+
+    protected function autoResolveSmsBankMatch(ReconciliationException $exception): bool
+    {
+        if (
+            in_array($exception->exception_code, [
+                'SMS_RECON_UNMATCHED_BANK_LINE',
+                'SMS_RECON_AMBIGUOUS_BANK_MATCH',
+            ], true)
+        ) {
+            $smsId = (int) ($exception->affected_entities['sms_transaction_id'] ?? 0);
+            $sms = SmsTransaction::query()->find($smsId);
+
+            if ($sms === null || ! $this->smsBankMatching->isSmsMatchEligible($sms)) {
+                return false;
+            }
+
+            $candidates = $this->smsBankMatching->findManualBankCandidates($sms);
+
+            if ($candidates->count() !== 1) {
+                return false;
+            }
+
+            $this->smsBankMatching->clearMatchPair($sms, $candidates->first());
+            $this->resolveException($exception, __('Auto-linked SMS to unique bank import line'));
+
+            return true;
+        }
+
+        if ($exception->exception_code === 'BANK_RECON_UNMATCHED_SMS_LINE') {
+            $bankId = (int) ($exception->affected_entities['bank_transaction_id'] ?? 0);
+            $bank = BankTransaction::query()->find($bankId);
+
+            if ($bank === null || ! $this->smsBankMatching->isBankMatchEligible($bank)) {
+                return false;
+            }
+
+            $candidates = $this->smsBankMatching->findManualSmsCandidates($bank);
+
+            if ($candidates->count() !== 1) {
+                return false;
+            }
+
+            $this->smsBankMatching->clearMatchPair($candidates->first(), $bank);
+            $this->resolveException($exception, __('Auto-linked bank import line to unique SMS row'));
+
+            return true;
         }
 
         return false;

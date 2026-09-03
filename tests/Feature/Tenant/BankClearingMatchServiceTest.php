@@ -820,3 +820,154 @@ test('clearMatchGroup rejects unbalanced selections', function () {
     expect(fn () => $this->matching->clearMatchGroup(collect([$uncleared]), $importedLines))
         ->toThrow(InvalidArgumentException::class);
 });
+
+test('unmatchClearedGroup restores source model bank_transaction_id when it pointed at imported lines', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BM-FK',
+        'name' => 'FK Hygiene Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->fundPostings->submit($member, 3000, '2026-06-20');
+    $this->fundPostings->accept($posting);
+
+    $uncleared = $posting->bankTransaction->fresh();
+    $statement = BankStatement::create([
+        'filename' => 'fk-hygiene.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 3,
+        'imported_rows' => 3,
+        'duplicate_rows' => 0,
+    ]);
+
+    $importedLines = collect([1200, 900, 900])->map(function (int $amount, int $index) use ($statement) {
+        return BankTransaction::create([
+            'bank_statement_id' => $statement->id,
+            'transaction_date' => '2026-06-20',
+            'description' => "Split {$index}",
+            'amount' => $amount,
+            'status' => 'imported',
+            'hash' => md5("fk-hygiene-{$index}"),
+            'is_cleared' => false,
+        ]);
+    });
+
+    $this->matching->clearMatchGroup(collect([$uncleared]), $importedLines);
+
+    $anchorImported = $importedLines->first()->fresh();
+    $posting->update(['bank_transaction_id' => $anchorImported->id]);
+
+    $this->matching->unmatchClearedGroup($anchorImported);
+
+    expect($posting->fresh()->bank_transaction_id)->toBe($uncleared->fresh()->id)
+        ->and($importedLines->every(fn (BankTransaction $line): bool => ! $line->fresh()->is_cleared))->toBeTrue();
+});
+
+test('unmatchClearedRow reverses clearance from an operational group member', function () {
+    $memberA = Member::create([
+        'member_number' => 'MEM-BM-UM-A',
+        'name' => 'Unmatch Ops A',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $memberB = Member::create([
+        'member_number' => 'MEM-BM-UM-B',
+        'name' => 'Unmatch Ops B',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($memberA);
+    $this->accounting->createMemberAccounts($memberB);
+
+    $postingA = $this->fundPostings->submit($memberA, 1500, '2026-06-21');
+    $this->fundPostings->accept($postingA);
+    $postingB = $this->fundPostings->submit($memberB, 500, '2026-06-21');
+    $this->fundPostings->accept($postingB);
+
+    $operational = collect([
+        $postingA->bankTransaction->fresh(),
+        $postingB->bankTransaction->fresh(),
+    ]);
+
+    $statement = BankStatement::create([
+        'filename' => 'unmatch-row.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 1,
+        'imported_rows' => 1,
+        'duplicate_rows' => 0,
+    ]);
+
+    $imported = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-06-21',
+        'description' => 'Combined deposit',
+        'amount' => 2000,
+        'status' => 'imported',
+        'hash' => md5('unmatch-row'),
+        'is_cleared' => false,
+    ]);
+
+    $this->matching->clearMatchGroup($operational, collect([$imported]));
+
+    $this->matching->unmatchClearedRow($operational->last()->fresh());
+
+    expect($imported->fresh()->is_cleared)->toBeFalse()
+        ->and($operational->every(fn (BankTransaction $line): bool => ! $line->fresh()->is_cleared))->toBeTrue();
+});
+
+test('scanGroupMatchHints detects one operational row matching two imported lines', function () {
+    $member = Member::create([
+        'member_number' => 'MEM-BM-HINT',
+        'name' => 'Hint Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    $posting = $this->fundPostings->submit($member, 2000, '2026-06-25');
+    $this->fundPostings->accept($posting);
+
+    $uncleared = $posting->bankTransaction->fresh();
+    $statement = BankStatement::create([
+        'filename' => 'hint-scan.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 2,
+        'imported_rows' => 2,
+        'duplicate_rows' => 0,
+    ]);
+
+    BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-06-25',
+        'description' => 'Split A',
+        'amount' => 800,
+        'status' => 'imported',
+        'hash' => md5('hint-scan-a'),
+        'is_cleared' => false,
+    ]);
+
+    BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-06-25',
+        'description' => 'Split B',
+        'amount' => 1200,
+        'status' => 'imported',
+        'hash' => md5('hint-scan-b'),
+        'is_cleared' => false,
+    ]);
+
+    $hints = $this->matching->scanGroupMatchHints();
+
+    expect($hints['one_to_many'])->toHaveCount(1)
+        ->and($hints['one_to_many'][0]['uncleared_bank_transaction_id'])->toBe($uncleared->id)
+        ->and($hints['one_to_many'][0]['imported_bank_transaction_ids'])->toHaveCount(2);
+});

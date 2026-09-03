@@ -7,11 +7,20 @@ namespace App\Services;
 use App\Models\Tenant\Account;
 use App\Models\Tenant\BankClearanceMatchGroup;
 use App\Models\Tenant\BankTransaction;
+use App\Models\Tenant\CashOutRequest;
+use App\Models\Tenant\ExpenseDisbursement;
+use App\Models\Tenant\FeeDisbursement;
+use App\Models\Tenant\FundPosting;
+use App\Models\Tenant\InboundPayment;
+use App\Models\Tenant\InvestDisbursement;
+use App\Models\Tenant\InvestReturn;
+use App\Models\Tenant\OutboundPayment;
 use App\Models\Tenant\Transaction;
 use App\Support\BankStatementBuckets;
 use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
@@ -153,7 +162,13 @@ class BankClearingMatchService
         protected MasterInvestDisbursementService $investDisbursements,
         protected MasterInvestReturnService $investReturns,
         protected AccountingService $accounting,
+        protected FundAuditLogService $audit,
     ) {}
+
+    public function clearanceMatchGroupCount(): int
+    {
+        return BankClearanceMatchGroup::query()->count();
+    }
 
     /**
      * @return list<string>
@@ -219,6 +234,21 @@ class BankClearingMatchService
 
                 return $stats;
             }
+        }
+
+        $operational = $records
+            ->filter(fn (mixed $record): bool => $record instanceof BankTransaction && $this->isPendingClearance($record))
+            ->values();
+        $imported = $records
+            ->filter(fn (mixed $record): bool => $record instanceof BankTransaction && $this->isImportedMatchCandidate($record))
+            ->values();
+
+        if ($operational->count() >= 2 && $imported->count() >= 2 && $this->groupAmountsMatch($operational, $imported)) {
+            $this->clearMatchGroup($operational, $imported);
+            $stats['matched'] = $operational->count() + $imported->count();
+            $stats['manual_pair'] = true;
+
+            return $stats;
         }
 
         $tolerance = ContributionPolicySettings::reconTolerance();
@@ -415,33 +445,43 @@ class BankClearingMatchService
         }
 
         DB::transaction(function () use ($uncleared, $imported): void {
-            $skipMasterBankLedger = $uncleared->expense_disbursement_id !== null
-                || $uncleared->fee_disbursement_id !== null
-                || $uncleared->invest_disbursement_id !== null
-                || $uncleared->invest_return_id !== null;
+            $this->clearMatchPairWithoutAudit($uncleared, $imported);
 
-            if ($uncleared->cash_out_request_id) {
-                $this->cashOuts->clearTransaction($uncleared, $imported);
-            } elseif ($uncleared->fee_disbursement_id) {
-                $this->feeDisbursements->clearTransaction($uncleared, $imported);
-            } elseif ($uncleared->expense_disbursement_id) {
-                $this->expenseDisbursements->clearTransaction($uncleared, $imported);
-            } elseif ($uncleared->invest_return_id) {
-                $this->investReturns->clearTransaction($uncleared, $imported);
-            } elseif ($uncleared->invest_disbursement_id) {
-                $this->investDisbursements->clearTransaction($uncleared, $imported);
-            } else {
-                $this->fundPostings->clearTransaction($uncleared, $imported);
-            }
-
-            if (! $skipMasterBankLedger) {
-                $this->postMatchedImportToMasterBankLedger($imported->fresh());
-            }
+            $this->audit->log('BANK_MATCH_LINKED', 'bank_clearing', $imported->fresh(), $imported->fresh()->member, [
+                'operational_bank_transaction_id' => $uncleared->fresh()->id,
+                'imported_bank_transaction_id' => $imported->fresh()->id,
+            ]);
         });
     }
 
+    private function clearMatchPairWithoutAudit(BankTransaction $uncleared, BankTransaction $imported): void
+    {
+        $skipMasterBankLedger = $uncleared->expense_disbursement_id !== null
+            || $uncleared->fee_disbursement_id !== null
+            || $uncleared->invest_disbursement_id !== null
+            || $uncleared->invest_return_id !== null;
+
+        if ($uncleared->cash_out_request_id) {
+            $this->cashOuts->clearTransaction($uncleared, $imported);
+        } elseif ($uncleared->fee_disbursement_id) {
+            $this->feeDisbursements->clearTransaction($uncleared, $imported);
+        } elseif ($uncleared->expense_disbursement_id) {
+            $this->expenseDisbursements->clearTransaction($uncleared, $imported);
+        } elseif ($uncleared->invest_return_id) {
+            $this->investReturns->clearTransaction($uncleared, $imported);
+        } elseif ($uncleared->invest_disbursement_id) {
+            $this->investDisbursements->clearTransaction($uncleared, $imported);
+        } else {
+            $this->fundPostings->clearTransaction($uncleared, $imported);
+        }
+
+        if (! $skipMasterBankLedger) {
+            $this->postMatchedImportToMasterBankLedger($imported->fresh());
+        }
+    }
+
     /**
-     * Clear a 1:N or N:1 match group (one row on one side, multiple on the other).
+     * Clear a 1:N, N:1, or N:M match group.
      *
      * @param  Collection<int, BankTransaction>  $operational
      * @param  Collection<int, BankTransaction>  $imported
@@ -455,11 +495,16 @@ class BankClearingMatchService
             throw new InvalidArgumentException(__('Select at least one operational row and one bank import line.'));
         }
 
-        $oneOperational = $operational->count() === 1 && $imported->count() >= 2;
-        $oneImported = $imported->count() === 1 && $operational->count() >= 2;
+        $shape = match (true) {
+            $operational->count() === 1 && $imported->count() === 1 => null,
+            $operational->count() === 1 && $imported->count() >= 2 => 'one_to_many',
+            $imported->count() === 1 && $operational->count() >= 2 => 'many_to_one',
+            $operational->count() >= 2 && $imported->count() >= 2 => 'many_to_many',
+            default => null,
+        };
 
-        if (! $oneOperational && ! $oneImported) {
-            throw new InvalidArgumentException(__('Group match requires one row on one side and two or more on the other.'));
+        if ($shape === null) {
+            throw new InvalidArgumentException(__('Group match requires two or more rows on at least one side, or use Match for a single pair.'));
         }
 
         foreach ($operational as $row) {
@@ -478,17 +523,32 @@ class BankClearingMatchService
             throw new InvalidArgumentException(__('Selected amounts do not balance within tolerance.'));
         }
 
-        DB::transaction(function () use ($operational, $imported, $oneOperational): void {
+        DB::transaction(function () use ($operational, $imported, $shape): void {
             $clearedAt = BusinessDay::now();
             $group = BankClearanceMatchGroup::query()->create(['cleared_at' => $clearedAt]);
+
+            if ($shape === 'many_to_many') {
+                $this->clearManyToManyMatchGroup($operational, $imported, $group, $clearedAt);
+
+                $this->audit->log('BANK_MATCH_GROUP_LINKED', 'bank_clearing', $group, $imported->first()?->member, [
+                    'bank_clearance_match_group_id' => $group->id,
+                    'operational_bank_transaction_ids' => $operational->pluck('id')->all(),
+                    'imported_bank_transaction_ids' => $imported->pluck('id')->all(),
+                    'direction' => 'many_to_many',
+                ]);
+
+                return;
+            }
+
             $clearance = app(BankTransactionClearanceService::class);
+            $oneOperational = $shape === 'one_to_many';
 
             if ($oneOperational) {
                 $uncleared = $operational->first();
                 $firstImported = $imported->first();
                 $skipMasterBankLedger = $this->shouldSkipMasterBankLedgerForOperational($uncleared);
 
-                $this->clearMatchPair($uncleared, $firstImported);
+                $this->clearMatchPairWithoutAudit($uncleared, $firstImported);
 
                 $uncleared->refresh()->update(['bank_clearance_match_group_id' => $group->id]);
                 $anchorImported = $firstImported->fresh();
@@ -507,13 +567,20 @@ class BankClearingMatchService
                     }
                 }
 
+                $this->audit->log('BANK_MATCH_GROUP_LINKED', 'bank_clearing', $group, $anchorImported?->member, [
+                    'bank_clearance_match_group_id' => $group->id,
+                    'operational_bank_transaction_ids' => $operational->pluck('id')->all(),
+                    'imported_bank_transaction_ids' => $imported->pluck('id')->all(),
+                    'direction' => 'one_to_many',
+                ]);
+
                 return;
             }
 
             $importedLine = $imported->first();
             $firstOperational = $operational->first();
 
-            $this->clearMatchPair($firstOperational, $importedLine);
+            $this->clearMatchPairWithoutAudit($firstOperational, $importedLine);
 
             $importedLine->refresh()->update(['bank_clearance_match_group_id' => $group->id]);
             $firstOperational->refresh()->update(['bank_clearance_match_group_id' => $group->id]);
@@ -525,7 +592,49 @@ class BankClearingMatchService
                     $clearedAt,
                 );
             }
+
+            $this->audit->log('BANK_MATCH_GROUP_LINKED', 'bank_clearing', $group, $importedLine?->member, [
+                'bank_clearance_match_group_id' => $group->id,
+                'operational_bank_transaction_ids' => $operational->pluck('id')->all(),
+                'imported_bank_transaction_ids' => $imported->pluck('id')->all(),
+                'direction' => 'many_to_one',
+            ]);
         });
+    }
+
+    /**
+     * Undo clearance from any cleared row (imported line, operational line, or group member).
+     */
+    public function unmatchClearedRow(BankTransaction $record): void
+    {
+        if (! $record->is_cleared) {
+            throw new InvalidArgumentException(__('This bank line is not cleared.'));
+        }
+
+        if ($record->bank_clearance_match_group_id !== null) {
+            $this->unmatchClearedGroup($record);
+
+            return;
+        }
+
+        if ($this->isSyntheticOperationalStatement($record)) {
+            $imported = $this->findClearedImportedPartner($record);
+
+            if ($imported === null) {
+                $record->update([
+                    'is_cleared' => false,
+                    'cleared_at' => null,
+                ]);
+
+                return;
+            }
+
+            $this->unmatchClearedPair($imported);
+
+            return;
+        }
+
+        $this->unmatchClearedPair($record);
     }
 
     /**
@@ -581,6 +690,18 @@ class BankClearingMatchService
                     'bank_clearance_match_group_id' => null,
                 ]);
             }
+
+            if ($partner !== null && $this->isSyntheticOperationalStatement($partner)) {
+                $this->reconcileSourceBankTransactionLinksAfterUnmatch(
+                    collect([$partner]),
+                    collect([$imported]),
+                );
+            }
+
+            $this->audit->log('BANK_MATCH_UNMATCHED', 'bank_clearing', $imported->fresh(), $imported->fresh()->member, [
+                'operational_bank_transaction_id' => $partner?->id,
+                'imported_bank_transaction_id' => $imported->fresh()->id,
+            ]);
         });
     }
 
@@ -605,7 +726,12 @@ class BankClearingMatchService
             throw new InvalidArgumentException(__('This match group could not be found.'));
         }
 
-        DB::transaction(function () use ($members): void {
+        DB::transaction(function () use ($members, $groupId): void {
+            $this->audit->log('BANK_MATCH_UNMATCHED', 'bank_clearing', BankClearanceMatchGroup::query()->find($groupId), null, [
+                'bank_clearance_match_group_id' => $groupId,
+                'bank_transaction_ids' => $members->pluck('id')->all(),
+            ]);
+
             $importedLines = $members->filter(
                 fn (BankTransaction $row): bool => ! $this->isSyntheticOperationalStatement($row),
             );
@@ -650,7 +776,113 @@ class BankClearingMatchService
                     'bank_clearance_match_group_id' => null,
                 ]);
             }
+
+            $this->reconcileSourceBankTransactionLinksAfterUnmatch($operationalLines, $importedLines);
         });
+    }
+
+    public function findClearedImportedPartner(BankTransaction $operational): ?BankTransaction
+    {
+        if (! $this->isSyntheticOperationalStatement($operational)) {
+            return null;
+        }
+
+        return BankTransaction::query()
+            ->with('bankStatement')
+            ->where('id', '!=', $operational->id)
+            ->where('is_cleared', true)
+            ->where(function (Builder $query) use ($operational): void {
+                foreach ([
+                    'fund_posting_id',
+                    'cash_out_request_id',
+                    'membership_application_id',
+                    'expense_disbursement_id',
+                    'fee_disbursement_id',
+                    'invest_disbursement_id',
+                    'invest_return_id',
+                ] as $column) {
+                    $value = $operational->getAttribute($column);
+
+                    if ($value !== null) {
+                        $query->orWhere($column, $value);
+                    }
+                }
+            })
+            ->get()
+            ->first(fn (BankTransaction $candidate): bool => ! $this->isSyntheticOperationalStatement($candidate));
+    }
+
+    /**
+     * @param  Collection<int, BankTransaction>  $operationalLines
+     * @param  Collection<int, BankTransaction>  $importedLines
+     */
+    private function reconcileSourceBankTransactionLinksAfterUnmatch(
+        Collection $operationalLines,
+        Collection $importedLines,
+    ): void {
+        if ($importedLines->isEmpty()) {
+            return;
+        }
+
+        $importedIds = $importedLines->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->all();
+
+        $sourceLinkColumns = [
+            'fund_posting_id' => FundPosting::class,
+            'cash_out_request_id' => CashOutRequest::class,
+            'expense_disbursement_id' => ExpenseDisbursement::class,
+            'fee_disbursement_id' => FeeDisbursement::class,
+            'invest_disbursement_id' => InvestDisbursement::class,
+            'invest_return_id' => InvestReturn::class,
+        ];
+
+        foreach ($operationalLines as $operational) {
+            foreach ($sourceLinkColumns as $column => $modelClass) {
+                $sourceId = $operational->getAttribute($column);
+
+                if ($sourceId === null) {
+                    continue;
+                }
+
+                /** @var FundPosting|CashOutRequest|ExpenseDisbursement|FeeDisbursement|InvestDisbursement|InvestReturn|null $source */
+                $source = $modelClass::query()->find($sourceId);
+
+                if ($source === null || ! isset($source->bank_transaction_id)) {
+                    continue;
+                }
+
+                if (in_array((int) $source->bank_transaction_id, $importedIds, true)) {
+                    $source->update(['bank_transaction_id' => $operational->id]);
+                }
+            }
+        }
+
+        foreach ([InboundPayment::class, OutboundPayment::class] as $paymentModel) {
+            $paymentModel::query()
+                ->whereIn('bank_transaction_id', $importedIds)
+                ->get()
+                ->each(function (InboundPayment|OutboundPayment $payment) use ($operationalLines, $sourceLinkColumns): void {
+                    foreach ($operationalLines as $operational) {
+                        foreach ($sourceLinkColumns as $column => $modelClass) {
+                            $sourceId = $operational->getAttribute($column);
+
+                            if ($sourceId === null) {
+                                continue;
+                            }
+
+                            if (
+                                $payment->source_type === (new $modelClass)->getMorphClass()
+                                && (int) $payment->source_id === (int) $sourceId
+                            ) {
+                                $payment->update(['bank_transaction_id' => $operational->id]);
+
+                                return;
+                            }
+                        }
+                    }
+                });
+        }
     }
 
     private function clearedPartnerFor(BankTransaction $imported): ?BankTransaction
@@ -854,6 +1086,274 @@ class BankClearingMatchService
             'ambiguous' => $ambiguous,
             'unmatched_imported' => $unmatchedImported,
         ];
+    }
+
+    /**
+     * Detect 1→N / N→1 sum hints for manual group matching (pairs and triples only).
+     *
+     * @return array{
+     *     one_to_many: list<array{uncleared_bank_transaction_id: int, imported_bank_transaction_ids: list<int>}>,
+     *     many_to_one: list<array{imported_bank_transaction_id: int, uncleared_bank_transaction_ids: list<int>}>,
+     *     many_to_many: list<array{uncleared_bank_transaction_ids: list<int>, imported_bank_transaction_ids: list<int>}>,
+     * }
+     */
+    public function scanGroupMatchHints(): array
+    {
+        $tolerance = ContributionPolicySettings::reconTolerance();
+        $oneToMany = [];
+        $manyToOne = [];
+        $manyToMany = [];
+        $importedHintIds = [];
+        $operationalHintIds = [];
+
+        $operationalRows = BankTransaction::query()
+            ->uncleared()
+            ->where(function ($query): void {
+                $query->whereNotNull('fund_posting_id')
+                    ->orWhereNotNull('cash_out_request_id')
+                    ->orWhereNotNull('expense_disbursement_id')
+                    ->orWhereNotNull('fee_disbursement_id')
+                    ->orWhereNotNull('invest_disbursement_id')
+                    ->orWhereNotNull('invest_return_id')
+                    ->orWhereNotNull('membership_application_id');
+            })
+            ->whereHas('bankStatement', function (Builder $statementQuery): void {
+                $statementQuery->whereIn('filename', BankStatementBuckets::OPERATIONAL_CLEARANCE);
+            })
+            ->get();
+
+        foreach ($operationalRows as $operational) {
+            if ($this->findImportedCandidates($operational, $tolerance)->count() === 1) {
+                continue;
+            }
+
+            $candidates = $this->findGroupMatchImportedCandidates($operational);
+
+            if ($candidates->count() < 2) {
+                continue;
+            }
+
+            $subset = $this->findBalancingSubset($candidates, (float) $operational->amount, $tolerance);
+
+            if ($subset === null) {
+                continue;
+            }
+
+            $oneToMany[] = [
+                'uncleared_bank_transaction_id' => $operational->id,
+                'imported_bank_transaction_ids' => $subset,
+            ];
+
+            $operationalHintIds[(int) $operational->id] = true;
+
+            foreach ($subset as $importedId) {
+                $importedHintIds[(int) $importedId] = true;
+            }
+        }
+
+        $importedLines = $this->bankStatementMatchTargetQuery()->get();
+
+        foreach ($importedLines as $imported) {
+            if ($this->findUnclearedCandidates($imported, $tolerance)->count() === 1) {
+                continue;
+            }
+
+            $candidates = $this->findGroupMatchOperationalCandidates($imported);
+
+            if ($candidates->count() < 2) {
+                continue;
+            }
+
+            $subset = $this->findBalancingSubset($candidates, (float) $imported->amount, $tolerance);
+
+            if ($subset === null) {
+                continue;
+            }
+
+            $manyToOne[] = [
+                'imported_bank_transaction_id' => $imported->id,
+                'uncleared_bank_transaction_ids' => $subset,
+            ];
+
+            $importedHintIds[(int) $imported->id] = true;
+
+            foreach ($subset as $operationalId) {
+                $operationalHintIds[(int) $operationalId] = true;
+            }
+        }
+
+        $operationalItems = $operationalRows
+            ->reject(fn (BankTransaction $row): bool => isset($operationalHintIds[(int) $row->id]))
+            ->map(fn (BankTransaction $transaction): array => [
+                'id' => $transaction->id,
+                'amount' => (float) $transaction->amount,
+            ])
+            ->values()
+            ->all();
+
+        $importedItems = $importedLines
+            ->reject(fn (BankTransaction $row): bool => isset($importedHintIds[(int) $row->id]))
+            ->map(fn (BankTransaction $transaction): array => [
+                'id' => $transaction->id,
+                'amount' => (float) $transaction->amount,
+            ])
+            ->values()
+            ->all();
+
+        foreach ($this->findManyToManySubsetHints($operationalItems, $importedItems, $tolerance) as $hint) {
+            $manyToMany[] = $hint;
+
+            foreach ($hint['uncleared_bank_transaction_ids'] as $operationalId) {
+                $operationalHintIds[(int) $operationalId] = true;
+            }
+
+            foreach ($hint['imported_bank_transaction_ids'] as $importedId) {
+                $importedHintIds[(int) $importedId] = true;
+            }
+        }
+
+        return [
+            'one_to_many' => $oneToMany,
+            'many_to_one' => $manyToOne,
+            'many_to_many' => $manyToMany,
+            'hint_imported_ids' => array_keys($importedHintIds),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, BankTransaction>  $operational
+     * @param  Collection<int, BankTransaction>  $imported
+     */
+    private function clearManyToManyMatchGroup(
+        Collection $operational,
+        Collection $imported,
+        BankClearanceMatchGroup $group,
+        CarbonInterface $clearedAt,
+    ): void {
+        $clearance = app(BankTransactionClearanceService::class);
+        $pairCount = min($operational->count(), $imported->count());
+
+        for ($index = 0; $index < $pairCount; $index++) {
+            $ops = $operational[$index];
+            $import = $imported[$index];
+
+            $this->clearMatchPairWithoutAudit($ops, $import);
+
+            $ops->fresh()->update(['bank_clearance_match_group_id' => $group->id]);
+            $import->fresh()->update(['bank_clearance_match_group_id' => $group->id]);
+        }
+
+        foreach ($operational->slice($pairCount) as $extraOperational) {
+            $clearance->markOperationalClearedInGroup($extraOperational, $group->id, $clearedAt);
+        }
+
+        $anchorImported = $imported->first()?->fresh();
+        $skipMasterBankLedger = $operational->first() !== null
+            && $this->shouldSkipMasterBankLedgerForOperational($operational->first());
+
+        foreach ($imported->slice($pairCount) as $extraImported) {
+            if ($anchorImported !== null) {
+                $clearance->markImportedClearedInGroup(
+                    $extraImported,
+                    $anchorImported,
+                    $group->id,
+                    $clearedAt,
+                );
+            }
+
+            if (! $skipMasterBankLedger) {
+                $this->postMatchedImportToMasterBankLedger($extraImported->fresh());
+            }
+        }
+    }
+
+    /**
+     * @param  list<array{id: int, amount: float}>  $leftItems
+     * @param  list<array{id: int, amount: float}>  $rightItems
+     * @return list<array{uncleared_bank_transaction_ids: list<int>, imported_bank_transaction_ids: list<int>}>
+     */
+    private function findManyToManySubsetHints(array $leftItems, array $rightItems, float $tolerance): array
+    {
+        $hints = [];
+        $leftCount = count($leftItems);
+
+        for ($leftA = 0; $leftA < $leftCount; $leftA++) {
+            for ($leftB = $leftA + 1; $leftB < $leftCount; $leftB++) {
+                $leftSum = $leftItems[$leftA]['amount'] + $leftItems[$leftB]['amount'];
+                $leftIds = [(int) $leftItems[$leftA]['id'], (int) $leftItems[$leftB]['id']];
+                $rightCount = count($rightItems);
+
+                for ($rightA = 0; $rightA < $rightCount; $rightA++) {
+                    for ($rightB = $rightA + 1; $rightB < $rightCount; $rightB++) {
+                        $rightSum = $rightItems[$rightA]['amount'] + $rightItems[$rightB]['amount'];
+
+                        if (abs($leftSum - $rightSum) > $tolerance) {
+                            continue;
+                        }
+
+                        $hints[] = [
+                            'uncleared_bank_transaction_ids' => $leftIds,
+                            'imported_bank_transaction_ids' => [
+                                (int) $rightItems[$rightA]['id'],
+                                (int) $rightItems[$rightB]['id'],
+                            ],
+                        ];
+                    }
+                }
+            }
+        }
+
+        return $hints;
+    }
+
+    /**
+     * @param  EloquentCollection<int, BankTransaction>  $candidates
+     * @return list<int>|null
+     */
+    private function findBalancingSubset(
+        EloquentCollection $candidates,
+        float $target,
+        float $tolerance,
+        int $maxCandidates = 15,
+    ): ?array {
+        $items = $candidates
+            ->take($maxCandidates)
+            ->values()
+            ->map(fn (BankTransaction $transaction): array => [
+                'id' => $transaction->id,
+                'amount' => (float) $transaction->amount,
+            ])
+            ->all();
+
+        $count = count($items);
+
+        for ($i = 0; $i < $count; $i++) {
+            for ($j = $i + 1; $j < $count; $j++) {
+                $sum = $items[$i]['amount'] + $items[$j]['amount'];
+
+                if (abs($sum - $target) <= $tolerance) {
+                    return [(int) $items[$i]['id'], (int) $items[$j]['id']];
+                }
+            }
+        }
+
+        for ($i = 0; $i < $count; $i++) {
+            for ($j = $i + 1; $j < $count; $j++) {
+                for ($k = $j + 1; $k < $count; $k++) {
+                    $sum = $items[$i]['amount'] + $items[$j]['amount'] + $items[$k]['amount'];
+
+                    if (abs($sum - $target) <= $tolerance) {
+                        return [
+                            (int) $items[$i]['id'],
+                            (int) $items[$j]['id'],
+                            (int) $items[$k]['id'],
+                        ];
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Support\BankTransactionWorkflow;
+use App\Support\EvidenceChannelSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -78,6 +79,10 @@ final class BankImportPostAsService
         ?int $memberId = null,
         ?string $transactionDate = null,
     ): void {
+        if (! EvidenceChannelSettings::usesBankCsv()) {
+            throw new InvalidArgumentException(__('Bank statement post-as is disabled for this tenant\'s evidence channel.'));
+        }
+
         if (! self::canPostAs($imported)) {
             throw new InvalidArgumentException(__('This statement line cannot be posted as an operation.'));
         }

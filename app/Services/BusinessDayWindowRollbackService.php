@@ -38,6 +38,7 @@ use App\Support\ContributionCollectionStatus;
 use App\Support\InstallmentCollectionStatus;
 use App\Support\LoanRepaymentNote;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -87,6 +88,8 @@ final class BusinessDayWindowRollbackService
         private LoanLedgerService $loanLedger,
         private LoanGuarantorTransferService $guarantorTransfers,
         private BankClearingMatchService $bankMatching,
+        private SmsBankClearingMatchService $smsBankMatching,
+        private SmsOperationalClearingMatchService $smsOpsMatching,
         private FundAuditLogService $audit,
         private AutomationSchedulerGate $scheduler,
         private LoanFreezeScheduleService $freezeSchedules,
@@ -753,8 +756,38 @@ final class BusinessDayWindowRollbackService
 
         return $matched
             ->concat($openFileLines)
+            ->concat($this->smsBankMatchesInWindow($cutoff))
+            ->concat($this->smsOpsMatchesInWindow($cutoff))
             ->unique('id')
             ->values();
+    }
+
+    /**
+     * @return Collection<int, BankTransaction>
+     */
+    private function smsBankMatchesInWindow(Carbon $cutoff): Collection
+    {
+        return BankTransaction::query()
+            ->with(['bankStatement', 'member'])
+            ->whereNotNull('sms_clearance_match_group_id')
+            ->whereHas('smsClearanceMatchGroup', function (Builder $query) use ($cutoff): void {
+                $query->where('cleared_at', '>', $cutoff);
+            })
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, BankTransaction>
+     */
+    private function smsOpsMatchesInWindow(Carbon $cutoff): Collection
+    {
+        return BankTransaction::query()
+            ->with(['bankStatement', 'member'])
+            ->whereNotNull('sms_ops_clearance_match_group_id')
+            ->whereHas('smsOpsClearanceMatchGroup', function (Builder $query) use ($cutoff): void {
+                $query->where('cleared_at', '>', $cutoff);
+            })
+            ->get();
     }
 
     /**
@@ -1145,6 +1178,19 @@ final class BusinessDayWindowRollbackService
         $line = $line->fresh() ?? $line;
         $reversed = 0;
 
+        if ($line->sms_ops_clearance_match_group_id !== null) {
+            $this->smsOpsMatching->unmatchClearedGroup($line);
+
+            return 0;
+        }
+
+        if ($line->sms_clearance_match_group_id !== null) {
+            $this->smsBankMatching->unmatchClearedGroup($line);
+            $this->ignoreImportedBankLineAfterCutoff($line->fresh() ?? $line, $cutoff);
+
+            return 0;
+        }
+
         if ($this->isBankFilePosting($line)) {
             $reversed = $this->reverseBankFilePosting($line);
         } else {
@@ -1243,6 +1289,18 @@ final class BusinessDayWindowRollbackService
     private function unmatchIfCleared(BankTransaction $line): void
     {
         $line = $line->fresh() ?? $line;
+
+        if ($line->sms_ops_clearance_match_group_id !== null) {
+            $this->smsOpsMatching->unmatchClearedGroup($line);
+
+            return;
+        }
+
+        if ($line->sms_clearance_match_group_id !== null) {
+            $this->smsBankMatching->unmatchClearedGroup($line);
+
+            return;
+        }
 
         if (! $line->is_cleared) {
             return;

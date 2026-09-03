@@ -7,6 +7,7 @@ use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Support\BankTransactionWorkflow;
 use App\Support\BusinessDay;
+use App\Support\EvidenceChannelSettings;
 use Carbon\Carbon;
 use DateTimeInterface;
 use Illuminate\Support\Collection;
@@ -30,6 +31,10 @@ class FundFlowService
      */
     public function mirrorToCash(Collection|array $bankTransactionIds, ?DateTimeInterface $forceTransactedAt = null): int
     {
+        if (! EvidenceChannelSettings::usesBankCsv()) {
+            throw new InvalidArgumentException(__('Bank statement import is disabled for this tenant\'s evidence channel.'));
+        }
+
         $masterCash = Account::masterCash();
         $masterBank = Account::masterBank();
         $mirrored = 0;
@@ -112,6 +117,10 @@ class FundFlowService
         Member $member,
         ?DateTimeInterface $transactedAt = null,
     ): void {
+        if (! EvidenceChannelSettings::usesBankCsv()) {
+            throw new InvalidArgumentException(__('Bank statement posting is disabled for this tenant\'s evidence channel.'));
+        }
+
         if (! BankTransactionWorkflow::canPostToMember($bankTransaction)) {
             throw new InvalidArgumentException(__('This statement line is for bank matching only; posting was already recorded via the deposit or cash-out request.'));
         }

@@ -6,15 +6,20 @@ namespace App\Filament\Support;
 
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\ReconciliationException;
+use App\Models\Tenant\SmsTransaction;
 use App\Models\Tenant\User;
 use App\Services\MemberInvariantDiagnosticsService;
 use App\Services\ReconciliationResolutionService;
+use App\Services\SmsBankClearingMatchService;
+use App\Services\SmsOperationalClearingMatchService;
 use App\Support\Lang;
 use App\Support\Reconciliation\ReconciliationExceptionPresenter;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -108,6 +113,12 @@ final class ReconciliationExceptionActions
     {
         return [
             self::resolveAmbiguousBankMatchAction(),
+            self::resolveSplittableBankMatchAction(),
+            self::resolveSmsBankMatchAction(),
+            self::resolveSmsBankMatchGroupAction(),
+            self::resolveSmsOpsMatchAction(),
+            self::assignMemberAndPostSmsAction(),
+            self::reverseSmsPostAction(),
             self::postEmiOverpaymentRefundAction(),
             self::acceptOverrideAction(),
             self::resolveAction(),
@@ -668,6 +679,500 @@ final class ReconciliationExceptionActions
                         (string) $data['notes'],
                     );
                     Notification::make()->title(__('Bank match cleared'))->success()->send();
+                } catch (\InvalidArgumentException $e) {
+                    ActionModalFailure::present($action, $e->getMessage());
+                }
+            });
+    }
+
+    public static function resolveSplittableBankMatchAction(): Action
+    {
+        return Action::make('resolveSplittableBankMatch')
+            ->label(__('Resolve group match'))
+            ->icon('heroicon-o-squares-plus')
+            ->visible(fn (ReconciliationException $record): bool => self::isActionable($record)
+                && $record->exception_code === 'RECON_SPLITTABLE_BANK_MATCH')
+            ->schema([
+                Hidden::make('direction')
+                    ->default(fn (ReconciliationException $record): ?string => $record->affected_entities['direction'] ?? null),
+                CheckboxList::make('imported_bank_transaction_ids')
+                    ->label(__('Bank import lines'))
+                    ->options(function (ReconciliationException $record): array {
+                        $ids = $record->affected_entities['imported_bank_transaction_ids'] ?? [];
+
+                        if (($record->affected_entities['direction'] ?? null) === 'many_to_one') {
+                            $anchor = (int) ($record->affected_entities['imported_bank_transaction_id'] ?? 0);
+                            $ids = $anchor > 0 ? [$anchor] : [];
+                        }
+
+                        if (! is_array($ids) || $ids === []) {
+                            return [];
+                        }
+
+                        return BankTransaction::query()
+                            ->whereIn('id', $ids)
+                            ->get()
+                            ->mapWithKeys(fn (BankTransaction $txn): array => [
+                                $txn->id => __(':id — :amount (:date)', [
+                                    'id' => $txn->id,
+                                    'amount' => number_format((float) $txn->amount, 2),
+                                    'date' => $txn->transaction_date?->format('Y-m-d') ?? '—',
+                                ]),
+                            ])
+                            ->all();
+                    })
+                    ->default(fn (ReconciliationException $record): array => (array) (
+                        ($record->affected_entities['direction'] ?? null) === 'many_to_one'
+                        ? [(int) ($record->affected_entities['imported_bank_transaction_id'] ?? 0)]
+                        : ($record->affected_entities['imported_bank_transaction_ids'] ?? [])
+                    ))
+                    ->required()
+                    ->columns(1),
+                CheckboxList::make('uncleared_bank_transaction_ids')
+                    ->label(__('Operational rows'))
+                    ->options(function (ReconciliationException $record): array {
+                        $ids = $record->affected_entities['uncleared_bank_transaction_ids'] ?? [];
+
+                        if (($record->affected_entities['direction'] ?? null) === 'one_to_many') {
+                            $anchor = (int) ($record->affected_entities['uncleared_bank_transaction_id'] ?? 0);
+                            $ids = $anchor > 0 ? [$anchor] : [];
+                        }
+
+                        if (! is_array($ids) || $ids === []) {
+                            return [];
+                        }
+
+                        return BankTransaction::query()
+                            ->whereIn('id', $ids)
+                            ->get()
+                            ->mapWithKeys(fn (BankTransaction $txn): array => [
+                                $txn->id => __(':id — :amount (:date)', [
+                                    'id' => $txn->id,
+                                    'amount' => number_format((float) $txn->amount, 2),
+                                    'date' => $txn->transaction_date?->format('Y-m-d') ?? '—',
+                                ]),
+                            ])
+                            ->all();
+                    })
+                    ->default(fn (ReconciliationException $record): array => (array) (
+                        ($record->affected_entities['direction'] ?? null) === 'one_to_many'
+                        ? [(int) ($record->affected_entities['uncleared_bank_transaction_id'] ?? 0)]
+                        : ($record->affected_entities['uncleared_bank_transaction_ids'] ?? [])
+                    ))
+                    ->required()
+                    ->columns(1),
+                Textarea::make('notes')
+                    ->label(__('Resolution notes'))
+                    ->required()
+                    ->rows(3),
+            ])
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
+                try {
+                    $importedIds = array_values(array_filter(array_map(
+                        'intval',
+                        (array) ($data['imported_bank_transaction_ids'] ?? []),
+                    )));
+                    $operationalIds = array_values(array_filter(array_map(
+                        'intval',
+                        (array) ($data['uncleared_bank_transaction_ids'] ?? []),
+                    )));
+
+                    $resolver->resolveSplittableBankMatch(
+                        $record,
+                        $importedIds,
+                        $operationalIds,
+                        (string) $data['notes'],
+                    );
+                    Notification::make()->title(__('Bank group match cleared'))->success()->send();
+                } catch (\InvalidArgumentException $e) {
+                    ActionModalFailure::present($action, $e->getMessage());
+                }
+            });
+    }
+
+    public static function resolveSmsBankMatchAction(): Action
+    {
+        return Action::make('resolveSmsBankMatch')
+            ->label(__('Resolve SMS bank match'))
+            ->icon('heroicon-o-link')
+            ->visible(fn (ReconciliationException $record): bool => self::isActionable($record)
+                && in_array($record->exception_code, [
+                    'SMS_RECON_AMBIGUOUS_BANK_MATCH',
+                    'SMS_RECON_UNMATCHED_BANK_LINE',
+                    'BANK_RECON_UNMATCHED_SMS_LINE',
+                ], true))
+            ->schema([
+                TextInput::make('sms_transaction_id')
+                    ->label(__('SMS row ID'))
+                    ->numeric()
+                    ->required()
+                    ->default(fn (ReconciliationException $record): ?int => isset($record->affected_entities['sms_transaction_id'])
+                        ? (int) $record->affected_entities['sms_transaction_id']
+                        : null)
+                    ->visible(fn (ReconciliationException $record): bool => $record->exception_code !== 'BANK_RECON_UNMATCHED_SMS_LINE'),
+                Select::make('bank_transaction_id')
+                    ->label(__('Bank import line'))
+                    ->options(function (ReconciliationException $record): array {
+                        if ($record->exception_code === 'SMS_RECON_UNMATCHED_BANK_LINE') {
+                            $smsId = (int) ($record->affected_entities['sms_transaction_id'] ?? 0);
+                            $sms = SmsTransaction::query()->find($smsId);
+
+                            if ($sms === null) {
+                                return [];
+                            }
+
+                            return app(SmsBankClearingMatchService::class)
+                                ->findManualBankCandidates($sms)
+                                ->mapWithKeys(fn (BankTransaction $txn): array => [
+                                    $txn->id => __(':id — :amount (:date)', [
+                                        'id' => $txn->id,
+                                        'amount' => number_format((float) $txn->amount, 2),
+                                        'date' => $txn->transaction_date?->format('Y-m-d') ?? '—',
+                                    ]),
+                                ])
+                                ->all();
+                        }
+
+                        $ids = $record->affected_entities['candidate_ids'] ?? [];
+
+                        if (! is_array($ids) || $ids === []) {
+                            return [];
+                        }
+
+                        return BankTransaction::query()
+                            ->whereIn('id', $ids)
+                            ->get()
+                            ->mapWithKeys(fn (BankTransaction $txn): array => [
+                                $txn->id => __(':id — :amount (:date)', [
+                                    'id' => $txn->id,
+                                    'amount' => number_format((float) $txn->amount, 2),
+                                    'date' => $txn->transaction_date?->format('Y-m-d') ?? '—',
+                                ]),
+                            ])
+                            ->all();
+                    })
+                    ->default(fn (ReconciliationException $record): ?int => $record->exception_code === 'SMS_RECON_AMBIGUOUS_BANK_MATCH'
+                        && count((array) ($record->affected_entities['candidate_ids'] ?? [])) === 1
+                        ? (int) $record->affected_entities['candidate_ids'][0]
+                        : null)
+                    ->searchable()
+                    ->required()
+                    ->visible(fn (ReconciliationException $record): bool => in_array($record->exception_code, [
+                        'SMS_RECON_AMBIGUOUS_BANK_MATCH',
+                        'SMS_RECON_UNMATCHED_BANK_LINE',
+                    ], true)),
+                Select::make('sms_transaction_id')
+                    ->label(__('SMS row'))
+                    ->options(function (ReconciliationException $record): array {
+                        $bankId = (int) ($record->affected_entities['bank_transaction_id'] ?? 0);
+                        $bank = BankTransaction::query()->find($bankId);
+
+                        if ($bank === null) {
+                            return [];
+                        }
+
+                        return app(SmsBankClearingMatchService::class)
+                            ->findManualSmsCandidates($bank)
+                            ->mapWithKeys(fn (SmsTransaction $sms): array => [
+                                $sms->id => app(SmsBankClearingMatchService::class)->formatSmsMatchOptionLabel($sms),
+                            ])
+                            ->all();
+                    })
+                    ->searchable()
+                    ->required()
+                    ->visible(fn (ReconciliationException $record): bool => $record->exception_code === 'BANK_RECON_UNMATCHED_SMS_LINE'),
+                Textarea::make('notes')
+                    ->label(__('Resolution notes'))
+                    ->required()
+                    ->rows(3),
+            ])
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
+                try {
+                    $smsId = (int) ($data['sms_transaction_id'] ?? $record->affected_entities['sms_transaction_id'] ?? 0);
+                    $bankId = (int) ($data['bank_transaction_id'] ?? $record->affected_entities['bank_transaction_id'] ?? 0);
+
+                    $resolver->resolveSmsBankMatch(
+                        $record,
+                        $smsId,
+                        $bankId,
+                        (string) $data['notes'],
+                    );
+                    Notification::make()->title(__('SMS ↔ bank link cleared'))->success()->send();
+                } catch (\InvalidArgumentException $e) {
+                    ActionModalFailure::present($action, $e->getMessage());
+                }
+            });
+    }
+
+    public static function resolveSmsBankMatchGroupAction(): Action
+    {
+        return Action::make('resolveSmsBankMatchGroup')
+            ->label(__('Resolve SMS bank group'))
+            ->icon('heroicon-o-squares-plus')
+            ->visible(fn (ReconciliationException $record): bool => self::isActionable($record)
+                && $record->exception_code === 'SMS_RECON_SPLITTABLE_BANK_MATCH')
+            ->schema([
+                Hidden::make('direction')
+                    ->default(fn (ReconciliationException $record): ?string => $record->affected_entities['direction'] ?? null),
+                CheckboxList::make('bank_transaction_ids')
+                    ->label(__('Bank import lines'))
+                    ->options(function (ReconciliationException $record): array {
+                        $ids = $record->affected_entities['bank_transaction_ids'] ?? [];
+
+                        if (($record->affected_entities['direction'] ?? null) === 'many_to_one') {
+                            $anchor = (int) ($record->affected_entities['bank_transaction_id'] ?? 0);
+                            $ids = $anchor > 0 ? [$anchor] : [];
+                        }
+
+                        if (! is_array($ids) || $ids === []) {
+                            return [];
+                        }
+
+                        return BankTransaction::query()
+                            ->whereIn('id', $ids)
+                            ->get()
+                            ->mapWithKeys(fn (BankTransaction $txn): array => [
+                                $txn->id => __(':id — :amount (:date)', [
+                                    'id' => $txn->id,
+                                    'amount' => number_format((float) $txn->amount, 2),
+                                    'date' => $txn->transaction_date?->format('Y-m-d') ?? '—',
+                                ]),
+                            ])
+                            ->all();
+                    })
+                    ->default(fn (ReconciliationException $record): array => (array) (
+                        ($record->affected_entities['direction'] ?? null) === 'many_to_one'
+                        ? [(int) ($record->affected_entities['bank_transaction_id'] ?? 0)]
+                        : ($record->affected_entities['bank_transaction_ids'] ?? [])
+                    ))
+                    ->required()
+                    ->columns(1),
+                CheckboxList::make('sms_transaction_ids')
+                    ->label(__('SMS rows'))
+                    ->options(function (ReconciliationException $record): array {
+                        $ids = $record->affected_entities['sms_transaction_ids'] ?? [];
+
+                        if (($record->affected_entities['direction'] ?? null) === 'one_to_many') {
+                            $anchor = (int) ($record->affected_entities['sms_transaction_id'] ?? 0);
+                            $ids = $anchor > 0 ? [$anchor] : [];
+                        }
+
+                        if (! is_array($ids) || $ids === []) {
+                            return [];
+                        }
+
+                        return SmsTransaction::query()
+                            ->whereIn('id', $ids)
+                            ->get()
+                            ->mapWithKeys(fn (SmsTransaction $sms): array => [
+                                $sms->id => app(SmsBankClearingMatchService::class)->formatSmsMatchOptionLabel($sms),
+                            ])
+                            ->all();
+                    })
+                    ->default(fn (ReconciliationException $record): array => (array) (
+                        ($record->affected_entities['direction'] ?? null) === 'one_to_many'
+                        ? [(int) ($record->affected_entities['sms_transaction_id'] ?? 0)]
+                        : ($record->affected_entities['sms_transaction_ids'] ?? [])
+                    ))
+                    ->required()
+                    ->columns(1),
+                Textarea::make('notes')
+                    ->label(__('Resolution notes'))
+                    ->required()
+                    ->rows(3),
+            ])
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
+                try {
+                    $resolver->resolveSmsBankMatchGroup(
+                        $record,
+                        array_map('intval', (array) ($data['sms_transaction_ids'] ?? [])),
+                        array_map('intval', (array) ($data['bank_transaction_ids'] ?? [])),
+                        (string) $data['notes'],
+                    );
+                    Notification::make()->title(__('SMS bank group match cleared'))->success()->send();
+                } catch (\InvalidArgumentException $e) {
+                    ActionModalFailure::present($action, $e->getMessage());
+                }
+            });
+    }
+
+    public static function resolveSmsOpsMatchAction(): Action
+    {
+        return Action::make('resolveSmsOpsMatch')
+            ->label(__('Resolve SMS ops match'))
+            ->icon('heroicon-o-link')
+            ->visible(fn (ReconciliationException $record): bool => self::isActionable($record)
+                && in_array($record->exception_code, [
+                    'SMS_OPS_AMBIGUOUS_MATCH',
+                    'SMS_OPS_UNMATCHED',
+                    'OPS_RECON_UNMATCHED_SMS',
+                ], true))
+            ->schema([
+                TextInput::make('sms_transaction_id')
+                    ->label(__('SMS row ID'))
+                    ->numeric()
+                    ->required()
+                    ->default(fn (ReconciliationException $record): ?int => isset($record->affected_entities['sms_transaction_id'])
+                        ? (int) $record->affected_entities['sms_transaction_id']
+                        : null)
+                    ->visible(fn (ReconciliationException $record): bool => $record->exception_code !== 'OPS_RECON_UNMATCHED_SMS'),
+                Select::make('operational_bank_transaction_id')
+                    ->label(__('Operational row'))
+                    ->options(function (ReconciliationException $record): array {
+                        if ($record->exception_code === 'SMS_OPS_UNMATCHED') {
+                            $smsId = (int) ($record->affected_entities['sms_transaction_id'] ?? 0);
+                            $sms = SmsTransaction::query()->find($smsId);
+
+                            if ($sms === null) {
+                                return [];
+                            }
+
+                            return app(SmsOperationalClearingMatchService::class)
+                                ->findGroupMatchOpsCandidates($sms)
+                                ->mapWithKeys(fn (BankTransaction $txn): array => [
+                                    $txn->id => app(SmsOperationalClearingMatchService::class)->formatOpsMatchOptionLabel($txn),
+                                ])
+                                ->all();
+                        }
+
+                        $ids = $record->affected_entities['candidate_ids'] ?? [];
+
+                        if (! is_array($ids) || $ids === []) {
+                            return [];
+                        }
+
+                        return BankTransaction::query()
+                            ->whereIn('id', $ids)
+                            ->get()
+                            ->mapWithKeys(fn (BankTransaction $txn): array => [
+                                $txn->id => app(SmsOperationalClearingMatchService::class)->formatOpsMatchOptionLabel($txn),
+                            ])
+                            ->all();
+                    })
+                    ->default(fn (ReconciliationException $record): ?int => $record->exception_code === 'SMS_OPS_AMBIGUOUS_MATCH'
+                        && count((array) ($record->affected_entities['candidate_ids'] ?? [])) === 1
+                        ? (int) $record->affected_entities['candidate_ids'][0]
+                        : (isset($record->affected_entities['operational_bank_transaction_id'])
+                            ? (int) $record->affected_entities['operational_bank_transaction_id']
+                            : null))
+                    ->searchable()
+                    ->required()
+                    ->visible(fn (ReconciliationException $record): bool => in_array($record->exception_code, [
+                        'SMS_OPS_AMBIGUOUS_MATCH',
+                        'SMS_OPS_UNMATCHED',
+                    ], true)),
+                Select::make('sms_transaction_id')
+                    ->label(__('SMS row'))
+                    ->options(function (ReconciliationException $record): array {
+                        $opsId = (int) ($record->affected_entities['operational_bank_transaction_id'] ?? 0);
+                        $ops = BankTransaction::query()->find($opsId);
+
+                        if ($ops === null) {
+                            return [];
+                        }
+
+                        return app(SmsOperationalClearingMatchService::class)
+                            ->findGroupMatchSmsCandidates($ops)
+                            ->mapWithKeys(fn (SmsTransaction $sms): array => [
+                                $sms->id => app(SmsOperationalClearingMatchService::class)->formatSmsMatchOptionLabel($sms),
+                            ])
+                            ->all();
+                    })
+                    ->searchable()
+                    ->required()
+                    ->visible(fn (ReconciliationException $record): bool => $record->exception_code === 'OPS_RECON_UNMATCHED_SMS'),
+                Textarea::make('notes')
+                    ->label(__('Resolution notes'))
+                    ->required()
+                    ->rows(3),
+            ])
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
+                try {
+                    $smsId = (int) ($data['sms_transaction_id'] ?? $record->affected_entities['sms_transaction_id'] ?? 0);
+                    $opsId = (int) ($data['operational_bank_transaction_id'] ?? $record->affected_entities['operational_bank_transaction_id'] ?? 0);
+
+                    $resolver->resolveSmsOpsMatch(
+                        $record,
+                        $opsId,
+                        $smsId,
+                        (string) $data['notes'],
+                    );
+                    Notification::make()->title(__('SMS ↔ ops link cleared'))->success()->send();
+                } catch (\InvalidArgumentException $e) {
+                    ActionModalFailure::present($action, $e->getMessage());
+                }
+            });
+    }
+
+    public static function assignMemberAndPostSmsAction(): Action
+    {
+        return Action::make('assignMemberAndPostSms')
+            ->label(__('Assign member & post'))
+            ->icon('heroicon-o-user-plus')
+            ->visible(fn (ReconciliationException $record): bool => self::isActionable($record)
+                && in_array($record->exception_code, ['SMS_MEMBER_UNMATCHED', 'SMS_UNPOSTED_BACKLOG'], true))
+            ->schema([
+                TextInput::make('sms_transaction_id')
+                    ->label(__('SMS row ID'))
+                    ->numeric()
+                    ->required()
+                    ->default(fn (ReconciliationException $record): ?int => isset($record->affected_entities['sms_transaction_id'])
+                        ? (int) $record->affected_entities['sms_transaction_id']
+                        : null),
+                MemberSelect::make('member_id')
+                    ->required()
+                    ->default(fn (ReconciliationException $record): ?int => isset($record->affected_entities['member_id'])
+                        ? (int) $record->affected_entities['member_id']
+                        : null),
+                Textarea::make('notes')
+                    ->label(__('Resolution notes'))
+                    ->required()
+                    ->rows(3),
+            ])
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
+                try {
+                    $resolver->assignMemberAndPostSms(
+                        $record,
+                        (int) $data['sms_transaction_id'],
+                        (int) $data['member_id'],
+                        (string) $data['notes'],
+                    );
+                    Notification::make()->title(__('SMS row posted to cash'))->success()->send();
+                } catch (\InvalidArgumentException $e) {
+                    ActionModalFailure::present($action, $e->getMessage());
+                }
+            });
+    }
+
+    public static function reverseSmsPostAction(): Action
+    {
+        return Action::make('reverseSmsPost')
+            ->label(__('Reverse SMS post'))
+            ->icon('heroicon-o-arrow-uturn-left')
+            ->color('warning')
+            ->visible(fn (ReconciliationException $record): bool => self::isActionable($record)
+                && $record->exception_code === 'SMS_POSTED_WITHOUT_LEDGER')
+            ->schema([
+                TextInput::make('sms_transaction_id')
+                    ->label(__('SMS row ID'))
+                    ->numeric()
+                    ->required()
+                    ->default(fn (ReconciliationException $record): ?int => isset($record->affected_entities['sms_transaction_id'])
+                        ? (int) $record->affected_entities['sms_transaction_id']
+                        : null),
+                Textarea::make('notes')
+                    ->label(__('Resolution notes'))
+                    ->required()
+                    ->rows(3),
+            ])
+            ->action(function (ReconciliationException $record, Action $action, array $data, ReconciliationResolutionService $resolver): void {
+                try {
+                    $resolver->reverseSmsPost(
+                        $record,
+                        (int) $data['sms_transaction_id'],
+                        (string) $data['notes'],
+                    );
+                    Notification::make()->title(__('SMS post reversed'))->success()->send();
                 } catch (\InvalidArgumentException $e) {
                     ActionModalFailure::present($action, $e->getMessage());
                 }

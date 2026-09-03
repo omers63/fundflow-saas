@@ -26,6 +26,9 @@ final class ReconciliationHealthSummary
      *     critical_issues: int,
      *     warning_issues: int,
      *     pending_bank_clearance: int,
+     *     bank_clearance_group_count: int,
+     *     pending_sms_pipeline: int,
+     *     sms_bank_link_group_count: int,
      *     last_checked_at: ?Carbon,
      *     last_checked_label: string,
      *     next_check_at: Carbon,
@@ -38,6 +41,9 @@ final class ReconciliationHealthSummary
         int $openCriticalCount,
         int $openWarningCount,
         int $pendingBankClearanceCount,
+        int $bankClearanceGroupCount,
+        int $pendingSmsPipelineCount,
+        int $smsBankLinkGroupCount,
         ?FundAuditLog $lastBatch,
     ): array {
         $status = $this->resolveStatus($latestSnapshot, $openCriticalCount, $openExceptionCount);
@@ -53,6 +59,9 @@ final class ReconciliationHealthSummary
             'critical_issues' => $openCriticalCount,
             'warning_issues' => $openWarningCount,
             'pending_bank_clearance' => $pendingBankClearanceCount,
+            'bank_clearance_group_count' => $bankClearanceGroupCount,
+            'pending_sms_pipeline' => $pendingSmsPipelineCount,
+            'sms_bank_link_group_count' => $smsBankLinkGroupCount,
             'last_checked_at' => $lastCheckedAt,
             'last_checked_label' => $lastCheckedAt?->diffForHumans() ?? __('Not yet checked'),
             'next_check_at' => $nextCheckAt,
@@ -106,10 +115,15 @@ final class ReconciliationHealthSummary
                     ],
                 ),
                 'action' => ReconciliationExceptionPresenter::recommendedAction($exception),
-                'url' => ReconciliationExceptionPresenter::isBankClearingRelated($exception)
-                    ? ReconciliationExceptionPresenter::bankClearingUrl($exception)
-                    : null,
-                'tab' => ReconciliationExceptionPresenter::isBankClearingRelated($exception) ? null : 'exceptions',
+                'url' => match (true) {
+                    ReconciliationExceptionPresenter::isBankClearingRelated($exception) => ReconciliationExceptionPresenter::bankClearingUrl($exception),
+                    ReconciliationExceptionPresenter::isSmsClearingRelated($exception) => ReconciliationExceptionPresenter::smsClearingUrl($exception),
+                    default => null,
+                },
+                'tab' => ReconciliationExceptionPresenter::isBankClearingRelated($exception)
+                    || ReconciliationExceptionPresenter::isSmsClearingRelated($exception)
+                    ? null
+                    : 'exceptions',
             ];
 
             if (count($steps) >= $limit) {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\FiscalClose;
 
+use App\Models\Tenant\BankClearanceMatchGroup;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\FiscalClose;
@@ -12,6 +13,9 @@ use App\Models\Tenant\FundPosting;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
+use App\Models\Tenant\SmsClearanceMatchGroup;
+use App\Models\Tenant\SmsOpsClearanceMatchGroup;
+use App\Models\Tenant\SmsTransaction;
 use App\Models\Tenant\Transaction;
 use App\Services\FundAuditLogService;
 use App\Services\MasterAccountInvariantService;
@@ -49,10 +53,16 @@ class FiscalClosePurgeService
         $counts = ReconciliationService::withoutRealtimeChecks(function () use ($periodEnd): array {
             return DB::transaction(function () use ($periodEnd): array {
                 $this->detachBankLinesFromLedger($periodEnd);
+                $this->detachSmsBankLinksBeforeBankPurge($periodEnd);
+                $this->detachSmsOpsLinksBeforeBankPurge($periodEnd);
+
+                $bankDeleted = $this->purgeClearedBankLinesThrough($periodEnd);
+                $orphanGroups = $this->purgeOrphanClearanceMatchGroups();
 
                 return [
                     'transactions' => $this->purgeTransactionsThrough($periodEnd),
-                    'bank_transactions' => $this->purgeClearedBankLinesThrough($periodEnd),
+                    'bank_transactions' => $bankDeleted,
+                    'clearance_match_groups' => $orphanGroups,
                     'reconciliation_exceptions' => $this->purgeResolvedReconciliationExceptions(),
                 ];
             });
@@ -282,6 +292,84 @@ class FiscalClosePurgeService
                 'master_bank_transaction_id' => null,
                 'master_fund_transaction_id' => null,
             ]);
+    }
+
+    private function detachSmsBankLinksBeforeBankPurge(Carbon $periodEnd): void
+    {
+        $groupIds = BankTransaction::query()
+            ->cleared()
+            ->whereDate('transaction_date', '<=', $periodEnd->toDateString())
+            ->whereNotNull('sms_clearance_match_group_id')
+            ->pluck('sms_clearance_match_group_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($groupIds->isEmpty()) {
+            return;
+        }
+
+        SmsTransaction::query()
+            ->whereIn('sms_clearance_match_group_id', $groupIds)
+            ->update([
+                'sms_clearance_match_group_id' => null,
+                'is_bank_cleared' => false,
+                'bank_cleared_at' => null,
+            ]);
+    }
+
+    private function detachSmsOpsLinksBeforeBankPurge(Carbon $periodEnd): void
+    {
+        $groupIds = BankTransaction::query()
+            ->cleared()
+            ->whereDate('transaction_date', '<=', $periodEnd->toDateString())
+            ->whereNotNull('sms_ops_clearance_match_group_id')
+            ->pluck('sms_ops_clearance_match_group_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($groupIds->isEmpty()) {
+            return;
+        }
+
+        SmsTransaction::query()
+            ->whereIn('sms_ops_clearance_match_group_id', $groupIds)
+            ->update([
+                'sms_ops_clearance_match_group_id' => null,
+                'is_ops_cleared' => false,
+                'ops_cleared_at' => null,
+                'master_bank_transaction_id' => null,
+            ]);
+
+        BankTransaction::query()
+            ->whereIn('sms_ops_clearance_match_group_id', $groupIds)
+            ->update([
+                'sms_ops_clearance_match_group_id' => null,
+                'is_cleared' => false,
+                'cleared_at' => null,
+            ]);
+    }
+
+    public function purgeOrphanClearanceMatchGroups(): int
+    {
+        $deleted = 0;
+
+        $deleted += BankClearanceMatchGroup::query()
+            ->whereDoesntHave('bankTransactions')
+            ->delete();
+
+        $deleted += SmsClearanceMatchGroup::query()
+            ->whereDoesntHave('bankTransactions')
+            ->whereDoesntHave('smsTransactions')
+            ->delete();
+
+        $deleted += SmsOpsClearanceMatchGroup::query()
+            ->whereDoesntHave('bankTransactions')
+            ->whereDoesntHave('smsTransactions')
+            ->delete();
+
+        return $deleted;
     }
 
     private function assertPostPurgeInvariants(FiscalClose $close): void

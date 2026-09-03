@@ -24,6 +24,13 @@ class SmsTransaction extends Model
         'raw_data',
         'posted_at',
         'posted_by',
+        'sms_clearance_match_group_id',
+        'is_bank_cleared',
+        'bank_cleared_at',
+        'sms_ops_clearance_match_group_id',
+        'is_ops_cleared',
+        'ops_cleared_at',
+        'master_bank_transaction_id',
         'is_duplicate',
         'duplicate_of_id',
     ];
@@ -34,8 +41,12 @@ class SmsTransaction extends Model
             'transaction_date' => 'date',
             'amount' => 'decimal:2',
             'is_duplicate' => 'boolean',
+            'is_bank_cleared' => 'boolean',
+            'is_ops_cleared' => 'boolean',
             'raw_data' => 'array',
             'posted_at' => 'datetime',
+            'bank_cleared_at' => 'datetime',
+            'ops_cleared_at' => 'datetime',
         ];
     }
 
@@ -57,6 +68,21 @@ class SmsTransaction extends Model
     public function duplicateOf(): BelongsTo
     {
         return $this->belongsTo(SmsTransaction::class, 'duplicate_of_id');
+    }
+
+    public function smsClearanceMatchGroup(): BelongsTo
+    {
+        return $this->belongsTo(SmsClearanceMatchGroup::class);
+    }
+
+    public function smsOpsClearanceMatchGroup(): BelongsTo
+    {
+        return $this->belongsTo(SmsOpsClearanceMatchGroup::class);
+    }
+
+    public function masterBankTransaction(): BelongsTo
+    {
+        return $this->belongsTo(Transaction::class, 'master_bank_transaction_id');
     }
 
     public function isPosted(): bool

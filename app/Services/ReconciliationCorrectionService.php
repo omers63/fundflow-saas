@@ -10,6 +10,7 @@ use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
+use App\Models\Tenant\SmsTransaction;
 use App\Models\Tenant\Transaction;
 use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
@@ -31,6 +32,8 @@ class ReconciliationCorrectionService
         protected ReconciliationSuspenseService $suspense,
         protected ContributionCollectionCycleService $contributionCollection,
         protected BankClearingMatchService $bankMatching,
+        protected SmsBankClearingMatchService $smsBankMatching,
+        protected SmsOperationalClearingMatchService $smsOpsMatching,
     ) {}
 
     /**
@@ -251,6 +254,224 @@ class ReconciliationCorrectionService
             'action' => 'ambiguous_bank_match',
             'imported_id' => $imported->id,
             'uncleared_id' => $uncleared->id,
+            'notes' => $notes,
+        ]);
+
+        $exception->update([
+            'status' => ReconciliationException::STATUS_RESOLVED,
+            'resolution_action' => self::ACTION_MANUAL_CORRECTION,
+            'resolution_notes' => $notes,
+            'resolved_at' => BusinessDay::now(),
+        ]);
+    }
+
+    /**
+     * @param  list<int>  $importedBankTransactionIds
+     * @param  list<int>  $unclearedBankTransactionIds
+     */
+    public function resolveSplittableBankMatch(
+        ReconciliationException $exception,
+        array $importedBankTransactionIds,
+        array $unclearedBankTransactionIds,
+        string $notes,
+    ): void {
+        $imported = BankTransaction::query()
+            ->whereIn('id', $importedBankTransactionIds)
+            ->get();
+        $operational = BankTransaction::query()
+            ->whereIn('id', $unclearedBankTransactionIds)
+            ->get();
+
+        if ($imported->isEmpty() || $operational->isEmpty()) {
+            throw new InvalidArgumentException(__('Select at least one operational row and one bank import line.'));
+        }
+
+        foreach ($operational as $row) {
+            if (! $this->bankMatching->isPendingClearance($row)) {
+                throw new InvalidArgumentException(__('One or more operational rows are not eligible for clearance.'));
+            }
+        }
+
+        foreach ($imported as $row) {
+            if (! $this->bankMatching->isImportedMatchCandidate($row)) {
+                throw new InvalidArgumentException(__('One or more bank import lines are not eligible for matching.'));
+            }
+        }
+
+        if (! $this->bankMatching->groupAmountsMatch($operational, $imported)) {
+            throw new InvalidArgumentException(__('Selected amounts do not balance within tolerance.'));
+        }
+
+        $this->bankMatching->clearMatchGroup($operational, $imported);
+
+        $this->audit->log('RECON_MANUAL_CORRECTION', 'reconciliation', $exception, null, [
+            'action' => 'splittable_bank_match',
+            'imported_ids' => $imported->pluck('id')->all(),
+            'uncleared_ids' => $operational->pluck('id')->all(),
+            'notes' => $notes,
+        ]);
+
+        $exception->update([
+            'status' => ReconciliationException::STATUS_RESOLVED,
+            'resolution_action' => self::ACTION_MANUAL_CORRECTION,
+            'resolution_notes' => $notes,
+            'resolved_at' => BusinessDay::now(),
+        ]);
+    }
+
+    public function assignMemberAndPostSms(
+        ReconciliationException $exception,
+        int $smsTransactionId,
+        int $memberId,
+        string $notes,
+    ): void {
+        $tx = SmsTransaction::query()->find($smsTransactionId);
+        $member = Member::query()->find($memberId);
+
+        if ($tx === null || $member === null) {
+            throw new InvalidArgumentException(__('The SMS row or member was not found.'));
+        }
+
+        if ($tx->isPosted()) {
+            throw new InvalidArgumentException(__('This SMS row is already posted.'));
+        }
+
+        if ($tx->is_duplicate) {
+            throw new InvalidArgumentException(__('Duplicate SMS rows cannot be posted.'));
+        }
+
+        $tx->update(['member_id' => $member->id]);
+        $this->accounting->postSmsTransactionToCash($tx->fresh() ?? $tx, $member);
+
+        $this->audit->log('RECON_MANUAL_CORRECTION', 'reconciliation', $exception, $member, [
+            'action' => 'assign_member_and_post_sms',
+            'sms_transaction_id' => $tx->id,
+            'member_id' => $member->id,
+            'notes' => $notes,
+        ]);
+
+        $exception->update([
+            'status' => ReconciliationException::STATUS_RESOLVED,
+            'resolution_action' => self::ACTION_MANUAL_CORRECTION,
+            'resolution_notes' => $notes,
+            'resolved_at' => BusinessDay::now(),
+        ]);
+    }
+
+    public function reverseSmsPost(
+        ReconciliationException $exception,
+        int $smsTransactionId,
+        string $notes,
+    ): void {
+        $tx = SmsTransaction::query()->find($smsTransactionId);
+
+        if ($tx === null) {
+            throw new InvalidArgumentException(__('The SMS row was not found.'));
+        }
+
+        if (! $tx->isPosted()) {
+            throw new InvalidArgumentException(__('This SMS row is not posted.'));
+        }
+
+        $this->accounting->reverseSmsTransactionPost($tx, $notes);
+
+        $this->audit->log('RECON_MANUAL_CORRECTION', 'reconciliation', $exception, $tx->member, [
+            'action' => 'reverse_sms_post',
+            'sms_transaction_id' => $tx->id,
+            'notes' => $notes,
+        ]);
+
+        $exception->update([
+            'status' => ReconciliationException::STATUS_RESOLVED,
+            'resolution_action' => self::ACTION_MANUAL_CORRECTION,
+            'resolution_notes' => $notes,
+            'resolved_at' => BusinessDay::now(),
+        ]);
+    }
+
+    public function resolveSmsBankMatch(
+        ReconciliationException $exception,
+        int $smsTransactionId,
+        int $bankTransactionId,
+        string $notes,
+    ): void {
+        $sms = SmsTransaction::query()->find($smsTransactionId);
+        $bank = BankTransaction::query()->find($bankTransactionId);
+
+        if ($sms === null || $bank === null) {
+            throw new InvalidArgumentException(__('The SMS row or bank line was not found.'));
+        }
+
+        $this->smsBankMatching->clearMatchPair($sms, $bank);
+
+        $this->audit->log('RECON_MANUAL_CORRECTION', 'reconciliation', $exception, $sms->member, [
+            'action' => 'sms_bank_match',
+            'sms_transaction_id' => $sms->id,
+            'bank_transaction_id' => $bank->id,
+            'notes' => $notes,
+        ]);
+
+        $exception->update([
+            'status' => ReconciliationException::STATUS_RESOLVED,
+            'resolution_action' => self::ACTION_MANUAL_CORRECTION,
+            'resolution_notes' => $notes,
+            'resolved_at' => BusinessDay::now(),
+        ]);
+    }
+
+    /**
+     * @param  list<int>  $smsTransactionIds
+     * @param  list<int>  $bankTransactionIds
+     */
+    public function resolveSmsBankMatchGroup(
+        ReconciliationException $exception,
+        array $smsTransactionIds,
+        array $bankTransactionIds,
+        string $notes,
+    ): void {
+        $smsRows = SmsTransaction::query()->whereIn('id', $smsTransactionIds)->get();
+        $bankRows = BankTransaction::query()->whereIn('id', $bankTransactionIds)->get();
+
+        if ($smsRows->isEmpty() || $bankRows->isEmpty()) {
+            throw new InvalidArgumentException(__('Select at least one SMS row and one bank import line.'));
+        }
+
+        $this->smsBankMatching->clearMatchGroup($smsRows, $bankRows);
+
+        $this->audit->log('RECON_MANUAL_CORRECTION', 'reconciliation', $exception, null, [
+            'action' => 'sms_bank_match_group',
+            'sms_transaction_ids' => $smsRows->pluck('id')->all(),
+            'bank_transaction_ids' => $bankRows->pluck('id')->all(),
+            'notes' => $notes,
+        ]);
+
+        $exception->update([
+            'status' => ReconciliationException::STATUS_RESOLVED,
+            'resolution_action' => self::ACTION_MANUAL_CORRECTION,
+            'resolution_notes' => $notes,
+            'resolved_at' => BusinessDay::now(),
+        ]);
+    }
+
+    public function resolveSmsOpsMatch(
+        ReconciliationException $exception,
+        int $operationalBankTransactionId,
+        int $smsTransactionId,
+        string $notes,
+    ): void {
+        $ops = BankTransaction::query()->find($operationalBankTransactionId);
+        $sms = SmsTransaction::query()->find($smsTransactionId);
+
+        if ($ops === null || $sms === null) {
+            throw new InvalidArgumentException(__('The operational row or SMS row was not found.'));
+        }
+
+        $this->smsOpsMatching->clearMatchPair($ops, $sms);
+
+        $this->audit->log('RECON_MANUAL_CORRECTION', 'reconciliation', $exception, $sms->member, [
+            'action' => 'sms_ops_match',
+            'operational_bank_transaction_id' => $ops->id,
+            'sms_transaction_id' => $sms->id,
             'notes' => $notes,
         ]);
 

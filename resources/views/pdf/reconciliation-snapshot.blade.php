@@ -154,10 +154,24 @@ $isArabic = app()->getLocale() === 'ar';
             </td>
         </tr>
         <tr>
+            <th>{{ __('Bank clearance groups') }}</th>
+            <td>{{ $snapshot->report['pipeline']['bank_clearance_group_count'] ?? 0 }}</td>
+        </tr>
+        <tr>
             <th>{{ __('SMS unposted') }}</th>
             <td>{{ $snapshot->report['pipeline']['sms_unposted_count'] ?? 0 }} {{ __('rows') }}
                 ({!! \App\Filament\Support\MoneyDisplay::pdfHtml($snapshot->report['pipeline']['sms_unposted_amount'] ?? 0)?->toHtml() ?? '—' !!})
             </td>
+        </tr>
+        <tr>
+            <th>{{ __('SMS unlinked bank') }}</th>
+            <td>{{ $snapshot->report['pipeline']['sms_unmatched_bank_count'] ?? 0 }} {{ __('rows') }}
+                ({!! \App\Filament\Support\MoneyDisplay::pdfHtml($snapshot->report['pipeline']['sms_unmatched_bank_amount'] ?? 0)?->toHtml() ?? '—' !!})
+            </td>
+        </tr>
+        <tr>
+            <th>{{ __('SMS bank link groups') }}</th>
+            <td>{{ $snapshot->report['pipeline']['sms_bank_link_group_count'] ?? 0 }}</td>
         </tr>
     </table>
 

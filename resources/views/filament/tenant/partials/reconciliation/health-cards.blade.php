@@ -5,7 +5,7 @@
     default => 'text-amber-600 dark:text-amber-400',
 })
 
-<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
         <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('Fund status') }}</p>
         <p class="mt-1 text-lg font-semibold {{ $statusColor }}">
@@ -56,6 +56,27 @@
             @else
                 {{ __('All lines matched') }}
             @endif
+            · {{ trans_choice(':count clearance group|:count clearance groups', $health['bank_clearance_group_count'], ['count' => number_format($health['bank_clearance_group_count'])]) }}
+        </p>
+    </div>
+
+    <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
+        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ __('SMS clearing') }}</p>
+        <p @class([
+            'mt-1 text-lg font-semibold tabular-nums',
+            'text-amber-600 dark:text-amber-400' => $health['pending_sms_pipeline'] > 0,
+            'text-gray-900 dark:text-white' => $health['pending_sms_pipeline'] === 0,
+        ])>
+            {{ number_format($health['pending_sms_pipeline']) }}
+        </p>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            @if ($health['pending_sms_pipeline'] > 0)
+                <a href="{{ $this->getSmsClearingUrl() }}"
+                    class="font-semibold text-sky-600 hover:underline dark:text-sky-400">{{ __('Open SMS clearing') }}</a>
+            @else
+                {{ __('Queue clear') }}
+            @endif
+            · {{ trans_choice(':count bank link group|:count bank link groups', $health['sms_bank_link_group_count'], ['count' => number_format($health['sms_bank_link_group_count'])]) }}
         </p>
     </div>
 

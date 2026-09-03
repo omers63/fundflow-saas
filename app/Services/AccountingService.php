@@ -2333,6 +2333,16 @@ class AccountingService
     public function safeDeleteSmsTransaction(SmsTransaction $tx): void
     {
         DB::transaction(function () use ($tx): void {
+            if ($tx->isPosted() && ($tx->is_ops_cleared || $tx->sms_ops_clearance_match_group_id !== null)) {
+                app(SmsOperationalClearingMatchService::class)->unmatchClearedGroup($tx->fresh() ?? $tx);
+                $tx = $tx->fresh() ?? $tx;
+            }
+
+            if ($tx->isPosted() && ($tx->is_bank_cleared || $tx->sms_clearance_match_group_id !== null)) {
+                app(SmsBankClearingMatchService::class)->unmatchClearedRow($tx);
+                $tx = $tx->fresh() ?? $tx;
+            }
+
             if ($tx->isPosted()) {
                 Transaction::query()
                     ->where('reference_type', SmsTransaction::class)
@@ -2342,6 +2352,53 @@ class AccountingService
             }
 
             $tx->delete();
+        });
+    }
+
+    /**
+     * Reverse posted SMS ledger legs and return the row to the open queue.
+     */
+    public function reverseSmsTransactionPost(SmsTransaction $tx, ?string $reason = null): void
+    {
+        if (! $tx->isPosted()) {
+            throw new InvalidArgumentException(__('This SMS row is not posted.'));
+        }
+
+        $reason = filled($reason) ? trim((string) $reason) : __('Reverse SMS post');
+
+        DB::transaction(function () use ($tx, $reason): void {
+            if ($tx->is_ops_cleared || $tx->sms_ops_clearance_match_group_id !== null) {
+                app(SmsOperationalClearingMatchService::class)->unmatchClearedGroup($tx->fresh() ?? $tx);
+                $tx = $tx->fresh() ?? $tx;
+            }
+
+            if ($tx->is_bank_cleared || $tx->sms_clearance_match_group_id !== null) {
+                app(SmsBankClearingMatchService::class)->unmatchClearedRow($tx->fresh() ?? $tx);
+                $tx = $tx->fresh() ?? $tx;
+            }
+
+            Transaction::query()
+                ->where('reference_type', $tx->getMorphClass())
+                ->where('reference_id', $tx->id)
+                ->whereHas(
+                    'account',
+                    fn ($query) => $query->where('type', 'cash')->where('is_master', false),
+                )
+                ->orderBy('id')
+                ->each(function (Transaction $ledger) use ($reason): void {
+                    if ($this->hasExistingReversal($ledger)) {
+                        return;
+                    }
+
+                    self::withoutMemberCashCollection(
+                        fn () => $this->createReversalEntry($ledger, $reason),
+                    );
+                });
+
+            $tx->update([
+                'posted_at' => null,
+                'posted_by' => null,
+            ]);
         });
     }
 }

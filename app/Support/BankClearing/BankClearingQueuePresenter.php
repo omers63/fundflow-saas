@@ -93,7 +93,7 @@ final class BankClearingQueuePresenter
                 ->where('bank_clearance_match_group_id', $record->bank_clearance_match_group_id)
                 ->count();
 
-            if ($groupCount > 2) {
+            if ($groupCount >= 2) {
                 $items[] = [
                     'label' => __('Match group'),
                     'value' => __(':count rows in group', ['count' => $groupCount]),

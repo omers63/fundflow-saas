@@ -2,9 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
+use App\Filament\Tenant\Support\BankClearingTabRegistry;
+use App\Models\Tenant\BankClearanceMatchGroup;
+use App\Models\Tenant\BankStatement;
+use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
 use App\Support\Reconciliation\ReconciliationExceptionPresenter;
+use App\Support\Reconciliation\ReconciliationSnapshotPresenter;
 use Filament\Facades\Filament;
 use Tests\Concerns\InitializesTenancy;
 
@@ -128,4 +134,55 @@ test('recon snapshot bank line link targets work queue with table search', funct
         ->and($url)->toContain('queueFilter='.BankClearingTabRegistry::FILTER_OPERATIONS)
         ->and($html)->toContain('tableSearch=190')
         ->and($html)->toContain('#190');
+});
+
+test('reconciliation exception presenter includes bank clearance group context', function (): void {
+    $group = BankClearanceMatchGroup::query()->create(['cleared_at' => now()]);
+
+    $statement = BankStatement::create([
+        'filename' => 'presenter-group.csv',
+        'bank_name' => 'Test Bank',
+        'status' => 'completed',
+        'total_rows' => 2,
+        'imported_rows' => 2,
+        'duplicate_rows' => 0,
+    ]);
+
+    $importedA = BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-06-22',
+        'description' => 'Split A',
+        'amount' => 600,
+        'status' => 'posted',
+        'hash' => md5('presenter-group-a'),
+        'is_cleared' => true,
+        'bank_clearance_match_group_id' => $group->id,
+    ]);
+
+    BankTransaction::create([
+        'bank_statement_id' => $statement->id,
+        'transaction_date' => '2026-06-22',
+        'description' => 'Split B',
+        'amount' => 400,
+        'status' => 'posted',
+        'hash' => md5('presenter-group-b'),
+        'is_cleared' => true,
+        'bank_clearance_match_group_id' => $group->id,
+    ]);
+
+    $exception = new ReconciliationException([
+        'exception_code' => 'AMOUNT_MISMATCH',
+        'domain' => 'bank_clearing',
+        'severity' => 'high',
+        'status' => ReconciliationException::STATUS_OPEN,
+        'affected_entities' => [
+            'imported_bank_transaction_id' => $importedA->id,
+        ],
+    ]);
+
+    $items = collect(ReconciliationExceptionPresenter::contextItems($exception));
+
+    expect($items->firstWhere('label', __('Match group'))['value'] ?? null)
+        ->toBe('2 linked bank rows')
+        ->and($items->firstWhere('label', __('Linked operations')))->toBeNull();
 });

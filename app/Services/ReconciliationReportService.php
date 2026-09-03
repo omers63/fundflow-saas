@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\Account;
+use App\Models\Tenant\BankClearanceMatchGroup;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\CashOutRequest;
 use App\Models\Tenant\Contribution;
@@ -22,11 +23,16 @@ use App\Models\Tenant\MembershipApplication;
 use App\Models\Tenant\ReconciliationException;
 use App\Models\Tenant\ReconciliationSnapshot;
 use App\Models\Tenant\Setting;
+use App\Models\Tenant\SmsClearanceMatchGroup;
+use App\Models\Tenant\SmsImportSession;
+use App\Models\Tenant\SmsOpsClearanceMatchGroup;
+use App\Models\Tenant\SmsTransaction;
 use App\Models\Tenant\Transaction;
 use App\Services\Loans\LoanLedgerService;
 use App\Support\BankTransactionWorkflow;
 use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
+use App\Support\EvidenceChannelSettings;
 use App\Support\LoanFundingStrategy;
 use App\Support\LoanRepaymentNote;
 use Carbon\Carbon;
@@ -422,11 +428,35 @@ class ReconciliationReportService
             'issues' => array_slice($bankPostingIssues, 0, 120),
             'issues_truncated' => count($bankPostingIssues) > 120,
         ];
-        // --- 3f) SMS transaction posting integrity (not used in SaaS) ---
+        // --- 3f) SMS transaction posting integrity ---
+        [$smsPostedCount, $smsPostingIssues] = $this->collectSmsTransactionPostingIntegrityIssues();
+
+        if ($smsPostingIssues !== []) {
+            $incrementCritical();
+        }
+
         $checks['sms_transaction_posting_integrity'] = [
             'label' => 'SMS transactions — posted ledger legs integrity',
-            'severity' => 'skipped',
-            'note' => 'SMS bank import is not available in this SaaS deployment; use bank statement import instead.',
+            'severity' => $smsPostingIssues === [] ? 'ok' : 'critical',
+            'transactions_checked' => $smsPostedCount,
+            'issue_count' => count($smsPostingIssues),
+            'issues' => array_slice($smsPostingIssues, 0, 100),
+            'issues_truncated' => count($smsPostingIssues) > 100,
+        ];
+
+        [$smsBankGroupsChecked, $smsBankLinkIssues] = $this->collectSmsBankLinkIntegrityIssues();
+
+        if ($smsBankLinkIssues !== []) {
+            $incrementCritical();
+        }
+
+        $checks['sms_bank_link_integrity'] = [
+            'label' => 'SMS ↔ bank link integrity',
+            'severity' => $smsBankLinkIssues === [] ? 'ok' : 'critical',
+            'groups_checked' => $smsBankGroupsChecked,
+            'issue_count' => count($smsBankLinkIssues),
+            'issues' => array_slice($smsBankLinkIssues, 0, 100),
+            'issues_truncated' => count($smsBankLinkIssues) > 100,
         ];
 
         // --- 4) Active loans: installment schedule vs loan ledger ---
@@ -1117,17 +1147,60 @@ class ReconciliationReportService
             ->selectRaw('COUNT(*) as c, COALESCE(SUM(amount), 0) as amt')
             ->first();
 
+        $smsUnposted = app(SmsClearingQueueService::class)
+            ->openItemsQuery()
+            ->selectRaw('COUNT(*) as c, COALESCE(SUM(amount), 0) as amt')
+            ->first();
+
+        $smsUnmatchedBank = app(SmsClearingQueueService::class)
+            ->postedUnlinkedBankQuery()
+            ->selectRaw('COUNT(*) as c, COALESCE(SUM(amount), 0) as amt')
+            ->first();
+
+        $smsOpsUncleared = null;
+
+        if (EvidenceChannelSettings::usesSms()) {
+            $smsOpsUncleared = $bankClearing
+                ->applyPendingOperationalClearanceScope(BankTransaction::query())
+                ->whereNull('sms_ops_clearance_match_group_id')
+                ->selectRaw('COUNT(*) as c, COALESCE(SUM(ABS(amount)), 0) as amt')
+                ->first();
+        }
+
         $pipeline = [
             'bank_unposted_count' => (int) ($bankImported->c ?? 0),
             'bank_unposted_amount' => round((float) ($bankImported->amt ?? 0), 2),
-            'bank_uncleared_count' => (int) ($bankUncleared->c ?? 0),
-            'bank_uncleared_amount' => round((float) ($bankUncleared->amt ?? 0), 2),
-            'sms_unposted_count' => 0,
-            'sms_unposted_amount' => 0.0,
-            'note' => 'Unposted counts real bank CSV imports (status=imported) excluding synthetic operational clearance statements. Uncleared uses is_cleared=false. SMS import is not available.',
+            'bank_uncleared_count' => EvidenceChannelSettings::isSmsOnly()
+                ? 0
+                : (int) ($bankUncleared->c ?? 0),
+            'bank_uncleared_amount' => EvidenceChannelSettings::isSmsOnly()
+                ? 0.0
+                : round((float) ($bankUncleared->amt ?? 0), 2),
+            'bank_clearance_group_count' => BankClearanceMatchGroup::query()->count(),
+            'sms_unposted_count' => (int) ($smsUnposted->c ?? 0),
+            'sms_unposted_amount' => round((float) ($smsUnposted->amt ?? 0), 2),
+            'sms_unmatched_bank_count' => EvidenceChannelSettings::usesBankCsv()
+                ? (int) ($smsUnmatchedBank->c ?? 0)
+                : 0,
+            'sms_unmatched_bank_amount' => EvidenceChannelSettings::usesBankCsv()
+                ? round((float) ($smsUnmatchedBank->amt ?? 0), 2)
+                : 0.0,
+            'sms_bank_link_group_count' => SmsClearanceMatchGroup::query()->count(),
+            'sms_ops_uncleared_count' => (int) ($smsOpsUncleared->c ?? 0),
+            'sms_ops_uncleared_amount' => round((float) ($smsOpsUncleared->amt ?? 0), 2),
+            'sms_ops_link_group_count' => EvidenceChannelSettings::usesSms()
+                ? SmsOpsClearanceMatchGroup::query()->count()
+                : 0,
+            'note' => EvidenceChannelSettings::isSmsOnly()
+                ? __('SMS-only treasury: uncleared operational rows await SMS ops match; bank CSV pipeline disabled.')
+                : __('Unposted bank counts real CSV imports (status=imported). Uncleared bank uses is_cleared=false. SMS unposted counts open queue rows (not posted, not duplicate). SMS unmatched bank counts posted rows without a bank link.'),
         ];
 
-        $pipelineHasBacklog = $pipeline['bank_unposted_count'] > 0 || $pipeline['bank_uncleared_count'] > 0;
+        $pipelineHasBacklog = $pipeline['bank_unposted_count'] > 0
+            || $pipeline['bank_uncleared_count'] > 0
+            || $pipeline['sms_unposted_count'] > 0
+            || $pipeline['sms_unmatched_bank_count'] > 0
+            || $pipeline['sms_ops_uncleared_count'] > 0;
 
         if ($pipelineHasBacklog) {
             $incrementWarning();
@@ -1135,13 +1208,35 @@ class ReconciliationReportService
 
         $checks['bank_pipeline'] = [
             'label' => 'Bank import & clearance pipeline',
-            'severity' => $pipelineHasBacklog ? 'warning' : 'ok',
+            'severity' => ($pipeline['bank_unposted_count'] > 0 || $pipeline['bank_uncleared_count'] > 0) ? 'warning' : 'ok',
             'bank_unposted_count' => $pipeline['bank_unposted_count'],
             'bank_unposted_amount' => $pipeline['bank_unposted_amount'],
             'bank_uncleared_count' => $pipeline['bank_uncleared_count'],
             'bank_uncleared_amount' => $pipeline['bank_uncleared_amount'],
+            'bank_clearance_group_count' => $pipeline['bank_clearance_group_count'],
             'issue_count' => $pipeline['bank_unposted_count'] + $pipeline['bank_uncleared_count'],
             'note' => $pipeline['note'],
+        ];
+
+        $checks['sms_pipeline'] = [
+            'label' => 'SMS import pipeline',
+            'severity' => ($pipeline['sms_unposted_count'] > 0
+                || $pipeline['sms_unmatched_bank_count'] > 0
+                || $pipeline['sms_ops_uncleared_count'] > 0) ? 'warning' : 'ok',
+            'sms_unposted_count' => $pipeline['sms_unposted_count'],
+            'sms_unposted_amount' => $pipeline['sms_unposted_amount'],
+            'sms_unmatched_bank_count' => $pipeline['sms_unmatched_bank_count'],
+            'sms_unmatched_bank_amount' => $pipeline['sms_unmatched_bank_amount'],
+            'sms_bank_link_group_count' => $pipeline['sms_bank_link_group_count'],
+            'sms_ops_uncleared_count' => $pipeline['sms_ops_uncleared_count'],
+            'sms_ops_uncleared_amount' => $pipeline['sms_ops_uncleared_amount'],
+            'sms_ops_link_group_count' => $pipeline['sms_ops_link_group_count'],
+            'issue_count' => $pipeline['sms_unposted_count']
+                + $pipeline['sms_unmatched_bank_count']
+                + $pipeline['sms_ops_uncleared_count'],
+            'note' => EvidenceChannelSettings::usesSms()
+                ? __('Open SMS rows awaiting member match or post to cash; posted rows may need an ops or bank link.')
+                : __('Open SMS rows awaiting member match or post to cash; posted rows may still need a bank link.'),
         ];
 
         // --- 7) Period metrics ---
@@ -1191,7 +1286,9 @@ class ReconciliationReportService
                 'member_portal_posting_integrity' => $checks['member_portal_posting_integrity']['severity'],
                 'bank_transaction_posting_integrity' => $checks['bank_transaction_posting_integrity']['severity'],
                 'bank_pipeline' => $checks['bank_pipeline']['severity'],
+                'sms_pipeline' => $checks['sms_pipeline']['severity'],
                 'sms_transaction_posting_integrity' => $checks['sms_transaction_posting_integrity']['severity'],
+                'sms_bank_link_integrity' => $checks['sms_bank_link_integrity']['severity'],
                 'loan_installment_flow_integrity' => $checks['loan_installment_flow_integrity']['severity'],
                 'member_cash_transfer_integrity' => $checks['member_cash_transfer_integrity']['severity'],
                 'orphan_loan_accounts' => $checks['orphan_loan_accounts']['severity'],
@@ -1224,7 +1321,9 @@ class ReconciliationReportService
             $covRow('Master cash vs declared bank / statement balance (optional)', ['bank_statement_vs_book']),
             $covRow('Bank import rows → ledger posting hygiene', ['bank_transaction_posting_integrity']),
             $covRow('Bank pipeline: unposted imports / uncleared lines', ['bank_pipeline']),
+            $covRow('SMS pipeline: unposted import rows', ['sms_pipeline']),
             $covRow('SMS import rows → ledger posting hygiene', ['sms_transaction_posting_integrity']),
+            $covRow('SMS ↔ bank linked group integrity', ['sms_bank_link_integrity']),
             $covRow('Member portal “post funds” → ledger', ['member_portal_posting_integrity']),
             $covRow('Contribution cycle: rows vs member fund + master fund legs', ['contribution_flow_integrity', 'collection_arrears_catalog']),
             $covRow('Contributions: master fund credits & per-row ledger presence', ['contributions_ledger']),
@@ -1515,6 +1614,214 @@ class ReconciliationReportService
         }
 
         return [];
+    }
+
+    /**
+     * @return array{0: int, 1: list<array<string, mixed>>}
+     */
+    public function collectSmsTransactionPostingIntegrityIssues(): array
+    {
+        $issues = [];
+        $checked = 0;
+
+        SmsTransaction::query()
+            ->whereNotNull('posted_at')
+            ->where('is_duplicate', false)
+            ->orderBy('id')
+            ->chunkById(200, function ($rows) use (&$issues, &$checked): void {
+                foreach ($rows as $tx) {
+                    if (! $tx instanceof SmsTransaction) {
+                        continue;
+                    }
+
+                    $checked++;
+                    array_push($issues, ...$this->smsTransactionPostingIntegrityIssuesFor($tx));
+                }
+            });
+
+        return [$checked, $issues];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function smsTransactionPostingIntegrityIssuesFor(SmsTransaction $tx): array
+    {
+        if ($tx->member_id === null) {
+            return [
+                [
+                    'sms_transaction_id' => $tx->id,
+                    'issue' => 'posted SMS row missing member',
+                ],
+            ];
+        }
+
+        $expectedType = $tx->transaction_type === 'credit' ? 'credit' : 'debit';
+        $expectedAmount = abs((float) $tx->amount);
+        $memberId = (int) $tx->member_id;
+
+        $issues = [];
+
+        $memberCashLine = Transaction::query()
+            ->where('reference_type', $tx->getMorphClass())
+            ->where('reference_id', $tx->id)
+            ->where('member_id', $memberId)
+            ->whereHas(
+                'account',
+                fn ($query) => $query->where('type', 'cash')->where('is_master', false)->where('member_id', $memberId),
+            )
+            ->first();
+
+        if ($memberCashLine === null) {
+            $issues[] = [
+                'sms_transaction_id' => $tx->id,
+                'issue' => 'missing member cash ledger line',
+                'member_id' => $memberId,
+            ];
+        } elseif (
+            $memberCashLine->type !== $expectedType
+            || abs((float) $memberCashLine->amount - $expectedAmount) > self::AMOUNT_TOLERANCE
+        ) {
+            $issues[] = [
+                'sms_transaction_id' => $tx->id,
+                'issue' => 'member cash ledger line amount/type mismatch',
+                'member_id' => $memberId,
+                'ledger_type' => $memberCashLine->type,
+                'ledger_amount' => (float) $memberCashLine->amount,
+                'expected_type' => $expectedType,
+                'expected_amount' => $expectedAmount,
+            ];
+        }
+
+        $masterCashLine = Transaction::query()
+            ->where('reference_type', $tx->getMorphClass())
+            ->where('reference_id', $tx->id)
+            ->whereHas(
+                'account',
+                fn ($query) => $query->where('type', 'cash')->where('is_master', true),
+            )
+            ->first();
+
+        if ($masterCashLine === null) {
+            $issues[] = [
+                'sms_transaction_id' => $tx->id,
+                'issue' => 'missing master cash mirror leg',
+                'member_id' => $memberId,
+            ];
+        } elseif (
+            $masterCashLine->type !== $expectedType
+            || abs((float) $masterCashLine->amount - $expectedAmount) > self::AMOUNT_TOLERANCE
+        ) {
+            $issues[] = [
+                'sms_transaction_id' => $tx->id,
+                'issue' => 'master cash mirror leg amount/type mismatch',
+                'member_id' => $memberId,
+                'ledger_type' => $masterCashLine->type,
+                'ledger_amount' => (float) $masterCashLine->amount,
+                'expected_type' => $expectedType,
+                'expected_amount' => $expectedAmount,
+            ];
+        }
+
+        return $issues;
+    }
+
+    /**
+     * @return array{0: int, 1: list<array<string, mixed>>}
+     */
+    public function collectSmsBankLinkIntegrityIssues(): array
+    {
+        if (
+            ! SmsTransaction::query()->where('is_duplicate', false)->exists()
+            && ! SmsImportSession::query()->exists()
+        ) {
+            return [0, []];
+        }
+
+        $issues = [];
+        $checked = 0;
+        $tolerance = ContributionPolicySettings::reconTolerance();
+        $smsMatching = app(SmsBankClearingMatchService::class);
+
+        SmsClearanceMatchGroup::query()
+            ->orderBy('id')
+            ->pluck('id')
+            ->each(function (int $groupId) use (&$issues, &$checked, $tolerance, $smsMatching): void {
+                $checked++;
+
+                $smsRows = SmsTransaction::query()
+                    ->where('sms_clearance_match_group_id', $groupId)
+                    ->get();
+                $bankRows = BankTransaction::query()
+                    ->where('sms_clearance_match_group_id', $groupId)
+                    ->get();
+
+                if ($smsRows->isEmpty() || $bankRows->isEmpty()) {
+                    $issues[] = [
+                        'sms_clearance_match_group_id' => $groupId,
+                        'issue' => 'incomplete SMS bank match group',
+                    ];
+
+                    return;
+                }
+
+                if (! $smsMatching->groupAmountsMatch($smsRows, $bankRows, $tolerance)) {
+                    $issues[] = [
+                        'sms_clearance_match_group_id' => $groupId,
+                        'issue' => 'SMS and bank totals diverge beyond tolerance',
+                        'sms_transaction_ids' => $smsRows->pluck('id')->all(),
+                        'bank_transaction_ids' => $bankRows->pluck('id')->all(),
+                        'sms_total' => $smsMatching->sumSmsAmounts($smsRows),
+                        'bank_total' => $smsMatching->sumBankAmounts($bankRows),
+                    ];
+
+                    return;
+                }
+
+                if ($smsRows->count() !== 1 || $bankRows->count() !== 1) {
+                    return;
+                }
+
+                $sms = $smsRows->first();
+                $bank = $bankRows->first();
+
+                if ($sms === null || $bank === null || ! $sms->isPosted()) {
+                    return;
+                }
+
+                if (
+                    $bank->member_id !== null
+                    && $sms->member_id !== null
+                    && (int) $bank->member_id !== (int) $sms->member_id
+                ) {
+                    $issues[] = [
+                        'sms_clearance_match_group_id' => $groupId,
+                        'issue' => 'posted SMS member disagrees with linked bank line member',
+                        'sms_transaction_id' => $sms->id,
+                        'bank_transaction_id' => $bank->id,
+                        'sms_member_id' => $sms->member_id,
+                        'bank_member_id' => $bank->member_id,
+                    ];
+                }
+            });
+
+        SmsTransaction::query()
+            ->whereNotNull('posted_at')
+            ->where('is_duplicate', false)
+            ->where('is_bank_cleared', false)
+            ->where('posted_at', '<', BusinessDay::now()->subDays(ContributionPolicySettings::stalePendingDays()))
+            ->orderBy('id')
+            ->limit(200)
+            ->get(['id', 'amount', 'member_id', 'posted_at'])
+            ->each(function (SmsTransaction $sms) use (&$issues): void {
+                $issues[] = [
+                    'sms_transaction_id' => $sms->id,
+                    'issue' => 'posted SMS row has no bank evidence link past stale threshold',
+                    'member_id' => $sms->member_id,
+                ];
+            });
+
+        return [$checked, $issues];
     }
 
     private function isMatchOnlyOperationalBankRow(BankTransaction $tx): bool

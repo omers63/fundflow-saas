@@ -40,6 +40,7 @@ Keep **member** and **master** ledger legs in sync wherever they represent the s
 
 | Flow | Service | Pattern |
 |------|---------|---------|
+| SMS ops clearance (Phase 7) | `SmsOperationalClearingMatchService::clearMatchPair()` | Ops row cleared + master bank from SMS evidence (no second member cash) |
 | Member deposit accept | `FundPostingService::accept()` | CR master cash + CR member cash |
 | Loan disbursement | `LoanLedgerService::postPartialLoanDisbursement()` | DR funds + CR master cash + CR member cash |
 | Cash-out approve | `MemberCashOutService::accept()` | DR member cash + DR master cash + uncleared bank txn |

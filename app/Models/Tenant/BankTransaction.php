@@ -25,6 +25,8 @@ class BankTransaction extends Model
         'is_cleared',
         'cleared_at',
         'bank_clearance_match_group_id',
+        'sms_clearance_match_group_id',
+        'sms_ops_clearance_match_group_id',
         'fund_posting_id',
         'membership_application_id',
         'cash_out_request_id',
@@ -56,6 +58,16 @@ class BankTransaction extends Model
     public function bankClearanceMatchGroup(): BelongsTo
     {
         return $this->belongsTo(BankClearanceMatchGroup::class);
+    }
+
+    public function smsClearanceMatchGroup(): BelongsTo
+    {
+        return $this->belongsTo(SmsClearanceMatchGroup::class);
+    }
+
+    public function smsOpsClearanceMatchGroup(): BelongsTo
+    {
+        return $this->belongsTo(SmsOpsClearanceMatchGroup::class);
     }
 
     public function member(): BelongsTo

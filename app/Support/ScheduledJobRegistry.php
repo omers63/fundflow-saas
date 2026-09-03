@@ -39,6 +39,7 @@ final class ScheduledJobRegistry
             self::job('loans:close-emi-window', __('Close EMI collection window'), __('Mark unpaid installments overdue'), AutomationScheduleSettings::emiCloseScheduleLabel(), 'loans', true),
             self::job('contributions:apply-late-fees', __('Apply late fees'), __('Contribution and EMI late fee tiers (also runs after each Apply contributions)'), AutomationScheduleSettings::lateFeesScheduleLabel(), 'contributions', true),
             self::job('bank:auto-match', __('Bank auto-match'), __('Match imports to uncleared fund postings'), AutomationScheduleSettings::bankAutoMatchScheduleLabel(), 'bank', true),
+            self::job('sms:auto-match-ops', __('SMS auto-match ops'), __('Match posted SMS rows to uncleared operational rows (1:1)'), AutomationScheduleSettings::bankAutoMatchScheduleLabel(), 'bank', true),
             self::job('statements:generate --notify', __('Generate statements'), __('Monthly statements with notifications'), AutomationScheduleSettings::statementsScheduleLabel(), 'statements', false),
             self::job('loans:send-due-notifications', __('Loan due notifications'), __('Notify borrowers of EMI due on configured cycle days'), AutomationScheduleSettings::loanDueNotifyScheduleLabel(), 'loans', false),
             self::job('loans:apply-repayments', __('Apply loan repayments'), __('Batch EMI collection; then loan delinquency check'), AutomationScheduleSettings::loanApplyScheduleLabel(), 'loans', true),

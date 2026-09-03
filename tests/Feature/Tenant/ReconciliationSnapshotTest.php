@@ -64,6 +64,7 @@ test('reconciliation report includes legacy check keys and control layer', funct
         'member_portal_posting_integrity',
         'bank_transaction_posting_integrity',
         'bank_pipeline',
+        'sms_pipeline',
         'sms_transaction_posting_integrity',
         'active_loans_schedule_vs_ledger',
         'approved_loans_disbursement_vs_ledger',
@@ -76,7 +77,8 @@ test('reconciliation report includes legacy check keys and control layer', funct
         'orphan_loan_accounts',
         'collection_arrears_catalog',
     ])
-        ->and($report['checks']['sms_transaction_posting_integrity']['severity'])->toBe('skipped')
+        ->and($report['checks']['sms_transaction_posting_integrity']['severity'])->toBe('ok')
+        ->and($report['checks']['sms_transaction_posting_integrity']['transactions_checked'])->toBe(0)
         ->and($report)->toHaveKeys(['coverage_matrix', 'control_layer', 'pipeline', 'verdict'])
         ->and($report['verdict'])->toHaveKeys(['pass', 'critical_issues', 'warnings']);
 });

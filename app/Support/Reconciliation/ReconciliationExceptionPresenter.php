@@ -10,7 +10,10 @@ use App\Filament\Tenant\Resources\BankAccounts\BankAccountsResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
+use App\Filament\Tenant\Resources\SmsClearing\SmsClearingResource;
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
+use App\Filament\Tenant\Support\SmsClearingTabRegistry;
+use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\ReconciliationException;
 use App\Services\MemberInvariantDiagnosticsService;
@@ -27,6 +30,7 @@ final class ReconciliationExceptionPresenter
         return [
             'master_account' => __('Master pool'),
             'bank_clearing' => __('Bank clearing'),
+            'sms_clearing' => __('SMS clearing'),
             'contribution' => __('Collections'),
             'loan' => __('Loans'),
             'emi' => __('Loan repayments'),
@@ -58,6 +62,19 @@ final class ReconciliationExceptionPresenter
 
         return match ($record->exception_code) {
             'RECON_AMBIGUOUS_MATCH' => __('Pick the correct pending line, or clear the match from Bank Clearing.'),
+            'RECON_SPLITTABLE_BANK_MATCH' => __('Use Match to multiple in Bank Clearing to group the suggested lines.'),
+            'SMS_RECON_UNMATCHED_BANK_LINE' => __('Open SMS clearing and link the row to a bank import line.'),
+            'SMS_RECON_AMBIGUOUS_BANK_MATCH' => __('Pick the correct bank import line, or use Match to multiple for a split settlement.'),
+            'SMS_RECON_SPLITTABLE_BANK_MATCH' => __('Use Match to multiple in SMS or bank clearing to group the suggested lines.'),
+            'BANK_RECON_UNMATCHED_SMS_LINE' => __('Open bank clearing and link the import line to an SMS row.'),
+            'SMS_OPS_UNMATCHED', 'OPS_RECON_UNMATCHED_SMS' => __('Open SMS clearing and link the row to its operational counterpart.'),
+            'SMS_OPS_AMBIGUOUS_MATCH' => __('Pick the correct operational row, or clear the match from SMS clearing.'),
+            'SMS_OPS_AMOUNT_MISMATCH' => __('Review the linked SMS and operational rows, then rematch or correct amounts.'),
+            'CASH_DEPOSIT_UNEVIDENCED' => __('Match a posted SMS alert to the accepted deposit in SMS clearing.'),
+            'SMS_BANK_AMOUNT_MISMATCH', 'SMS_BANK_CROSS_POSTED_DRIFT' => __('Review the linked SMS and bank rows, then rematch or correct the member assignment.'),
+            'SMS_MEMBER_UNMATCHED' => __('Assign a member in Bank SMS clearing, then post to cash.'),
+            'SMS_UNPOSTED_BACKLOG', 'SMS_DUPLICATE_RISK' => __('Open Bank SMS clearing and match or post the pending row.'),
+            'SMS_POSTED_WITHOUT_LEDGER' => __('Reverse and re-post the SMS row, or post a ledger correction.'),
             'RECON_UNMATCHED_BANK_LINE', 'UNMATCHED_CASH_ENTRY', 'STALE_PENDING' => __('Open Bank Clearing and match or clear the pending line.'),
             'CASH_DEPOSIT_UNBANKED' => __('Accept the deposit bank line or link the member deposit in Bank Clearing.'),
             'AMOUNT_MISMATCH' => __('Compare the posting and bank amounts, then correct the ledger or rematch.'),
@@ -74,25 +91,81 @@ final class ReconciliationExceptionPresenter
         return $record->domain === 'bank_clearing'
             || in_array($record->exception_code, [
                 'RECON_AMBIGUOUS_MATCH',
+                'RECON_SPLITTABLE_BANK_MATCH',
                 'RECON_UNMATCHED_BANK_LINE',
                 'UNMATCHED_CASH_ENTRY',
                 'STALE_PENDING',
                 'CASH_DEPOSIT_UNBANKED',
                 'AMOUNT_MISMATCH',
+                'BANK_RECON_UNMATCHED_SMS_LINE',
             ], true);
+    }
+
+    public static function isSmsClearingRelated(ReconciliationException $record): bool
+    {
+        return $record->domain === 'sms_clearing'
+            || in_array($record->exception_code, [
+                'SMS_UNPOSTED_BACKLOG',
+                'SMS_MEMBER_UNMATCHED',
+                'SMS_POSTED_WITHOUT_LEDGER',
+                'SMS_DUPLICATE_RISK',
+                'SMS_RECON_UNMATCHED_BANK_LINE',
+                'SMS_RECON_AMBIGUOUS_BANK_MATCH',
+                'SMS_RECON_SPLITTABLE_BANK_MATCH',
+                'SMS_BANK_AMOUNT_MISMATCH',
+                'SMS_BANK_CROSS_POSTED_DRIFT',
+                'SMS_OPS_UNMATCHED',
+                'OPS_RECON_UNMATCHED_SMS',
+                'SMS_OPS_AMBIGUOUS_MATCH',
+                'SMS_OPS_AMOUNT_MISMATCH',
+                'CASH_DEPOSIT_UNEVIDENCED',
+            ], true);
+    }
+
+    public static function smsClearingUrl(?ReconciliationException $record = null): string
+    {
+        $queueFilter = SmsClearingTabRegistry::FILTER_ALL;
+
+        if ($record !== null) {
+            $queueFilter = match ($record->exception_code) {
+                'SMS_MEMBER_UNMATCHED' => SmsClearingTabRegistry::FILTER_UNMATCHED,
+                'SMS_UNPOSTED_BACKLOG' => filled($record->affected_entities['member_id'] ?? null)
+                ? SmsClearingTabRegistry::FILTER_READY
+                : SmsClearingTabRegistry::FILTER_ALL,
+                'SMS_RECON_UNMATCHED_BANK_LINE', 'SMS_RECON_AMBIGUOUS_BANK_MATCH' => SmsClearingTabRegistry::FILTER_UNMATCHED_BANK,
+                'SMS_RECON_SPLITTABLE_BANK_MATCH' => match ($record->affected_entities['direction'] ?? null) {
+                    'many_to_one' => SmsClearingTabRegistry::FILTER_ALL,
+                    'many_to_many' => SmsClearingTabRegistry::FILTER_ALL,
+                    default => SmsClearingTabRegistry::FILTER_UNMATCHED_BANK,
+                },
+                'SMS_OPS_UNMATCHED' => SmsClearingTabRegistry::FILTER_UNMATCHED_OPS,
+                'OPS_RECON_UNMATCHED_SMS' => SmsClearingTabRegistry::FILTER_READY_TO_CLEAR_OPS,
+                'SMS_OPS_AMBIGUOUS_MATCH' => SmsClearingTabRegistry::FILTER_UNMATCHED_OPS,
+                'CASH_DEPOSIT_UNEVIDENCED' => SmsClearingTabRegistry::FILTER_UNMATCHED_OPS,
+                default => $queueFilter,
+            };
+        }
+
+        return SmsClearingResource::listUrl(
+            SmsClearingTabRegistry::TAB_QUEUE,
+            queueFilter: $queueFilter,
+        );
     }
 
     public static function bankClearingUrl(?ReconciliationException $record = null): string
     {
         $queueFilter = BankClearingTabRegistry::FILTER_OPERATIONS;
 
-        if (
-            $record !== null && in_array($record->exception_code, [
-                'RECON_UNMATCHED_BANK_LINE',
-                'STALE_PENDING',
-            ], true)
-        ) {
-            $queueFilter = BankClearingTabRegistry::FILTER_BANK_FILE;
+        if ($record !== null) {
+            $queueFilter = match ($record->exception_code) {
+                'RECON_SPLITTABLE_BANK_MATCH' => ($record->affected_entities['direction'] ?? null) === 'one_to_many'
+                ? BankClearingTabRegistry::FILTER_OPERATIONS
+                : (($record->affected_entities['direction'] ?? null) === 'many_to_many'
+                    ? BankClearingTabRegistry::FILTER_ALL
+                    : BankClearingTabRegistry::FILTER_BANK_FILE),
+                'RECON_UNMATCHED_BANK_LINE', 'STALE_PENDING', 'BANK_RECON_UNMATCHED_SMS_LINE' => BankClearingTabRegistry::FILTER_BANK_FILE,
+                default => $queueFilter,
+            };
         }
 
         return BankAccountsResource::listUrl(
@@ -184,6 +257,28 @@ final class ReconciliationExceptionPresenter
                     self::queueFilterForBankLineEntity($record, $key),
                 ),
             ];
+
+            $items = [...$items, ...self::bankClearanceGroupContextItems($bankTransactionId)];
+        }
+
+        if (filled($entities['sms_transaction_id'] ?? null)) {
+            $smsTransactionId = (int) $entities['sms_transaction_id'];
+
+            $items[] = [
+                'label' => __('SMS row'),
+                'value' => '#'.$smsTransactionId,
+                'url' => self::smsClearingUrl($record),
+            ];
+        }
+
+        if (filled($entities['sms_transaction_ids'] ?? null) && is_array($entities['sms_transaction_ids'])) {
+            $items[] = [
+                'label' => __('SMS rows'),
+                'value' => collect($entities['sms_transaction_ids'])
+                    ->map(fn (mixed $id): string => '#'.(int) $id)
+                    ->implode(', '),
+                'url' => self::smsClearingUrl($record),
+            ];
         }
 
         if (filled($entities['fund_posting_id'] ?? null)) {
@@ -200,6 +295,36 @@ final class ReconciliationExceptionPresenter
                 'value' => trans_choice(':count pending line|:count pending lines', count($entities['candidate_ids']), [
                     'count' => count($entities['candidate_ids']),
                 ]),
+                'url' => self::bankClearingUrl($record),
+            ];
+        }
+
+        if (filled($entities['bank_transaction_ids'] ?? null) && is_array($entities['bank_transaction_ids'])) {
+            $items[] = [
+                'label' => __('Suggested bank lines'),
+                'value' => collect($entities['bank_transaction_ids'])
+                    ->map(fn (mixed $id): string => '#'.(int) $id)
+                    ->implode(', '),
+                'url' => self::bankClearingUrl($record),
+            ];
+        }
+
+        if (filled($entities['imported_bank_transaction_ids'] ?? null) && is_array($entities['imported_bank_transaction_ids'])) {
+            $items[] = [
+                'label' => __('Suggested bank lines'),
+                'value' => collect($entities['imported_bank_transaction_ids'])
+                    ->map(fn (mixed $id): string => '#'.(int) $id)
+                    ->implode(', '),
+                'url' => self::bankClearingUrl($record),
+            ];
+        }
+
+        if (filled($entities['uncleared_bank_transaction_ids'] ?? null) && is_array($entities['uncleared_bank_transaction_ids'])) {
+            $items[] = [
+                'label' => __('Suggested operational rows'),
+                'value' => collect($entities['uncleared_bank_transaction_ids'])
+                    ->map(fn (mixed $id): string => '#'.(int) $id)
+                    ->implode(', '),
                 'url' => self::bankClearingUrl($record),
             ];
         }
@@ -233,6 +358,67 @@ final class ReconciliationExceptionPresenter
                     'url' => null,
                 ];
             }
+        }
+
+        return $items;
+    }
+
+    /**
+     * @return list<array{label: string, value: string, url: ?string}>
+     */
+    private static function bankClearanceGroupContextItems(int $bankTransactionId): array
+    {
+        $bankLine = BankTransaction::query()->find($bankTransactionId);
+
+        if ($bankLine?->bank_clearance_match_group_id === null) {
+            return [];
+        }
+
+        $groupMembers = BankTransaction::query()
+            ->where('bank_clearance_match_group_id', $bankLine->bank_clearance_match_group_id)
+            ->orderBy('id')
+            ->get(['id', 'amount', 'fund_posting_id', 'cash_out_request_id']);
+
+        if ($groupMembers->count() <= 1) {
+            return [];
+        }
+
+        $items = [
+            [
+                'label' => __('Match group'),
+                'value' => trans_choice(':count linked bank row|:count linked bank rows', $groupMembers->count(), [
+                    'count' => $groupMembers->count(),
+                ]),
+                'url' => BankAccountsResource::listUrl(
+                    BankClearingTabRegistry::TAB_HISTORY,
+                    historySection: BankClearingTabRegistry::HISTORY_CLOSED,
+                ),
+            ],
+        ];
+
+        $linkedRefs = $groupMembers
+            ->flatMap(function (BankTransaction $member): array {
+                $refs = [];
+
+                if ($member->fund_posting_id !== null) {
+                    $refs[] = __('Deposit #:id', ['id' => $member->fund_posting_id]);
+                }
+
+                if ($member->cash_out_request_id !== null) {
+                    $refs[] = __('Cash-out #:id', ['id' => $member->cash_out_request_id]);
+                }
+
+                return $refs;
+            })
+            ->unique()
+            ->values();
+
+        if ($linkedRefs->isNotEmpty()) {
+            $items[] = [
+                'label' => __('Linked operations'),
+                'value' => $linkedRefs->implode(', '),
+                'url' => null,
+            ];
         }
 
         return $items;
@@ -373,6 +559,16 @@ final class ReconciliationExceptionPresenter
             ];
         }
 
+        if (self::isSmsClearingRelated($record)) {
+            $actions[] = [
+                'type' => 'link',
+                'label' => __('Open SMS clearing'),
+                'icon' => 'heroicon-o-device-phone-mobile',
+                'color' => 'primary',
+                'url' => self::smsClearingUrl($record),
+            ];
+        }
+
         $action = match ($record->exception_code) {
             'RECON_AMBIGUOUS_MATCH' => [
                 'type' => 'action',
@@ -380,6 +576,55 @@ final class ReconciliationExceptionPresenter
                 'label' => __('Resolve bank match'),
                 'icon' => 'heroicon-o-link',
                 'color' => 'primary',
+            ],
+            'RECON_SPLITTABLE_BANK_MATCH' => [
+                'type' => 'action',
+                'name' => 'resolveSplittableBankMatch',
+                'label' => __('Resolve group match'),
+                'icon' => 'heroicon-o-squares-plus',
+                'color' => 'primary',
+            ],
+            'SMS_RECON_AMBIGUOUS_BANK_MATCH' => [
+                'type' => 'action',
+                'name' => 'resolveSmsBankMatch',
+                'label' => __('Resolve SMS bank match'),
+                'icon' => 'heroicon-o-link',
+                'color' => 'primary',
+            ],
+            'SMS_RECON_SPLITTABLE_BANK_MATCH' => [
+                'type' => 'action',
+                'name' => 'resolveSmsBankMatchGroup',
+                'label' => __('Resolve SMS bank group'),
+                'icon' => 'heroicon-o-squares-plus',
+                'color' => 'primary',
+            ],
+            'SMS_OPS_AMBIGUOUS_MATCH', 'SMS_OPS_UNMATCHED', 'OPS_RECON_UNMATCHED_SMS' => [
+                'type' => 'action',
+                'name' => 'resolveSmsOpsMatch',
+                'label' => __('Resolve SMS ops match'),
+                'icon' => 'heroicon-o-link',
+                'color' => 'primary',
+            ],
+            'SMS_RECON_UNMATCHED_BANK_LINE', 'BANK_RECON_UNMATCHED_SMS_LINE' => [
+                'type' => 'action',
+                'name' => 'resolveSmsBankMatch',
+                'label' => __('Link SMS ↔ bank'),
+                'icon' => 'heroicon-o-link',
+                'color' => 'primary',
+            ],
+            'SMS_MEMBER_UNMATCHED', 'SMS_UNPOSTED_BACKLOG' => [
+                'type' => 'action',
+                'name' => 'assignMemberAndPostSms',
+                'label' => __('Assign member & post'),
+                'icon' => 'heroicon-o-user-plus',
+                'color' => 'primary',
+            ],
+            'SMS_POSTED_WITHOUT_LEDGER' => [
+                'type' => 'action',
+                'name' => 'reverseSmsPost',
+                'label' => __('Reverse SMS post'),
+                'icon' => 'heroicon-o-arrow-uturn-left',
+                'color' => 'warning',
             ],
             'EMI_OVER_COLLECTION' => [
                 'type' => 'action',
@@ -438,7 +683,7 @@ final class ReconciliationExceptionPresenter
         ];
 
         $resolveName = $advancedUi ? 'resolve' : 'primaryResolve';
-        if (! self::isBankClearingRelated($record) || $advancedUi) {
+        if ((! self::isBankClearingRelated($record) && ! self::isSmsClearingRelated($record)) || $advancedUi) {
             $actions[] = [
                 'type' => 'action',
                 'name' => $resolveName,
@@ -491,6 +736,22 @@ final class ReconciliationExceptionPresenter
             'SCHEDULE_BEFORE_FULL_DISBURSE' => __('Schedule before full disbursement'),
             'FUND_TIER_OVER_COMMITTED' => __('Fund tier over-committed'),
             'RECON_AMBIGUOUS_MATCH' => __('Ambiguous bank match'),
+            'RECON_SPLITTABLE_BANK_MATCH' => __('Splittable bank match'),
+            'SMS_UNPOSTED_BACKLOG' => __('Stale unposted SMS row'),
+            'SMS_MEMBER_UNMATCHED' => __('SMS row without member'),
+            'SMS_POSTED_WITHOUT_LEDGER' => __('SMS posted without ledger legs'),
+            'SMS_DUPLICATE_RISK' => __('Possible duplicate SMS rows'),
+            'SMS_RECON_UNMATCHED_BANK_LINE' => __('Posted SMS without bank evidence'),
+            'SMS_RECON_AMBIGUOUS_BANK_MATCH' => __('Ambiguous SMS bank match'),
+            'SMS_RECON_SPLITTABLE_BANK_MATCH' => __('Splittable SMS bank match'),
+            'BANK_RECON_UNMATCHED_SMS_LINE' => __('Bank import without SMS link'),
+            'SMS_BANK_AMOUNT_MISMATCH' => __('SMS ↔ bank amount mismatch'),
+            'SMS_BANK_CROSS_POSTED_DRIFT' => __('SMS ↔ bank member drift'),
+            'SMS_OPS_UNMATCHED' => __('Posted SMS without ops evidence'),
+            'OPS_RECON_UNMATCHED_SMS' => __('Uncleared ops row without SMS link'),
+            'SMS_OPS_AMBIGUOUS_MATCH' => __('Ambiguous SMS ops match'),
+            'SMS_OPS_AMOUNT_MISMATCH' => __('SMS ↔ ops amount mismatch'),
+            'CASH_DEPOSIT_UNEVIDENCED' => __('Accepted deposit without SMS evidence'),
             'RECON_UNMATCHED_BANK_LINE' => __('Unmatched bank import line'),
             'UNMATCHED_CASH_ENTRY' => __('Unmatched deposit line'),
             'STALE_PENDING' => __('Stale pending bank line'),
@@ -514,6 +775,22 @@ final class ReconciliationExceptionPresenter
             'MEMBER_CASH_DRIFT' => __('This member’s cash ledger components do not reconcile to the account balance.'),
             'MEMBER_FUND_DRIFT' => __('This member’s fund ledger components do not reconcile to the account balance.'),
             'RECON_AMBIGUOUS_MATCH' => __('An imported bank line matches more than one pending operational entry.'),
+            'RECON_SPLITTABLE_BANK_MATCH' => __('Several bank lines sum to one operational row, several operational rows sum to one bank line, or multi-row totals balance on both sides.'),
+            'SMS_UNPOSTED_BACKLOG' => __('An SMS import row has stayed unposted past the stale threshold.'),
+            'SMS_MEMBER_UNMATCHED' => __('An SMS import row has no assigned member past the stale threshold.'),
+            'SMS_POSTED_WITHOUT_LEDGER' => __('An SMS row is marked posted but member or master cash legs are missing or mismatched.'),
+            'SMS_DUPLICATE_RISK' => __('Multiple unposted SMS rows share the same bank, date, and amount.'),
+            'SMS_RECON_UNMATCHED_BANK_LINE' => __('A posted SMS row has no linked bank import line past the stale threshold.'),
+            'SMS_RECON_AMBIGUOUS_BANK_MATCH' => __('A posted SMS row matches more than one bank import line within tolerance.'),
+            'SMS_RECON_SPLITTABLE_BANK_MATCH' => __('Several bank lines sum to one SMS row, several SMS rows sum to one bank line, or multi-row totals balance on both sides.'),
+            'BANK_RECON_UNMATCHED_SMS_LINE' => __('An imported bank line has no SMS evidence link where the SMS channel is in use.'),
+            'SMS_BANK_AMOUNT_MISMATCH' => __('Linked SMS and bank rows no longer sum to the same total.'),
+            'SMS_BANK_CROSS_POSTED_DRIFT' => __('A posted SMS row is linked to a bank line assigned to a different member.'),
+            'SMS_OPS_UNMATCHED' => __('A posted SMS row has no linked operational row past the stale threshold.'),
+            'OPS_RECON_UNMATCHED_SMS' => __('An uncleared operational row has no SMS evidence link past the stale threshold.'),
+            'SMS_OPS_AMBIGUOUS_MATCH' => __('A posted SMS row matches more than one operational row within tolerance.'),
+            'SMS_OPS_AMOUNT_MISMATCH' => __('Linked SMS and operational rows no longer sum to the same total.'),
+            'CASH_DEPOSIT_UNEVIDENCED' => __('A member deposit was accepted in the ledger but has no SMS ops evidence yet.'),
             'RECON_UNMATCHED_BANK_LINE' => __('An imported bank statement line has no matching pending entry.'),
             'UNMATCHED_CASH_ENTRY' => __('A pending deposit line has stayed uncleared beyond the stale threshold.'),
             'STALE_PENDING' => __('A pending operational bank line is older than the stale threshold.'),

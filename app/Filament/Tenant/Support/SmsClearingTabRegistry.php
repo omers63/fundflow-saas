@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Support;
 
 use App\Filament\Tenant\Resources\SmsClearing\SmsClearingResource;
+use App\Support\EvidenceChannelSettings;
 
 final class SmsClearingTabRegistry
 {
@@ -19,6 +20,14 @@ final class SmsClearingTabRegistry
     public const FILTER_UNMATCHED = 'unmatched';
 
     public const FILTER_READY = 'ready_to_post';
+
+    public const FILTER_UNMATCHED_BANK = 'unmatched_bank';
+
+    public const FILTER_READY_TO_MATCH = 'ready_to_match';
+
+    public const FILTER_UNMATCHED_OPS = 'unmatched_ops';
+
+    public const FILTER_READY_TO_CLEAR_OPS = 'ready_to_clear_ops';
 
     public const HISTORY_BATCHES = 'batches';
 
@@ -41,11 +50,23 @@ final class SmsClearingTabRegistry
      */
     public static function queueFilters(): array
     {
-        return [
+        $filters = [
             self::FILTER_ALL => __('All open'),
             self::FILTER_UNMATCHED => __('Unmatched member'),
             self::FILTER_READY => __('Ready to post'),
         ];
+
+        if (EvidenceChannelSettings::usesBankCsv()) {
+            $filters[self::FILTER_UNMATCHED_BANK] = __('Unmatched bank');
+            $filters[self::FILTER_READY_TO_MATCH] = __('Ready to match bank');
+        }
+
+        if (EvidenceChannelSettings::usesSms()) {
+            $filters[self::FILTER_UNMATCHED_OPS] = __('Unmatched ops');
+            $filters[self::FILTER_READY_TO_CLEAR_OPS] = __('Ready to clear ops');
+        }
+
+        return $filters;
     }
 
     /**
@@ -80,7 +101,9 @@ final class SmsClearingTabRegistry
     public static function normalizeQueueFilter(?string $filter): string
     {
         return match ($filter) {
-            self::FILTER_UNMATCHED, self::FILTER_READY => (string) $filter,
+            self::FILTER_UNMATCHED, self::FILTER_READY,
+            self::FILTER_UNMATCHED_BANK, self::FILTER_READY_TO_MATCH,
+            self::FILTER_UNMATCHED_OPS, self::FILTER_READY_TO_CLEAR_OPS => (string) $filter,
             default => self::FILTER_ALL,
         };
     }

@@ -6,6 +6,7 @@ use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
 use App\Support\BusinessDay;
+use App\Support\EvidenceChannelSettings;
 use App\Support\ImportDateFormats;
 use Illuminate\Http\UploadedFile;
 
@@ -19,6 +20,10 @@ class BankImportService
      */
     public function importCsv(UploadedFile $file, ?int $importedBy = null, ?string $bankName = null, ?array $template = null, ?int $bankTemplateId = null): array
     {
+        if (! EvidenceChannelSettings::usesBankCsv()) {
+            throw new \InvalidArgumentException(__('Bank statement CSV import is disabled for this tenant\'s evidence channel.'));
+        }
+
         $template = $template ?? $this->getCsvTemplate();
         $errors = [];
         $imported = 0;

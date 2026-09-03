@@ -7,10 +7,8 @@ use App\Filament\Support\BankWorkspaceImportTableHeaderActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberTableColumns;
 use App\Filament\Support\TableGrouping;
-use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableStandards;
 use App\Filament\Tenant\Support\BankClearingTabRegistry;
-use App\Filament\Tenant\Support\ViewBankTransactionAction;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\Setting;
 use Closure;
@@ -31,9 +29,7 @@ class BankTransactionsTable
     public static function configure(Table $table, ?Closure $afterImport = null, bool $includeImportHeaderAction = true, bool $auditMode = false): Table
     {
         $recordActions = $auditMode
-            ? TableRecordActionGroups::wrap([
-                ViewBankTransactionAction::make(),
-            ])
+            ? BankClearingQueueActions::clearedRecordActions()
             : BankClearingQueueActions::groupedRecordActions(BankClearingTabRegistry::FILTER_BANK_FILE);
 
         $toolbarActions = $auditMode

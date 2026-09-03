@@ -226,6 +226,120 @@ class ReconciliationResolutionService
         $this->auditResolution($exception, ReconciliationCorrectionService::ACTION_MANUAL_CORRECTION, $notes);
     }
 
+    /**
+     * @param  list<int>  $importedBankTransactionIds
+     * @param  list<int>  $unclearedBankTransactionIds
+     */
+    public function resolveSplittableBankMatch(
+        ReconciliationException $exception,
+        array $importedBankTransactionIds,
+        array $unclearedBankTransactionIds,
+        string $notes,
+    ): void {
+        $this->assertOpen($exception);
+
+        $this->corrections->resolveSplittableBankMatch(
+            $exception,
+            $importedBankTransactionIds,
+            $unclearedBankTransactionIds,
+            $notes,
+        );
+
+        $this->auditResolution($exception, ReconciliationCorrectionService::ACTION_MANUAL_CORRECTION, $notes);
+    }
+
+    public function assignMemberAndPostSms(
+        ReconciliationException $exception,
+        int $smsTransactionId,
+        int $memberId,
+        string $notes,
+    ): void {
+        $this->assertOpen($exception);
+
+        $this->corrections->assignMemberAndPostSms(
+            $exception,
+            $smsTransactionId,
+            $memberId,
+            $notes,
+        );
+
+        $this->auditResolution($exception, ReconciliationCorrectionService::ACTION_MANUAL_CORRECTION, $notes);
+    }
+
+    public function reverseSmsPost(
+        ReconciliationException $exception,
+        int $smsTransactionId,
+        string $notes,
+    ): void {
+        $this->assertOpen($exception);
+
+        $this->corrections->reverseSmsPost(
+            $exception,
+            $smsTransactionId,
+            $notes,
+        );
+
+        $this->auditResolution($exception, ReconciliationCorrectionService::ACTION_MANUAL_CORRECTION, $notes);
+    }
+
+    public function resolveSmsBankMatch(
+        ReconciliationException $exception,
+        int $smsTransactionId,
+        int $bankTransactionId,
+        string $notes,
+    ): void {
+        $this->assertOpen($exception);
+
+        $this->corrections->resolveSmsBankMatch(
+            $exception,
+            $smsTransactionId,
+            $bankTransactionId,
+            $notes,
+        );
+
+        $this->auditResolution($exception, ReconciliationCorrectionService::ACTION_MANUAL_CORRECTION, $notes);
+    }
+
+    /**
+     * @param  list<int>  $smsTransactionIds
+     * @param  list<int>  $bankTransactionIds
+     */
+    public function resolveSmsBankMatchGroup(
+        ReconciliationException $exception,
+        array $smsTransactionIds,
+        array $bankTransactionIds,
+        string $notes,
+    ): void {
+        $this->assertOpen($exception);
+
+        $this->corrections->resolveSmsBankMatchGroup(
+            $exception,
+            $smsTransactionIds,
+            $bankTransactionIds,
+            $notes,
+        );
+
+        $this->auditResolution($exception, ReconciliationCorrectionService::ACTION_MANUAL_CORRECTION, $notes);
+    }
+
+    public function resolveSmsOpsMatch(
+        ReconciliationException $exception,
+        int $operationalBankTransactionId,
+        int $smsTransactionId,
+        string $notes,
+    ): void {
+        $this->assertOpen($exception);
+
+        $this->corrections->resolveSmsOpsMatch(
+            $exception,
+            $operationalBankTransactionId,
+            $smsTransactionId,
+            $notes,
+        );
+
+        $this->auditResolution($exception, ReconciliationCorrectionService::ACTION_MANUAL_CORRECTION, $notes);
+    }
+
     public function postEmiOverpaymentRefund(
         ReconciliationException $exception,
         int $loanId,

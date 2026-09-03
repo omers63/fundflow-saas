@@ -8,6 +8,7 @@ use App\Models\Tenant\BankTemplate;
 use App\Models\Tenant\SmsImportTemplate;
 use App\Services\BankImportService;
 use App\Services\SmsImportService;
+use App\Support\EvidenceChannelSettings;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
@@ -28,6 +29,7 @@ final class BankWorkspaceImportTableHeaderActions
                 ->label(__('Import'))
                 ->icon(Heroicon::OutlinedArrowUpTray)
                 ->color('primary')
+                ->visible(fn (): bool => EvidenceChannelSettings::usesBankCsv())
                 ->form([
                     FileUpload::make('csv_file')
                         ->label(__('CSV file'))

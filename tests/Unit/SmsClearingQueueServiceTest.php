@@ -88,6 +88,8 @@ test('open queue counts unmatched and ready rows separately', function () {
     expect($this->queue->counts())->toBe([
         'unmatched' => 1,
         'ready_to_post' => 1,
+        'unmatched_bank' => 2,
+        'ready_to_match' => 1,
         'all' => 2,
     ]);
 });

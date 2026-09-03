@@ -59,7 +59,7 @@ $failingChecks = collect($orderedChecks)->filter(fn(array $row): bool => in_arra
     </div>
 
     {{-- Context cards --}}
-    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
             <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Checks with issues') }}</p>
             <p class="mt-1 text-lg font-semibold tabular-nums text-gray-900 dark:text-white">{{ number_format($failingChecks->count()) }}</p>
@@ -86,6 +86,17 @@ $failingChecks = collect($orderedChecks)->filter(fn(array $row): bool => in_arra
             <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
                 {!! \App\Filament\Support\MoneyDisplay::html((float) ($pipeline['bank_uncleared_amount'] ?? 0), $currency)?->toHtml() ?? '—' !!}
                 {{ __('uncleared amount') }}
+                · {{ trans_choice(':count group|:count groups', (int) ($pipeline['bank_clearance_group_count'] ?? 0), ['count' => number_format((int) ($pipeline['bank_clearance_group_count'] ?? 0))]) }}
+            </p>
+        </div>
+        <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('SMS pipeline') }}</p>
+            <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                {{ number_format((int) ($pipeline['sms_unposted_count'] ?? 0)) }} {{ __('unposted') }}
+                · {{ number_format((int) ($pipeline['sms_unmatched_bank_count'] ?? 0)) }} {{ __('unlinked bank') }}
+            </p>
+            <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                {{ trans_choice(':count link group|:count link groups', (int) ($pipeline['sms_bank_link_group_count'] ?? 0), ['count' => number_format((int) ($pipeline['sms_bank_link_group_count'] ?? 0))]) }}
             </p>
         </div>
         <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-gray-900/60">

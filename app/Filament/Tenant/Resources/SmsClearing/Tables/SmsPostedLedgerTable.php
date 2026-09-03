@@ -6,6 +6,7 @@ namespace App\Filament\Tenant\Resources\SmsClearing\Tables;
 
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\MemberTableColumns;
+use App\Filament\Support\SmsClearingQueueActions;
 use App\Filament\Support\TableGrouping;
 use App\Filament\Support\TableRecordActionGroups;
 use App\Filament\Support\TableToolbar;
@@ -70,6 +71,8 @@ final class SmsPostedLedgerTable
                 ])
                 ->recordActions(TableRecordActionGroups::wrap([
                     ViewSmsTransactionAction::make(),
+                    ...SmsClearingQueueActions::bankLinkActions(),
+                    ...SmsClearingQueueActions::opsLinkActions(),
                 ]))
                 ->toolbarActions([
                     BulkActionGroup::make([
