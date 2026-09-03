@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Member\Support;
 
+use App\Filament\Member\Resources\MyDependents\MyDependentResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\User;
 use App\Services\Tenant\HouseholdProfileVerificationService;
@@ -121,8 +122,18 @@ final class SwitchHouseholdProfileAction
 
         RateLimiter::clear($throttleKey);
 
-        app(ImpersonationService::class)->start($actor, $dependentUser, $member);
+        $returnUrl = url()->previous(
+            MyDependentResource::getUrl('index', panel: 'member'),
+        );
 
-        $action->redirect(filament()->getPanel('member')?->getUrl() ?? '/member');
+        app(ImpersonationService::class)->start(
+            $actor,
+            $dependentUser,
+            $member,
+            ImpersonationService::SOURCE_MEMBER_DEPENDENTS,
+            $returnUrl,
+        );
+
+                $action->redirect(filament()->getPanel('member')?->getUrl() ?? '/member', navigate: false);
     }
 }

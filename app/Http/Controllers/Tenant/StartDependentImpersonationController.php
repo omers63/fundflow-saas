@@ -39,11 +39,30 @@ class StartDependentImpersonationController extends Controller
         }
 
         $memberPanel = Filament::getPanel('member');
-        if ($memberPanel !== null && ! $dependentUser->canAccessPanel($memberPanel)) {
-            return redirect(MyDependentResource::getUrl('index'));
+        $impersonation = app(ImpersonationService::class);
+        $adminOverride = $impersonation->isAdminImpersonatingUser($actor);
+
+        // Explicit panel: this route can run after admin→parent impersonation while
+        // Filament's current panel is still tenant/admin (not member).
+        $dependentsIndexUrl = MyDependentResource::getUrl('index', panel: 'member');
+
+        if (
+            $memberPanel !== null
+            && ! $dependentUser->canAccessPanel($memberPanel)
+            && ! $adminOverride
+        ) {
+            return redirect($dependentsIndexUrl);
         }
 
-        app(ImpersonationService::class)->start($actor, $dependentUser, $dependent);
+        $returnUrl = url()->previous($dependentsIndexUrl);
+
+        $impersonation->start(
+            $actor,
+            $dependentUser,
+            $dependent,
+            ImpersonationService::SOURCE_MEMBER_DEPENDENTS,
+            $returnUrl,
+        );
 
         return redirect($memberPanel?->getUrl() ?? '/member');
     }

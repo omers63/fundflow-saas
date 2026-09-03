@@ -25,9 +25,11 @@ class AuthenticateMemberPanel extends AuthenticateFilamentPanel
             && $request->path() === 'member/logout'
             && (int) $request->session()->get('impersonator_user_id') > 0
         ) {
-            app(ImpersonationService::class)->stop();
+            $impersonation = app(ImpersonationService::class);
+            $returnUrl = $impersonation->returnUrl();
+            $impersonation->stop();
 
-            return redirect(Filament::getPanel('member')?->getUrl() ?? '/member');
+            return redirect($returnUrl);
         }
 
         return parent::handle($request, $next, ...$guards);
@@ -69,6 +71,7 @@ class AuthenticateMemberPanel extends AuthenticateFilamentPanel
                 && $authUser instanceof User
                 && ($member = $authUser->activeMember()) !== null
                 && app(MemberMembershipPolicy::class)->isPortalAccessBlocked($member)
+                                && ! app(ImpersonationService::class)->isAdminImpersonatingUser($authUser)
             ) {
                 $memberStatus = $member->status;
                 $guard->logout();

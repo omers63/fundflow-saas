@@ -13,8 +13,10 @@ use App\Filament\Tenant\Resources\Members\Schemas\MemberViewInfolist;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Services\MemberWorkspaceSummaryService;
+use App\Services\Tenant\ImpersonationService;
 use App\Support\ArabicDisplaySettings;
 use App\Support\ArabicTypography;
+use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\View as SchemaView;
@@ -117,6 +119,25 @@ class ViewMember extends ViewRecord
     protected function getHeaderActions(): array
     {
         return TableHeaderIconAction::normalize([
+            Action::make('impersonateMember')
+                ->label(__('Impersonate'))
+                ->icon('heroicon-o-eye')
+                ->color('warning')
+                ->visible(fn (): bool => app(ImpersonationService::class)->canAdminImpersonate($this->getRecord()))
+                ->tooltip(__('Open the member portal as this member'))
+                ->requiresConfirmation()
+                ->modalHeading(__('Impersonate member'))
+                ->modalDescription(__('You will open the member portal as this member. Use “Return to admin portal” when finished.'))
+                ->modalSubmitActionLabel(__('Impersonate'))
+                ->action(function (): void {
+                    $member = $this->getRecord();
+                    assert($member instanceof Member);
+
+                    $this->redirect(
+                        route('tenant.admin.members.impersonate', ['member' => $member]),
+                        navigate: false,
+                    );
+                }),
             ...MemberFilamentActions::forMemberEditHeader(
                 $this->buildMemberAllocateDependentsAction(),
             ),

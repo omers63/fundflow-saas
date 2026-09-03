@@ -2,6 +2,7 @@
 
 namespace App\Models\Tenant;
 
+use App\Services\Tenant\ImpersonationService;
 use App\Support\AppLocale;
 use App\Support\LocalizationSettings;
 use App\Support\MemberMembershipPolicy;
@@ -79,6 +80,10 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         }
 
         if ($panel->getId() === 'member') {
+            if (app(ImpersonationService::class)->isAdminImpersonatingUser($this)) {
+                return true;
+            }
+
             $member = $this->activeMember();
 
             if ($member === null) {

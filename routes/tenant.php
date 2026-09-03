@@ -20,6 +20,7 @@ use App\Http\Controllers\Tenant\MemberActivityExportController;
 use App\Http\Controllers\Tenant\MemberImportSampleController;
 use App\Http\Controllers\Tenant\MembershipApplicationImportSampleController;
 use App\Http\Controllers\Tenant\MemberWebPushSubscriptionController;
+use App\Http\Controllers\Tenant\StartAdminMemberImpersonationController;
 use App\Http\Controllers\Tenant\StartDependentImpersonationController;
 use App\Http\Controllers\Tenant\StatementPdfController;
 use App\Http\Controllers\Tenant\StopImpersonationController;
@@ -142,6 +143,9 @@ Route::middleware([
 
         Route::get('/admin/statements/{statement}/pdf', [StatementPdfController::class, 'admin'])
             ->name('tenant.admin.statement.pdf');
+
+        Route::get('/admin/members/{member}/impersonate', StartAdminMemberImpersonationController::class)
+            ->name('tenant.admin.members.impersonate');
 
         Route::get('/admin/fiscal-closes/{fiscalClose}/exports/{fileKey}', FiscalCloseExportDownloadController::class)
             ->name('tenant.admin.fiscal-close.export');

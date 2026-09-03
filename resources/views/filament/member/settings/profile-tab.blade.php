@@ -1,4 +1,4 @@
-@php
+        @php
 use App\Models\Tenant\Member;
 
 $user = $user ?? auth('tenant')->user();
@@ -38,13 +38,13 @@ $member = $member ?? $user?->member;
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 @foreach ($householdProfiles as $profile)
                                 @php
-                                    $isCurrent = (int) $profile->user_id === (int) auth('tenant')->id();
+        $isCurrent = (int) $profile->user_id === (int) auth('tenant')->id();
                                 @endphp
                     <div @class([
-                        'flex flex-col items-center rounded-xl border p-3 text-center',
-                        'border-emerald-500 bg-emerald-50 dark:border-emerald-400/50 dark:bg-emerald-950/40' => $isCurrent,
-                        'border-gray-200 dark:border-white/10' => !$isCurrent,
-                    ])>
+            'flex flex-col items-center rounded-xl border p-3 text-center',
+            'border-emerald-500 bg-emerald-50 dark:border-emerald-400/50 dark:bg-emerald-950/40' => $isCurrent,
+            'border-gray-200 dark:border-white/10' => !$isCurrent,
+        ])>
                         <span
                             class="mb-2 flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-bold text-gray-600 dark:bg-white/10 dark:text-gray-300">
                             @if ($profile->user?->avatarPublicUrl())
@@ -72,9 +72,12 @@ $member = $member ?? $user?->member;
     @endif
 
     @if (session()->has('impersonator_user_id'))
+        @php($impersonation = app(\App\Services\Tenant\ImpersonationService::class))
         <x-member::notice tone="amber" :title="__('Impersonation active')">
             <p class="m-0">
-                {{ __('You are viewing the portal as a household member. Use "Return to parent portal" to switch back.') }}
+                {{ $impersonation->isAdminImpersonation()
+        ? __('You are viewing the portal as this member. Use ":action" to switch back.', ['action' => $impersonation->returnActionLabel()])
+        : __('You are viewing the portal as a household member. Use "Return to parent portal" to switch back.') }}
             </p>
         </x-member::notice>
     @endif

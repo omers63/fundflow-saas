@@ -1,5 +1,6 @@
 @php
     $name = auth('tenant')->user()?->name;
+    $impersonation = app(\App\Services\Tenant\ImpersonationService::class);
 @endphp
 
 <div class="ff-status-footer-banner ff-status-footer-banner--impersonation" role="status" aria-live="polite">
@@ -10,7 +11,7 @@
     <form method="post" action="{{ route('tenant.member.impersonation.stop') }}" class="ff-status-footer-banner__form">
         @csrf
         <button type="submit" class="ff-status-footer-banner__action">
-            {{ __('Return to parent portal') }}
+            {{ $impersonation->returnActionLabel() }}
         </button>
     </form>
 </div>

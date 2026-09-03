@@ -1,4 +1,4 @@
-<x-filament-panels::page>
+            <x-filament-panels::page>
     @php
 use App\Models\Tenant\Member;
 
@@ -67,7 +67,7 @@ $member = $member ?? $user?->member;
                 <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                     @foreach ($householdProfiles as $profile)
                                                         @php
-                        $isCurrent = (int) $profile->user_id === (int) auth('tenant')->id();
+        $isCurrent = (int) $profile->user_id === (int) auth('tenant')->id();
                                                         @endphp
                                                         <div
                                                             class="flex min-w-0 flex-col items-center rounded-xl border p-3 text-center {{ $isCurrent ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-gray-200 dark:border-gray-700' }}">
@@ -99,10 +99,13 @@ $member = $member ?? $user?->member;
         @endif
 
         @if (session()->has('impersonator_user_id'))
+            @php($impersonation = app(\App\Services\Tenant\ImpersonationService::class))
             <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
                 <p class="text-sm font-semibold text-amber-800 dark:text-amber-200">{{ __('Impersonation active') }}</p>
                 <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                    {{ __('You are viewing the portal as a household member. Use "Return to parent portal" to switch back.') }}
+                    {{ $impersonation->isAdminImpersonation()
+        ? __('You are viewing the portal as this member. Use ":action" to switch back.', ['action' => $impersonation->returnActionLabel()])
+        : __('You are viewing the portal as a household member. Use "Return to parent portal" to switch back.') }}
                 </p>
             </div>
         @endif

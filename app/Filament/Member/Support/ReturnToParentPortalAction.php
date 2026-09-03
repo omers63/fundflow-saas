@@ -1,10 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Member\Support;
 
 use App\Services\Tenant\ImpersonationService;
 use Filament\Actions\Action;
-use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Livewire\Component;
 
@@ -12,33 +13,36 @@ final class ReturnToParentPortalAction
 {
     public static function isImpersonating(): bool
     {
-        return session()->has('impersonator_user_id');
+                return app(ImpersonationService::class)->isActive();
     }
 
     public static function make(?Component $livewire = null): Action
     {
+        $impersonation = app(ImpersonationService::class);
+
         return Action::make('return_to_parent_portal')
-            ->label(__('Return to parent portal'))
+            ->label(fn(): string => $impersonation->returnActionLabel())
             ->icon('heroicon-o-arrow-uturn-left')
             ->color('warning')
             ->visible(fn (): bool => self::isImpersonating())
             ->requiresConfirmation()
-            ->modalDescription(__('You will switch back to the parent household portal.'))
-            ->action(function () use ($livewire): void {
-                if (! app(ImpersonationService::class)->stop()) {
+            ->modalDescription(fn(): string => $impersonation->returnModalDescription())
+            ->action(function (Action $action) use ($impersonation): void {
+                $returnUrl = $impersonation->returnUrl();
+                $successTitle = $impersonation->returnSuccessTitle();
+
+                if (!$impersonation->stop()) {
                     return;
                 }
 
                 Notification::make()
-                    ->title(__('Returned to parent portal.'))
+                    ->title($successTitle)
                     ->success()
                     ->send();
 
-                $url = Filament::getPanel('member')?->getUrl() ?? '/member';
-
-                if ($livewire instanceof Component) {
-                    $livewire->redirect($url, navigate: false);
-                }
+                // Full document navigation — SPA soft-nav after an auth swap leaves
+                // Livewire on a stale fingerprint and can 419.
+                $action->redirect($returnUrl, navigate: false);
             });
     }
 }

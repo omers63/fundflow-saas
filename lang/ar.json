@@ -7644,5 +7644,14 @@
     "••••••••": "••••••••",
     "…and :count more.": "…و :count أخرى.",
     "≥90%": "≥90%",
-    "✓ Saved at :time": "✓ حُفظ في :time"
+    "✓ Saved at :time": "✓ حُفظ في :time",
+    "Impersonate": "انتحال الهوية",
+    "Impersonate member": "انتحال هوية العضو",
+    "Open the member portal as this member": "افتح بوابة العضو بهوية هذا العضو",
+    "Return to admin portal": "العودة إلى بوابة المسؤول",
+    "Returned to admin portal.": "تمت العودة إلى بوابة المسؤول.",
+    "This member cannot be impersonated (no portal login).": "لا يمكن انتحال هوية هذا العضو (لا يوجد حساب دخول).",
+    "You are viewing the portal as this member. Use \":action\" to switch back.": "أنت تعرض البوابة بهوية هذا العضو. استخدم «:action» للرجوع.",
+    "You will open the member portal as this member. Use “Return to admin portal” when finished.": "ستفتح بوابة العضو بهوية هذا العضو. استخدم «العودة إلى بوابة المسؤول» عند الانتهاء.",
+    "You will switch back to the admin portal.": "ستعود إلى بوابة المسؤول."
 }
