@@ -71,6 +71,9 @@ test('view member workspace shows inline summary and grouped header actions', fu
         ->assertDontSee('ff-member-detail-shell', false)
         ->assertDontSee('ff-member-stepper', false)
         ->assertDontSee('ff-app-insights-kpi-strip', false)
+        ->assertSee(__('Overview'))
+        ->assertSee(__('Lifetime contributions'))
+        ->assertSee(__('Quick links'))
         ->assertSee(__('Contribute'))
         ->assertSee(__('Treasury'))
         ->assertSee(__('Edit profile'))
@@ -412,6 +415,8 @@ test('edit member profile page focuses on form fields and links back to workspac
         'status' => 'active',
     ]);
 
+    app(AccountingService::class)->createMemberAccounts($member);
+
     Filament::setCurrentPanel('tenant');
 
     $component = Livewire::actingAs($admin, 'tenant')
@@ -419,6 +424,8 @@ test('edit member profile page focuses on form fields and links back to workspac
         ->assertSuccessful()
         ->assertSee('Profile Member')
         ->assertSee(__('Membership'))
+        ->assertSee('ff-member-workspace-summary', false)
+        ->assertSee(__('Overview'))
         ->assertDontSee(__('Treasury'))
         ->assertActionExists('backToWorkspace');
 });

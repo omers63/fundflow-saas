@@ -5,11 +5,14 @@ namespace App\Filament\Tenant\Resources\Members\Pages;
 use App\Filament\Concerns\RefreshesResourceRecord;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
+use App\Services\MemberWorkspaceSummaryService;
 use App\Services\Tenant\HouseholdMemberService;
 use App\Support\ArabicDisplaySettings;
 use App\Support\ArabicTypography;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Schemas\Components\View as SchemaView;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
@@ -19,6 +22,11 @@ class EditMember extends EditRecord
     use RefreshesResourceRecord;
 
     protected static string $resource = MemberResource::class;
+
+    /**
+     * @var array<string, mixed>|null
+     */
+    private ?array $workspaceSummaryCache = null;
 
     public function getTitle(): string
     {
@@ -68,6 +76,29 @@ class EditMember extends EditRecord
         ];
     }
 
+    public function content(Schema $schema): Schema
+    {
+        return $schema->components([
+            SchemaView::make('filament.tenant.pages.member-workspace-summary')
+                ->viewData(fn (): array => [
+                    'summary' => $this->workspaceSummary(),
+                ]),
+            $this->getFormContentComponent(),
+            $this->getRelationManagersContentComponent(),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function workspaceSummary(): array
+    {
+        assert($this->record instanceof Member);
+
+        return $this->workspaceSummaryCache ??= app(MemberWorkspaceSummaryService::class)
+            ->summary($this->record);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -81,6 +112,9 @@ class EditMember extends EditRecord
 
     protected function afterSave(): void
     {
+        assert($this->record instanceof Member);
+
+        MemberWorkspaceSummaryService::forgetCached((int) $this->record->id);
         MemberResource::dispatchMemberDetailInsightsRefresh($this);
 
         $this->redirect(MemberResource::getUrl('view', ['record' => $this->record]));

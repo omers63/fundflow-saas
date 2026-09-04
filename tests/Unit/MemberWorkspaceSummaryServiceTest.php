@@ -35,14 +35,61 @@ test('member workspace summary includes balances cycle and links without delinqu
 
     $summary = app(MemberWorkspaceSummaryService::class)->summary($member->fresh(['cashAccount', 'fundAccount']));
 
-    expect($summary)->toHaveKeys(['balances', 'cycle', 'arrears', 'loan', 'household', 'links', 'currency'])
+    expect($summary)->toHaveKeys(['balances', 'cycle', 'arrears', 'loan', 'household', 'links', 'currency', 'member', 'contributions', 'monthly'])
         ->and($summary['balances']['cash']['amount'])->toBe(1500.0)
         ->and($summary['balances']['fund']['amount'])->toBe(2500.0)
         ->and($summary['balances']['cash']['url'])->toBeString()->not->toBeEmpty()
         ->and($summary['cycle']['label'])->toBeString()
         ->and($summary['cycle']['period_label'])->toBeString()
         ->and($summary['arrears']['visible'])->toBeBool()
+        ->and($summary['member']['status'])->toBe('active')
+        ->and($summary['member']['status_label'])->toBeString()
+        ->and($summary['contributions']['posted_count'])->toBe(0)
+        ->and($summary['contributions']['posted_total'])->toBe(0.0)
+        ->and($summary['monthly'])->toBe(1000.0)
         ->and($summary['links']['ledger'])->toBeString()->not->toBeEmpty();
+});
+
+test('member workspace summary includes lifetime posted contribution totals', function () {
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    Contribution::query()->create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate(1, (int) now()->year),
+        'amount' => 1000,
+        'status' => 'posted',
+        'posted_at' => now()->subMonths(2),
+    ]);
+
+    Contribution::query()->create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate(2, (int) now()->year),
+        'amount' => 1000,
+        'status' => 'posted',
+        'posted_at' => now()->subMonth(),
+    ]);
+
+    Contribution::query()->create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate(3, (int) now()->year),
+        'amount' => 1000,
+        'status' => 'pending',
+        'posted_at' => null,
+    ]);
+
+    MemberWorkspaceSummaryService::forgetCached((int) $member->id);
+
+    $summary = app(MemberWorkspaceSummaryService::class)->summary($member->fresh());
+
+    expect($summary['contributions']['posted_count'])->toBe(2)
+        ->and($summary['contributions']['posted_total'])->toBe(2000.0)
+        ->and($summary['contributions']['hint'])->toContain('2');
 });
 
 test('member workspace summary shows active loan chip when loan exists', function () {
@@ -63,6 +110,7 @@ test('member workspace summary shows active loan chip when loan exists', functio
 
     expect($summary['loan'])->not->toBeNull()
         ->and($summary['loan']['id'])->toBeGreaterThan(0)
+        ->and($summary['loan'])->toHaveKeys(['outstanding', 'outstanding_formatted', 'repay_percent'])
         ->and($summary['loan']['url'])->toBeString()->not->toBeEmpty();
 });
 

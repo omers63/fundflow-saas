@@ -82,6 +82,16 @@ final class MemberWorkspaceSummaryService
             ->posted()
             ->exists();
 
+        $lifetimePosted = Contribution::query()
+            ->where('member_id', $member->id)
+            ->posted()
+            ->toBase()
+            ->selectRaw('count(*) as posted_count, coalesce(sum(amount), 0) as posted_total')
+            ->first();
+
+        $postedCount = (int) ($lifetimePosted->posted_count ?? 0);
+        $postedTotal = (float) ($lifetimePosted->posted_total ?? 0);
+
         $activeLoan = Loan::query()
             ->where('member_id', $member->id)
             ->active()
@@ -91,7 +101,7 @@ final class MemberWorkspaceSummaryService
                 'installments as open_installments_count' => fn ($query) => $query->whereIn('status', ['pending', 'overdue']),
             ])
             ->latest('applied_at')
-            ->first(['id', 'status']);
+            ->first(['id', 'status', 'master_portion', 'repaid_to_master']);
 
         $underLoanRepayment = (int) ($activeLoan?->open_installments_count ?? 0) > 0;
         $exempt = $member->isExemptFromContributions($curMonth, $curYear);
@@ -117,14 +127,23 @@ final class MemberWorkspaceSummaryService
         $repayPercent = $installmentsTotal > 0
             ? (int) round(($installmentsPaid / $installmentsTotal) * 100)
             : 0;
+        $loanOutstanding = $activeLoan ? $activeLoan->getOutstandingBalance() : 0.0;
 
         $cashAccount = $member->cashAccount;
         $fundAccount = $member->fundAccount;
 
         $dependents = $dependents->values();
 
+        $statusKey = (string) $member->status;
+        $statusLabel = Member::statusOptions()[$statusKey] ?? ucfirst($statusKey);
+
         return [
             'currency' => $currency,
+            'member' => [
+                'status' => $statusKey,
+                'status_label' => $statusLabel,
+                'member_number' => $member->member_number,
+            ],
             'balances' => [
                 'cash' => [
                     'amount' => $cashBalance,
@@ -136,6 +155,17 @@ final class MemberWorkspaceSummaryService
                     'negative' => $fundBalance < 0,
                     'url' => $fundAccount ? AccountResource::getUrl('view', ['record' => $fundAccount]) : null,
                 ],
+            ],
+            'contributions' => [
+                'posted_count' => $postedCount,
+                'posted_total' => $postedTotal,
+                'posted_total_formatted' => InsightFormatter::money($postedTotal),
+                'hint' => $postedCount > 0
+                    ? __(':count posted · :amount', [
+                        'count' => number_format($postedCount),
+                        'amount' => InsightFormatter::money($postedTotal),
+                    ])
+                    : __('No posted contributions yet'),
             ],
             'cycle' => [
                 'period_label' => $periodLabel,
@@ -158,6 +188,8 @@ final class MemberWorkspaceSummaryService
                 'installments_paid' => $installmentsPaid,
                 'installments_total' => $installmentsTotal,
                 'repay_percent' => $repayPercent,
+                'outstanding' => $loanOutstanding,
+                'outstanding_formatted' => InsightFormatter::money($loanOutstanding),
                 'url' => MemberResource::workspaceUrl($member, LoansRelationManager::class),
             ] : null,
             'household' => [
@@ -179,6 +211,7 @@ final class MemberWorkspaceSummaryService
                 'contributions' => ContributionResource::ledgerUrlForMember($member),
                 'loans' => LoanResource::portfolioUrlForMember($member),
             ],
+            'monthly' => $monthly,
             'monthly_formatted' => InsightFormatter::money($monthly),
         ];
     }
