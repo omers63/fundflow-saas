@@ -209,6 +209,9 @@ test('impersonation renders footer banner with return action', function () {
     $this->get('http://'.$this->domain.'/member')
         ->assertSuccessful()
         ->assertSee('ff-portal-bottom-bar', false)
+        ->assertSee('ff-portal-bottom-bar--impersonating', false)
+        ->assertSee('ff-portal-bottom-bar__center', false)
         ->assertSee('ff-status-footer-banner--impersonation', false)
-        ->assertSee(__('Return to parent portal'), false);
+        ->assertSee(__('Return to parent portal'), false)
+        ->assertSee(__('Impersonating: :name', ['name' => $dependent->name]), false);
 });

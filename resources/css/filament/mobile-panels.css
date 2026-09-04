@@ -688,38 +688,6 @@
     color: #fde68a;
 }
 
-.ff-status-footer-banner--impersonation {
-    color: #fff7ed;
-    background: linear-gradient(
-        120deg,
-        #7c2d12 0%,
-        #9a3412 25%,
-        #b45309 50%,
-        #9a3412 75%,
-        #7c2d12 100%
-    );
-    background-size: 250% 250%;
-    border-top: 1px solid rgb(254 215 170 / 0.45);
-    box-shadow: 0 -4px 18px rgb(124 45 18 / 0.35);
-    animation: ff-status-footer-impersonation-roll 5s linear infinite, ff-status-footer-impersonation-flash 1.4s ease-in-out infinite;
-}
-
-.ff-status-footer-banner--impersonation .ff-status-footer-banner__dot {
-    background: #f97316;
-    box-shadow: 0 0 0 0 rgb(249 115 22 / 0.6);
-    animation: ff-status-footer-dot-pulse 1.2s ease-in-out infinite;
-}
-
-.ff-status-footer-banner--impersonation .ff-status-footer-banner__action {
-    color: #fff7ed;
-    background: rgb(255 255 255 / 0.08);
-}
-
-.ff-status-footer-banner--impersonation .ff-status-footer-banner__action:hover {
-    background: rgb(255 255 255 / 0.16);
-    border-color: rgb(255 255 255 / 0.55);
-}
-
 @keyframes ff-status-footer-business-flash {
     0%,
     100% {
@@ -740,19 +708,6 @@
 
     100% {
         background-position: 200% 50%;
-    }
-}
-
-@keyframes ff-status-footer-impersonation-flash {
-    0%,
-    100% {
-        box-shadow: 0 -4px 18px rgb(124 45 18 / 0.35);
-    }
-
-    50% {
-        box-shadow:
-            0 -4px 22px rgb(249 115 22 / 0.45),
-            0 0 18px rgb(249 115 22 / 0.25);
     }
 }
 

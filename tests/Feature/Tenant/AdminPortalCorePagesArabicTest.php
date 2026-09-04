@@ -44,6 +44,12 @@ test('admin portal core page translation keys have arabic entries', function ():
         'Review member fund-to-cash transfer requests. Accepting moves money from fund to cash with master mirrors.',
         'Queue projection',
         'Expand',
+        'Core profile and contribution settings — balances and journey are in the summary panel above.',
+        'Login and household linkage',
+        'Contribution arrears cut-off',
+        'Update membership details, contribution amount, and household linkage.',
+        'Members with inactive status — frozen or on administrative hold.',
+        'Use Membership actions to change status — not this field.',
     ];
 
     /** @var array<string, string> $arabic */

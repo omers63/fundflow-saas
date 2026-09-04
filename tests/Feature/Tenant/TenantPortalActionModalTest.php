@@ -31,6 +31,16 @@ it('styles confirmation actions without replacing modal body', function (): void
         ->and($styled->hasModalContentFooter())->toBeFalse();
 });
 
+it('keeps confirmation dialogs above portal bottom chrome and centers them on compact viewports', function (): void {
+    $css = file_get_contents(resource_path('css/filament/confirm-modals.css'));
+
+    expect($css)
+        ->toContain('z-index: 70')
+        ->toContain('grid-template-rows: 1fr auto 1fr')
+        ->toContain('100dvh')
+        ->toContain('safe-area-inset-bottom');
+});
+
 it('styles confirmations on member and admin panels too', function (string $panel): void {
     Filament::setCurrentPanel($panel);
 

@@ -30,16 +30,6 @@
     );
 }
 
-.fi-body.fi-panel-tenant:has(.ff-status-footer-banners--double) .fi-sidebar-nav,
-.fi-body.fi-panel-member:has(.ff-status-footer-banners--double) .fi-sidebar-nav {
-    padding-block-end: calc(
-        var(--ff-portal-bottom-bar-height, 2rem)
-        + var(--ff-portal-bottom-bar-clearance, 0.75rem)
-        + 5.5rem
-        + 0.5rem
-    );
-}
-
 .ff-portal-bottom-bar {
     position: fixed;
     inset-inline: 0;
@@ -98,7 +88,8 @@
 }
 
 .ff-portal-bottom-bar__start,
-.ff-portal-bottom-bar__end {
+.ff-portal-bottom-bar__end,
+.ff-portal-bottom-bar__center {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -107,6 +98,123 @@
 
 .ff-portal-bottom-bar__end {
     flex-shrink: 0;
+}
+
+/* True center slot between fund/portal and date while impersonating */
+.ff-portal-bottom-bar--impersonating .ff-portal-bottom-bar__inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    justify-content: stretch;
+}
+
+.ff-portal-bottom-bar--impersonating .ff-portal-bottom-bar__end {
+    justify-self: end;
+}
+
+.ff-portal-bottom-bar__center {
+    justify-self: center;
+    max-width: min(100%, 28rem);
+    gap: 0.5rem;
+    min-height: 1.35rem;
+    padding: 0;
+    color: #9a3412;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    animation: none;
+}
+
+.ff-portal-bottom-bar__impersonation-dot {
+    flex-shrink: 0;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 9999px;
+    background: #ea580c;
+    box-shadow:
+        0 0 0 0 rgb(234 88 12 / 0.7),
+        0 0 8px rgb(249 115 22 / 0.85);
+    animation: ff-portal-bottom-bar-impersonation-dot-pulse 1.1s ease-in-out infinite;
+}
+
+.ff-portal-bottom-bar__impersonation-text {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    color: #9a3412;
+}
+
+.ff-portal-bottom-bar__impersonation-form {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.ff-portal-bottom-bar__impersonation-action {
+    border: 1px solid rgb(154 52 18 / 0.45);
+    border-radius: 9999px;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    color: #9a3412;
+    background: transparent;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ff-portal-bottom-bar__impersonation-action:hover {
+    background: rgb(154 52 18 / 0.08);
+    border-color: rgb(154 52 18 / 0.7);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__impersonation-text,
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar__impersonation-text,
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__impersonation-action,
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar__impersonation-action {
+    color: #fdba74;
+}
+
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__impersonation-action,
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar__impersonation-action {
+    border-color: rgb(251 146 60 / 0.55);
+}
+
+.dark .fi-body.fi-panel-tenant .ff-portal-bottom-bar__impersonation-action:hover,
+.dark .fi-body.fi-panel-member .ff-portal-bottom-bar__impersonation-action:hover {
+    background: rgb(249 115 22 / 0.16);
+    border-color: rgb(251 146 60 / 0.85);
+}
+
+@keyframes ff-portal-bottom-bar-impersonation-dot-pulse {
+    0% {
+        transform: scale(1);
+        background: #ea580c;
+        box-shadow:
+            0 0 0 0 rgb(234 88 12 / 0.75),
+            0 0 6px rgb(249 115 22 / 0.9);
+    }
+
+    50% {
+        transform: scale(1.28);
+        background: #f97316;
+        box-shadow:
+            0 0 0 7px rgb(249 115 22 / 0),
+            0 0 14px rgb(249 115 22 / 1);
+    }
+
+    100% {
+        transform: scale(1);
+        background: #ea580c;
+        box-shadow:
+            0 0 0 0 rgb(234 88 12 / 0),
+            0 0 6px rgb(249 115 22 / 0.9);
+    }
 }
 
 .ff-portal-bottom-bar__fund {
@@ -210,14 +318,6 @@
     );
 }
 
-.fi-body:has(.ff-status-footer-banners--double) {
-    padding-bottom: calc(
-        var(--ff-portal-bottom-bar-height, 2rem)
-        + var(--ff-portal-bottom-bar-clearance, 0.75rem)
-        + 5.5rem
-    );
-}
-
 @media (max-width: 639px) {
     .fi-body.fi-panel-tenant,
     .fi-body.fi-panel-member {
@@ -239,5 +339,13 @@
 
     .ff-portal-bottom-bar__divider {
         display: none;
+    }
+
+    .ff-portal-bottom-bar--impersonating .ff-portal-bottom-bar__fund {
+        max-width: 5.5rem;
+    }
+
+    .ff-portal-bottom-bar__impersonation-text {
+        max-width: 7.5rem;
     }
 }

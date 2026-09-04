@@ -195,7 +195,20 @@ final class AppTranslationCatalog
             return true;
         }
 
-        if (in_array($key, ['CSV', 'PDF', 'JSON', 'SAR', 'YYYY-MM', 'YYYY-MM-DD'], true)) {
+        if (
+            in_array($key, [
+                'CSV',
+                'PDF',
+                'JSON',
+                'SAR',
+                'YYYY-MM',
+                'YYYY-MM-DD',
+                'DejaVu Sans Mono',
+                'DejaVu Serif',
+                'PHP-FPM',
+                'Reverb',
+            ], true)
+        ) {
             return true;
         }
 
@@ -204,6 +217,14 @@ final class AppTranslationCatalog
         }
 
         if (preg_match('/^[\dX@.\-]+$/', $key) || preg_match('/@(?:example|email)\.com$/', $key)) {
+            return true;
+        }
+
+        // Placeholder-only labels (no prose to localize).
+        $withoutPlaceholders = trim(preg_replace('/:[A-Za-z_][A-Za-z0-9_]*/', '', $key) ?? '');
+        $withoutPlaceholders = trim(preg_replace('/[\s·.\-\/–—|:]+/u', '', $withoutPlaceholders) ?? '');
+
+        if ($withoutPlaceholders === '') {
             return true;
         }
 
