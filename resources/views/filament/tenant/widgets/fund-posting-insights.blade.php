@@ -24,23 +24,31 @@
         'rate' => $pipeline['deposits_url'],
         'review' => $pipeline['deposits_url'],
     ]);
-@endphp
 
-@php
     $hero = $d['pending'] > 0
         ? [
-            'title'     => __('Deposits need your attention'),
-            'subtitle'  => trans_choice(':count pending', $d['pending'], ['count' => $d['pending']])
-                           . ' · ' . (MoneyDisplay::format($d['pending_amount_total'], $currency, precision: 0) ?? '')
-                           . ($d['pending_over_sla'] > 0 ? ' · ' . trans_choice(':count past SLA', $d['pending_over_sla'], ['count' => $d['pending_over_sla']]) : ''),
-            'tone'      => 'amber',
-            'cta_url'   => $pipeline['deposits_pending_url'],
+            'title' => __('Deposits need your attention'),
+            'subtitle' => trans_choice(':count pending', $d['pending'], ['count' => $d['pending']])
+                . ' · ' . (MoneyDisplay::format($d['pending_amount_total'], $currency, precision: 0) ?? '')
+                . ($d['pending_over_sla'] > 0 ? ' · ' . trans_choice(':count past SLA', $d['pending_over_sla'], ['count' => $d['pending_over_sla']]) : ''),
+            'tone' => 'amber',
+            'cta_url' => $pipeline['deposits_pending_url'],
             'cta_label' => __('Review'),
         ]
         : ['title' => __('Queue clear'), 'subtitle' => __('No deposits awaiting review'), 'tone' => 'success'];
+
+    $badge = match ($hero['tone']) {
+        'amber' => ['label' => __('Needs attention'), 'tone' => 'amber'],
+        'success' => ['label' => $hero['title'], 'tone' => 'success'],
+        default => null,
+    };
 @endphp
 
-<div class="ff-app-insights w-full max-w-none space-y-3 mb-1">
+@component('filament.tenant.partials.ops-overview.shell', [
+    'title' => __('Overview'),
+    'badge' => $badge,
+    'wrapperClass' => '',
+])
     @include('filament.tenant.widgets.partials.insights-head', [
         'hero' => $hero,
         'kpis' => $kpis,
@@ -200,4 +208,4 @@
             'secondaryLabel' => __('Decided'),
         ])
     </div>
-</div>
+@endcomponent

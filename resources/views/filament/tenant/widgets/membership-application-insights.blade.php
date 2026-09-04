@@ -4,6 +4,7 @@
     $fees = $d['fees'];
     $maxType = max(1, collect($d['type_breakdown'])->max('count'));
     $currency = $fees['currency'];
+    $pollingInterval = method_exists($this, 'getPollingInterval') ? $this->getPollingInterval() : null;
 
     $hero = $d['pending'] > 0
         ? [
@@ -19,14 +20,27 @@
             'subtitle' => __('No applications awaiting review'),
             'tone' => 'success',
         ];
+
+    $badge = match ($hero['tone']) {
+        'amber' => ['label' => __('Needs attention'), 'tone' => 'amber'],
+        'success' => ['label' => $hero['title'], 'tone' => 'success'],
+        default => null,
+    };
 @endphp
 
-<div class="ff-app-insights ff-applications-list-insights w-full max-w-none space-y-3 mb-1" @if (filled($pollingInterval ?? null)) wire:poll.{{ $pollingInterval }} @endif>
+@if (filled($pollingInterval))
+    <div wire:poll.{{ $pollingInterval }}>
+@endif
+@component('filament.tenant.partials.ops-overview.shell', [
+    'title' => __('Overview'),
+    'badge' => $badge,
+    'wrapperClass' => 'ff-applications-list-insights',
+])
     @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $hero])
 
     <div class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div
-            class="overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
+            class="overflow-hidden rounded-lg border border-gray-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
             <div class="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-800 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                 <a href="{{ $pipeline['applications_pending_url'] }}"
                     class="px-3 py-3 text-center transition hover:bg-amber-50/60 dark:hover:bg-amber-950/20">
@@ -64,7 +78,7 @@
         </div>
 
         <div
-            class="overflow-hidden rounded-2xl border border-gray-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
+            class="overflow-hidden rounded-lg border border-gray-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
             <div
                 class="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
                 <div class="flex items-center gap-1.5">
@@ -105,4 +119,7 @@
             </div>
         </div>
     </div>
-</div>
+@endcomponent
+@if (filled($pollingInterval))
+    </div>
+@endif

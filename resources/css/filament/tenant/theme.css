@@ -577,24 +577,30 @@ html.fi.fi-panel-tenant #nprogress .peg {
   max-width: none;
 }
 
+.fi-body.fi-panel-tenant .ff-ops-overview,
+.fi-body.fi-panel-tenant .ff-member-workspace-summary {
+  max-width: none;
+}
+
 .fi-body.fi-panel-tenant .ff-app-insights-head {
   width: 100%;
 }
 
+.fi-body.fi-panel-tenant .ff-ops-overview__kpi,
 .fi-body.fi-panel-tenant .ff-app-insights-kpi {
   transition:
     background-color 0.15s ease,
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+    border-color 0.15s ease;
 }
 
 .fi-body.fi-panel-tenant a.ff-app-insights-kpi:hover,
+.fi-body.fi-panel-tenant a.ff-ops-overview__kpi:hover,
 .fi-body.fi-panel-tenant a.ff-tenant-stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px -10px rgb(2 132 199 / 0.3);
+  border-color: rgb(199 210 254 / 0.9);
 }
 
-.fi-body.fi-panel-tenant .ff-app-insights-hero {
+.fi-body.fi-panel-tenant .ff-app-insights-hero,
+.fi-body.fi-panel-tenant .ff-ops-overview__hero {
   transition: box-shadow 0.25s ease;
 }
 

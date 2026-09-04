@@ -1,98 +1,97 @@
 @php
-        $kpis = $kpis ?? [];
-        $sparkline = $sparkline ?? null;
-        $sparklineMax = $sparklineMax ?? 1;
-        $compact = (bool) ($compact ?? false);
+    $kpis = $kpis ?? [];
+    $sparkline = $sparkline ?? null;
+    $sparklineMax = $sparklineMax ?? 1;
+    $compact = (bool) ($compact ?? true);
 
-        $accentText = [
-            'amber' => 'text-amber-600 dark:text-amber-400',
-            'emerald' => 'text-emerald-600 dark:text-emerald-400',
-            'rose' => 'text-red-600 dark:text-red-400',
-            'sky' => 'text-sky-600 dark:text-sky-400',
-            'violet' => 'text-violet-600 dark:text-violet-400',
-            'teal' => 'text-teal-600 dark:text-teal-400',
-            'indigo' => 'text-indigo-600 dark:text-indigo-400',
-            'gray' => 'text-gray-500 dark:text-gray-400',
-            'slate' => 'text-gray-500 dark:text-gray-400',
-        ];
-        $count = count($kpis);
-        $gridCols = match (true) {
+    $accentText = [
+        'amber' => 'text-amber-600 dark:text-amber-400',
+        'emerald' => 'text-emerald-600 dark:text-emerald-400',
+        'rose' => 'text-rose-600 dark:text-rose-400',
+        'sky' => 'text-sky-600 dark:text-sky-400',
+        'violet' => 'text-violet-600 dark:text-violet-400',
+        'teal' => 'text-teal-600 dark:text-teal-400',
+        'indigo' => 'text-indigo-600 dark:text-indigo-400',
+        'gray' => 'text-gray-500 dark:text-gray-400',
+        'slate' => 'text-gray-500 dark:text-gray-400',
+    ];
+    $count = count($kpis);
+    $gridCols = match (true) {
         $count <= 1 => 'grid-cols-1',
-        $compact && $count <= 5 => 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5',
-        $compact && $count <= 6 => 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6',
-        $count === 2 => 'grid-cols-1 sm:grid-cols-2',
-        $count === 3 => 'grid-cols-1 sm:grid-cols-3',
-        $count <= 4 => 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
-        $count <= 6 => 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6',
-        default => 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+        $count === 2 => 'grid-cols-2',
+        $count === 3 => 'grid-cols-2 lg:grid-cols-3',
+        $count <= 4 => 'grid-cols-2 lg:grid-cols-4',
+        $count <= 6 => 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
+        default => 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
     };
 @endphp
-        
-        <div @class([
-            'ff-app-insights-kpi-strip w-full min-w-0 grid',
-            $gridCols,
-            'gap-1.5' => $compact,
-            'gap-2.5' => !$compact,
-        ])>
-            @foreach ($kpis as $i => $card)
-                    @php
-                        $accent = $card['accent'] ?? 'gray';
-                        $textClass = $accentText[$accent] ?? 'text-gray-500 dark:text-gray-400';
-                        $active = $card['active'] ?? true;
-                        $tag = filled($card['url'] ?? null) ? 'a' : 'div';
-                        $rawValue = $card['value'];
-                        $valueText = (string) $rawValue;
-                        $currency = $card['currency'] ?? null;
-                        $valuePrecision = (int) ($card['value_precision'] ?? 2);
-                        $valueCompact = (bool) ($card['value_compact'] ?? false);
-                        $subPrecision = (int) ($card['sub_precision'] ?? 2);
-                        $subText = (string) ($card['sub'] ?? '');
-                        $valueIsAmount = (bool) ($card['value_is_amount'] ?? false);
 
-                        if (!$valueIsAmount && filled($currency)) {
-                            if (is_int($rawValue) || is_float($rawValue)) {
-                                $valueIsAmount = true;
-                            } elseif (is_string($rawValue) && is_numeric($rawValue)) {
-                                $valueIsAmount = true;
-                                $rawValue = str_contains($rawValue, '.') ? (float) $rawValue : (int) $rawValue;
-                            }
-                        }
+<div @class([
+    'ff-app-insights-kpi-strip ff-ops-overview__kpi-strip w-full min-w-0 grid gap-2',
+    $gridCols,
+])>
+    @foreach ($kpis as $i => $card)
+        @php
+            $accent = $card['accent'] ?? 'gray';
+            $textClass = $accentText[$accent] ?? 'text-gray-500 dark:text-gray-400';
+            $active = $card['active'] ?? true;
+            $tag = filled($card['url'] ?? null) ? 'a' : 'div';
+            $rawValue = $card['value'];
+            $valueText = (string) $rawValue;
+            $currency = $card['currency'] ?? null;
+            $valuePrecision = (int) ($card['value_precision'] ?? 2);
+            $valueCompact = (bool) ($card['value_compact'] ?? false);
+            $subPrecision = (int) ($card['sub_precision'] ?? 2);
+            $subText = (string) ($card['sub'] ?? '');
+            $valueIsAmount = (bool) ($card['value_is_amount'] ?? false);
 
-                        $subIsAmount = (bool) ($card['sub_is_amount'] ?? false);
+            if (! $valueIsAmount && filled($currency)) {
+                if (is_int($rawValue) || is_float($rawValue)) {
+                    $valueIsAmount = true;
+                } elseif (is_string($rawValue) && is_numeric($rawValue)) {
+                    $valueIsAmount = true;
+                    $rawValue = str_contains($rawValue, '.') ? (float) $rawValue : (int) $rawValue;
+                }
+            }
 
-                        $dimmed = !$active ? 'opacity-50' : '';
-                    @endphp
-                    <{{ $tag }}
-                        @if ($tag === 'a') href="{{ $card['url'] }}" @endif
-                        @class([
-                            'ff-app-insights-kpi group flex min-w-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:hover:border-sky-700',
-                            'gap-0 px-2.5 py-1.5' => $compact,
-                            'gap-0.5 px-3 py-2.5' => !$compact,
-                            $dimmed,
-                        ])
-                        style="animation: ff-stat-in 0.3s ease-out {{ 0.02 + ($i * 0.03) }}s forwards">
-                        <p class="break-words text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                            {{ ui_label($card['label']) }}
-                        </p>
-                        <div class="flex min-w-0 items-baseline gap-0.5 overflow-hidden">
-                            <x-ff-stat-line :amount="$valueIsAmount ? $rawValue : null" :text="$valueIsAmount ? null : $valueText"
-                                :currency="$currency" :precision="$valuePrecision" :compact="$valueCompact" @class([
-                                    'min-w-0 flex-1 break-words',
-                                    $card['value_class'] ?? 'text-gray-900 dark:text-white',
-                                    'text-sm font-bold tabular-nums leading-none sm:text-base' => $compact,
-                                    'text-base font-bold tabular-nums leading-none sm:text-lg xl:text-[22px]' => !$compact,
-                                ]) />
-                            @if (!empty($card['suffix'] ?? null))
-                                <span class="shrink-0 text-[11px] font-normal text-gray-400">{{ $card['suffix'] }}</span>
-                            @endif
-                        </div>
-                        <x-ff-stat-line :text="$subIsAmount ? null : $subText" :amount="$subIsAmount ? $subText : null"
-                            :currency="$subIsAmount ? $currency : null" :precision="$subPrecision" @class([
-                                'min-w-0 break-words',
-                                        $textClass,
-                                        'text-[10px] font-medium' => $compact,
-                                        'text-[11px] font-medium' => !$compact,
-                            ]) />
-                </{{ $tag }}>
-            @endforeach
+            $subIsAmount = (bool) ($card['sub_is_amount'] ?? false);
+            $dimmed = ! $active ? 'opacity-50' : '';
+        @endphp
+        <{{ $tag }}
+            @if ($tag === 'a') href="{{ $card['url'] }}" @endif
+            @class([
+                'ff-app-insights-kpi ff-ops-overview__kpi group flex min-w-0 flex-col gap-0 overflow-hidden rounded-lg border border-gray-200/90 bg-white px-3 py-2.5 transition hover:bg-gray-50 dark:border-white/10 dark:bg-transparent dark:hover:bg-gray-800/80',
+                $dimmed,
+            ])
+        >
+            <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                {{ ui_label($card['label']) }}
+            </p>
+            <div class="mt-0.5 flex min-w-0 items-baseline gap-0.5 overflow-hidden">
+                <x-ff-stat-line
+                    :amount="$valueIsAmount ? $rawValue : null"
+                    :text="$valueIsAmount ? null : $valueText"
+                    :currency="$currency"
+                    :precision="$valuePrecision"
+                    :compact="$valueCompact"
+                    @class([
+                        'min-w-0 flex-1 truncate text-lg font-extrabold tabular-nums tracking-tight sm:text-xl',
+                        $card['value_class'] ?? 'text-gray-900 dark:text-white',
+                    ])
+                />
+                @if (! empty($card['suffix'] ?? null))
+                    <span class="shrink-0 text-[11px] font-normal text-gray-400">{{ $card['suffix'] }}</span>
+                @endif
+            </div>
+            @if (filled($subText) || $subIsAmount)
+                <x-ff-stat-line
+                    :text="$subIsAmount ? null : $subText"
+                    :amount="$subIsAmount ? $subText : null"
+                    :currency="$subIsAmount ? $currency : null"
+                    :precision="$subPrecision"
+                    @class(['mt-0.5 min-w-0 truncate text-[10px] font-medium', $textClass])
+                />
+            @endif
+        </{{ $tag }}>
+    @endforeach
 </div>

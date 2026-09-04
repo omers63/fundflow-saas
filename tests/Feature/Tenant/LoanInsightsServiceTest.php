@@ -280,7 +280,7 @@ test('emi arrears snapshot reports unpaid members for selected cycle', function 
 
     expect($html)->toContain('ff-app-insights')
         ->and($html)->toContain(__('Total arrears amount'))
-        ->and($html)->toContain('space-y-2')
+        ->and($html)->toContain('space-y-3')
         ->and($html)->toContain('text-lg');
 
     Carbon::setTestNow();

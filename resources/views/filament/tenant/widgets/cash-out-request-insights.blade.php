@@ -9,6 +9,12 @@
     $sparkMax = max(1, max($d['sparkline']));
     $currency = $d['currency'];
 
+    $badge = match ($hero['tone'] ?? null) {
+        'amber' => ['label' => __('Needs attention'), 'tone' => 'amber'],
+        'success' => ['label' => $hero['title'], 'tone' => 'success'],
+        default => null,
+    };
+
     $kpis = \App\Support\Insights\InsightKpi::linkMany([
         ['key' => 'pending', 'label' => __('Pending'), 'value' => $d['pending'], 'sub' => __('Awaiting'), 'icon' => 'heroicon-o-clock', 'accent' => 'amber', 'active' => $d['pending'] > 0],
         ['key' => 'accepted', 'label' => __('Accepted'), 'value' => $d['accepted'], 'sub' => __(':count/mo', ['count' => $d['accepted_this_month']]), 'icon' => 'heroicon-o-check-circle', 'accent' => 'emerald', 'active' => true],
@@ -25,18 +31,22 @@
         'review' => $pipeline['index_url'],
     ]);
 @endphp
-    
-    <div class="ff-app-insights w-full max-w-none space-y-3 mb-1">
-        @include('filament.tenant.widgets.partials.insights-head', [
-            'hero' => $hero,
-            'kpis' => $kpis,
-            'sparkline' => $d['pending'] > 0 ? $d['sparkline'] : null,
-            'sparklineMax' => $sparkMax,
-        ])
 
-        @include('filament.tenant.widgets.partials.treasury-forecast-grid', ['forecast' => $forecast])
+@component('filament.tenant.partials.ops-overview.shell', [
+    'title' => __('Overview'),
+    'badge' => $badge,
+    'wrapperClass' => '',
+])
+    @include('filament.tenant.widgets.partials.insights-head', [
+        'hero' => $hero,
+        'kpis' => $kpis,
+        'sparkline' => $d['pending'] > 0 ? $d['sparkline'] : null,
+        'sparklineMax' => $sparkMax,
+    ])
 
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+    @include('filament.tenant.widgets.partials.treasury-forecast-grid', ['forecast' => $forecast])
+
+    <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
             class="overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div
@@ -163,10 +173,10 @@
                                 {{ $request['has_notes'] ? __('Has notes') : __('No notes') }}</p>
                         </div>
                         <span @class([
-        'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
-        'bg-amber-100 text-amber-800 dark:bg-amber-900/40' => $request['days_waiting'] <= 3,
-        'bg-red-100 text-red-800 dark:bg-red-900/40' => $request['days_waiting'] > 3,
-    ])>
+                            'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+                            'bg-amber-100 text-amber-800 dark:bg-amber-900/40' => $request['days_waiting'] <= 3,
+                            'bg-red-100 text-red-800 dark:bg-red-900/40' => $request['days_waiting'] > 3,
+                        ])>
                             {{ $request['days_waiting'] }}d
                         </span>
                     </a>
@@ -180,10 +190,10 @@
         </div>
 
         @include('filament.partials.insights.six-month-workflow-panel', [
-    'title' => __('6-month volume & outcomes'),
-    'trend' => $d['trend'],
-    'primaryLabel' => __('Accepted'),
-    'secondaryLabel' => __('Decided'),
-])
+            'title' => __('6-month volume & outcomes'),
+            'trend' => $d['trend'],
+            'primaryLabel' => __('Accepted'),
+            'secondaryLabel' => __('Decided'),
+        ])
     </div>
-</div>
+@endcomponent

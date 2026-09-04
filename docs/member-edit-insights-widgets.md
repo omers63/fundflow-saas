@@ -67,3 +67,4 @@ The **Accounts** tab was removed; cash/fund cards link to account views instead.
 
 - Delinquency actions: `docs/loan-delinquency-workflow.md`
 - Account detail pattern: `resources/views/filament/tenant/widgets/account-detail-insights.blade.php`
+- Ops list overviews (shared chrome): Members list + treasury/roster queues use `resources/views/filament/tenant/partials/ops-overview/` and restyled `insights-{head,hero,kpi-strip}`; Bank/SMS/Reconciliation/Delinquency shells share the same density. Thin Fund-out / Cash-transfer widgets: `FundOutRequestInsightsService`, `MemberCashTransferRequestInsightsService`.

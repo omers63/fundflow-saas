@@ -2,15 +2,28 @@
 $d = $this->getData();
 $pollingInterval = method_exists($this, 'getPollingInterval') ? $this->getPollingInterval() : null;
 $masterFundBalance = (float) ($d['master_fund'] ?? 0);
+$hero = $d['hero'];
+$badge = match ($hero['tone'] ?? null) {
+    'amber' => ['label' => __('Needs attention'), 'tone' => 'amber'],
+    'success' => ['label' => $hero['title'] ?? __('Healthy'), 'tone' => 'success'],
+    default => null,
+};
 @endphp
 
-<div class="ff-app-insights w-full max-w-none space-y-3 mb-1" @if (filled($pollingInterval)) wire:poll.{{ $pollingInterval }} @endif>
-    @include('filament.tenant.widgets.partials.insights-head', [
-    'hero' => $d['hero'],
-    'kpis' => $d['kpis'],
-    'sparkline' => $d['sparkline'],
-    'sparklineMax' => $d['sparkline_max'],
+@if (filled($pollingInterval))
+    <div wire:poll.{{ $pollingInterval }}>
+@endif
+@component('filament.tenant.partials.ops-overview.shell', [
+    'title' => __('Overview'),
+    'badge' => $badge,
+    'wrapperClass' => '',
 ])
+    @include('filament.tenant.widgets.partials.insights-head', [
+        'hero' => $d['hero'],
+        'kpis' => $d['kpis'],
+        'sparkline' => $d['sparkline'],
+        'sparklineMax' => $d['sparkline_max'],
+    ])
 
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div
@@ -23,11 +36,11 @@ $masterFundBalance = (float) ($d['master_fund'] ?? 0);
                     </h3>
                 </div>
                 @php
-$healthBadge = match ($d['fund_health']) {
-    'healthy' => [__('Healthy'), 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'],
-    'monitor' => [__('Monitor'), 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'],
-    default => [__('Action'), 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200'],
-};
+                    $healthBadge = match ($d['fund_health']) {
+                        'healthy' => [__('Healthy'), 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'],
+                        'monitor' => [__('Monitor'), 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'],
+                        default => [__('Action'), 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200'],
+                    };
                 @endphp
                 <span @class(['rounded-full px-2 py-0.5 text-[9px] font-bold uppercase', $healthBadge[1]])>
                     {{ $healthBadge[0] }}
@@ -90,7 +103,7 @@ $healthBadge = match ($d['fund_health']) {
                     </p>
                     <p class="mt-1 text-lg font-bold tabular-nums text-gray-900 dark:text-white">
                         @php
-$netSign = $d['activity_net'] >= 0 ? '+' : '−';
+                            $netSign = $d['activity_net'] >= 0 ? '+' : '−';
                         @endphp
                         {!! $netSign . (\App\Filament\Support\MoneyDisplay::html(abs($d['activity_net']), $d['currency'], precision: 0)?->toHtml() ?? '') !!}
                     </p>
@@ -115,5 +128,7 @@ $netSign = $d['activity_net'] >= 0 ? '+' : '−';
             @endif
         </x-ff-lazy-fold>
     @endif
-
-</div>
+@endcomponent
+@if (filled($pollingInterval))
+    </div>
+@endif

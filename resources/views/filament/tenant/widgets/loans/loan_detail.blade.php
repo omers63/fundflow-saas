@@ -9,7 +9,7 @@ $showDisburseProgress = (float) ($snapshot['approved'] ?? 0) > 0 || $isPreDisbur
 @endphp
 
 <section
-    class="ff-loan-detail-shell overflow-hidden rounded-2xl border border-gray-200/90 bg-gradient-to-br from-white via-slate-50 to-sky-50/60 shadow-sm dark:border-white/10 dark:from-gray-900 dark:via-gray-900/95 dark:to-sky-950/20"
+    class="ff-loan-detail-shell overflow-hidden rounded-lg border border-gray-200/90 bg-gradient-to-br from-white via-slate-50 to-sky-50/60 shadow-sm dark:border-white/10 dark:from-gray-900 dark:via-gray-900/95 dark:to-sky-950/20"
     data-ff-loan-ui="v2"
 >
     <x-loan-pipeline-stepper :steps="$d['steps']" />

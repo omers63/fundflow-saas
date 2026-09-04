@@ -48,7 +48,9 @@ $showOverviewExtras = in_array($sideTab, ['overview', 'related'], true);
                         @include('filament.tenant.widgets.partials.insights-head', [
                 'hero' => $snapshot['hero'] ?? null,
                 'kpis' => $snapshot['kpis'] ?? null,
-                'compact' => false,
+                'compact' => true,
+                'wrapShell' => true,
+                'title' => __('Overview'),
             ])
                     </x-ff-lazy-fold>
 

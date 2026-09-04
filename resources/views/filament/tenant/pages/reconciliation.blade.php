@@ -1,18 +1,27 @@
 <x-filament-panels::page>
     <section
-        class="rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-sm dark:border-white/10 dark:bg-gray-900/60">
-        <header class="mb-4 border-b border-gray-100 pb-4 dark:border-white/10">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ __('Reconciliation') }}</h2>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {{ $this->getSubheading() }}
-            </p>
+        class="ff-reconciliation-shell ff-ops-overview overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
+        <header
+            class="ff-ops-overview__header flex flex-wrap items-start justify-between gap-2 border-b border-gray-200/80 px-3 py-2.5 dark:border-white/10">
+            <div class="min-w-0">
+                <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    {{ __('Overview') }}
+                </h2>
+                <p class="mt-0.5 text-[11px] font-medium text-gray-900 dark:text-white">
+                    {{ __('Reconciliation') }}
+                </p>
+                <p class="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+                    {{ $this->getSubheading() }}
+                </p>
+            </div>
         </header>
 
+        <div class="ff-ops-overview__body space-y-3 p-3">
         @include('filament.tenant.partials.reconciliation-workspace-actions')
 
         @include('filament.tenant.partials.reconciliation-tab-pills')
 
-        <div class="min-w-0 space-y-6" wire:key="reconciliation-workspace-{{ $this->sideTab }}">
+        <div class="min-w-0 space-y-3" wire:key="reconciliation-workspace-{{ $this->sideTab }}">
             @if ($this->batchPostingIsHalted())
                 <div role="alert"
                     class="flex flex-wrap items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 shadow-sm dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200">
@@ -348,6 +357,7 @@
                     </p>
                 </div>
             @endif
+        </div>
         </div>
     </section>
 

@@ -1,9 +1,22 @@
 @php
     $d = $this->getData();
     $pollingInterval = method_exists($this, 'getPollingInterval') ? $this->getPollingInterval() : null;
+    $hero = $d['hero'] ?? [];
+    $badge = match ($hero['tone'] ?? null) {
+        'amber' => ['label' => __('Needs attention'), 'tone' => 'amber'],
+        'success' => ['label' => $hero['title'] ?? __('Healthy'), 'tone' => 'success'],
+        default => null,
+    };
 @endphp
 
-<div class="ff-app-insights w-full max-w-none space-y-3 mb-1" @if (filled($pollingInterval)) wire:poll.{{ $pollingInterval }} @endif>
+@if (filled($pollingInterval))
+    <div wire:poll.{{ $pollingInterval }}>
+@endif
+@component('filament.tenant.partials.ops-overview.shell', [
+    'title' => __('Overview'),
+    'badge' => $badge,
+    'wrapperClass' => '',
+])
     @include('filament.tenant.widgets.partials.insights-head', [
         'hero' => $d['hero'],
         'kpis' => $d['kpis'],
@@ -83,4 +96,7 @@
             @endforelse
         </div>
     </div>
-</div>
+@endcomponent
+@if (filled($pollingInterval))
+    </div>
+@endif
