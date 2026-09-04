@@ -20,7 +20,7 @@ it('uses western digits and places currency symbol before amount in arabic local
     app()->setLocale('ar');
 
     expect(MoneyDisplay::format(3240, 'SAR'))
-        ->toBe("\u{2066}SAR 3,240.00\u{2069}")
+        ->toBe("\u{2066}\u{20C1} 3,240.00\u{2069}")
         ->and(MoneyDisplay::amount(3240))->toBe('3,240.00');
 });
 
@@ -39,7 +39,7 @@ it('uses translated currency symbol from lang files', function (): void {
     app()->setLocale('ar');
 
     expect(MoneyDisplay::symbol('SAR'))->toBe("\u{20C1}")
-        ->and(MoneyDisplay::plainTextSymbol('SAR'))->toBe('SAR');
+        ->and(MoneyDisplay::plainTextSymbol('SAR'))->toBe("\u{20C1}");
 });
 
 it('renders html markup with inline svg symbol before digits in arabic', function (): void {
@@ -200,7 +200,7 @@ it('formats compact amounts with symbol before digits in arabic', function (): v
     app()->setLocale('ar');
 
     expect(MoneyDisplay::compactWithSymbol(1_500_000, 'SAR'))
-        ->toBe("\u{2066}SAR 1.5M\u{2069}");
+        ->toBe("\u{2066}\u{20C1} 1.5M\u{2069}");
 });
 
 it('formats compact amounts with sar code in english', function (): void {
@@ -279,11 +279,22 @@ it('upgrades plain SAR format strings to svg markup in arabic html', function ()
     $plain = MoneyDisplay::format(1500, 'SAR');
     $html = MoneyDisplay::markupForDisplay($plain, 'SAR');
 
-    expect($plain)->toContain('SAR')
-        ->and($plain)->not->toContain("\u{20C1}")
+    expect($plain)->toContain("\u{20C1}")
+        ->and($plain)->not->toContain('SAR')
         ->and($html)->toContain('ff-sar-symbol--svg')
         ->and($html)->toContain('ff-sar-symbol__img')
         ->and($html)->toContain('1,500.00');
+});
+
+it('upgrades legacy plain SAR code strings to svg markup in arabic html', function (): void {
+    app()->setLocale('ar');
+
+    $html = MoneyDisplay::markupForDisplay('SAR 1,500.00', 'SAR');
+
+    expect($html)
+        ->toContain('ff-sar-symbol--svg')
+        ->toContain('ff-sar-symbol__img')
+        ->toContain('1,500.00');
 });
 
 it('upgrades middle segments of hero-style subtitles with money in arabic', function (): void {

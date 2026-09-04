@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
@@ -35,7 +36,7 @@ test('member workspace summary includes balances cycle and links without delinqu
 
     $summary = app(MemberWorkspaceSummaryService::class)->summary($member->fresh(['cashAccount', 'fundAccount']));
 
-    expect($summary)->toHaveKeys(['balances', 'cycle', 'arrears', 'loan', 'household', 'links', 'currency', 'member', 'contributions', 'monthly'])
+    expect($summary)->toHaveKeys(['balances', 'cycle', 'arrears', 'loan', 'household', 'links', 'currency', 'member', 'contributions', 'monthly', 'totals'])
         ->and($summary['balances']['cash']['amount'])->toBe(1500.0)
         ->and($summary['balances']['fund']['amount'])->toBe(2500.0)
         ->and($summary['balances']['cash']['url'])->toBeString()->not->toBeEmpty()
@@ -46,6 +47,10 @@ test('member workspace summary includes balances cycle and links without delinqu
         ->and($summary['member']['status_label'])->toBeString()
         ->and($summary['contributions']['posted_count'])->toBe(0)
         ->and($summary['contributions']['posted_total'])->toBe(0.0)
+        ->and($summary['totals']['loans_count'])->toBe(0)
+        ->and($summary['totals']['loans_value'])->toBe(0.0)
+        ->and($summary['totals']['repayments'])->toBe(0.0)
+        ->and($summary['totals']['collection'])->toBe(0.0)
         ->and($summary['monthly'])->toBe(1000.0)
         ->and($summary['links']['ledger'])->toBeString()->not->toBeEmpty();
 });
@@ -89,7 +94,57 @@ test('member workspace summary includes lifetime posted contribution totals', fu
 
     expect($summary['contributions']['posted_count'])->toBe(2)
         ->and($summary['contributions']['posted_total'])->toBe(2000.0)
-        ->and($summary['contributions']['hint'])->toContain('2');
+        ->and($summary['contributions']['hint'])->toContain('2')
+        ->and($summary['totals']['collection'])->toBe(2000.0);
+});
+
+test('member workspace summary includes loan portfolio and collection totals', function () {
+    $member = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    Contribution::query()->create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate(4, (int) now()->year),
+        'amount' => 500,
+        'status' => 'posted',
+        'posted_at' => now()->subMonths(3),
+    ]);
+
+    $loan = Loan::factory()->for($member)->create([
+        'status' => 'active',
+        'amount_requested' => 10_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    LoanRepayment::query()->create([
+        'loan_id' => $loan->id,
+        'amount' => 1500,
+        'paid_at' => now()->subMonth(),
+        'notes' => 'test repayment',
+    ]);
+
+    LoanRepayment::query()->create([
+        'loan_id' => $loan->id,
+        'amount' => 500,
+        'paid_at' => now()->subDays(10),
+        'notes' => 'test repayment 2',
+    ]);
+
+    MemberWorkspaceSummaryService::forgetCached((int) $member->id);
+
+    $summary = app(MemberWorkspaceSummaryService::class)->summary($member->fresh());
+
+    expect($summary['totals']['loans_count'])->toBe(1)
+        ->and($summary['totals']['loans_value'])->toBe(12_000.0)
+        ->and($summary['totals']['repayments'])->toBe(2000.0)
+        ->and($summary['totals']['collection'])->toBe(2500.0);
 });
 
 test('member workspace summary shows active loan chip when loan exists', function () {

@@ -4,6 +4,7 @@
     $memberMeta = $summary['member'] ?? [];
     $balances = $summary['balances'] ?? [];
     $contributions = $summary['contributions'] ?? [];
+    $totals = $summary['totals'] ?? [];
     $cycle = $summary['cycle'] ?? [];
     $arrears = $summary['arrears'] ?? [];
     $loan = $summary['loan'] ?? null;
@@ -66,8 +67,8 @@
                         @class([
                             'mt-0.5 text-lg font-extrabold tabular-nums tracking-tight sm:text-xl',
                             ($balances['cash']['negative'] ?? false)
-                                ? 'text-rose-600 dark:text-rose-400'
-                                : 'text-emerald-600 dark:text-emerald-400',
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : 'text-emerald-600 dark:text-emerald-400',
                         ])
                     />
                 </a>
@@ -85,8 +86,8 @@
                         @class([
                             'mt-0.5 text-lg font-extrabold tabular-nums tracking-tight sm:text-xl',
                             ($balances['fund']['negative'] ?? false)
-                                ? 'text-rose-600 dark:text-rose-400'
-                                : 'text-indigo-600 dark:text-indigo-400',
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : 'text-indigo-600 dark:text-indigo-400',
                         ])
                     />
                 </a>
@@ -95,10 +96,11 @@
                     <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                         {{ __('Monthly') }}
                     </p>
-                    <p class="mt-0.5 truncate text-lg font-extrabold tabular-nums tracking-tight text-gray-900 sm:text-xl dark:text-white"
-                        title="{{ $summary['monthly_formatted'] ?? '—' }}">
-                        {{ $summary['monthly_formatted'] ?? '—' }}
-                    </p>
+                    <x-ff-stat-line
+                        :amount="$summary['monthly'] ?? 0"
+                        :currency="$currency"
+                        class="mt-0.5 text-lg font-extrabold tabular-nums tracking-tight text-gray-900 sm:text-xl dark:text-white"
+                    />
                 </div>
 
                 <a href="{{ $links['contributions'] ?? '#' }}" @class([
@@ -108,14 +110,73 @@
                     <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                         {{ __('Lifetime contributions') }}
                     </p>
-                    <p class="mt-0.5 truncate text-lg font-extrabold tabular-nums tracking-tight text-sky-700 sm:text-xl dark:text-sky-300"
-                        title="{{ $contributions['posted_total_formatted'] ?? '—' }}">
-                        {{ $contributions['posted_total_formatted'] ?? '—' }}
+                    <x-ff-stat-line
+                        :amount="$contributions['posted_total'] ?? 0"
+                        :currency="$currency"
+                        class="mt-0.5 text-lg font-extrabold tabular-nums tracking-tight text-sky-700 sm:text-xl dark:text-sky-300"
+                    />
+                    @if (filled($contributions['hint'] ?? null))
+                        <p class="mt-0.5 truncate text-[10px] text-gray-400 dark:text-gray-500">
+                            {!! \App\Filament\Support\MoneyDisplay::markupForDisplay($contributions['hint'], $currency) !!}
+                        </p>
+                    @endif
+                </a>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <a href="{{ $links['loans'] ?? '#' }}" @class([
+                    'block min-w-0 overflow-hidden rounded-lg border border-gray-200/90 px-3 py-2.5 transition hover:bg-gray-50 dark:border-white/10 dark:hover:bg-gray-800/80',
+                    'pointer-events-none opacity-70' => empty($links['loans']),
+                ])>
+                    <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        {{ __('Total loans') }}
                     </p>
-                    <p class="mt-0.5 truncate text-[10px] text-gray-400 dark:text-gray-500">
-                        {{ $contributions['hint'] ?? '' }}
+                    <p class="mt-0.5 truncate text-lg font-extrabold tabular-nums tracking-tight text-gray-900 sm:text-xl dark:text-white">
+                        {{ number_format((int) ($totals['loans_count'] ?? 0)) }}
                     </p>
                 </a>
+
+                <a href="{{ $links['loans'] ?? '#' }}" @class([
+                    'block min-w-0 overflow-hidden rounded-lg border border-gray-200/90 px-3 py-2.5 transition hover:bg-gray-50 dark:border-white/10 dark:hover:bg-gray-800/80',
+                    'pointer-events-none opacity-70' => empty($links['loans']),
+                ])>
+                    <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        {{ __('Total loans value') }}
+                    </p>
+                    <x-ff-stat-line
+                        :amount="$totals['loans_value'] ?? 0"
+                        :currency="$currency"
+                        class="mt-0.5 text-lg font-extrabold tabular-nums tracking-tight text-violet-700 sm:text-xl dark:text-violet-300"
+                    />
+                </a>
+
+                <a href="{{ $links['loans'] ?? '#' }}" @class([
+                    'block min-w-0 overflow-hidden rounded-lg border border-gray-200/90 px-3 py-2.5 transition hover:bg-gray-50 dark:border-white/10 dark:hover:bg-gray-800/80',
+                    'pointer-events-none opacity-70' => empty($links['loans']),
+                ])>
+                    <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        {{ __('Loan Repayments Total') }}
+                    </p>
+                    <x-ff-stat-line
+                        :amount="$totals['repayments'] ?? 0"
+                        :currency="$currency"
+                        class="mt-0.5 text-lg font-extrabold tabular-nums tracking-tight text-emerald-700 sm:text-xl dark:text-emerald-300"
+                    />
+                </a>
+
+                <div class="min-w-0 overflow-hidden rounded-lg border border-gray-200/90 px-3 py-2.5 dark:border-white/10">
+                    <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        {{ __('Collection Total') }}
+                    </p>
+                    <x-ff-stat-line
+                        :amount="$totals['collection'] ?? 0"
+                        :currency="$currency"
+                        class="mt-0.5 text-lg font-extrabold tabular-nums tracking-tight text-indigo-700 sm:text-xl dark:text-indigo-300"
+                    />
+                    <p class="mt-0.5 truncate text-[10px] text-gray-400 dark:text-gray-500">
+                        {{ __('Contributions + repayments') }}
+                    </p>
+                </div>
             </div>
 
             @if ($hasStatusChips)
@@ -161,9 +222,11 @@
                             </p>
                             <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
                                 {{ __('Outstanding') }}:
-                                <span class="font-semibold tabular-nums text-gray-900 dark:text-white">
-                                    {{ $loan['outstanding_formatted'] ?? '—' }}
-                                </span>
+                                <x-member::amount
+                                    :value="$loan['outstanding'] ?? 0"
+                                    :currency="$currency"
+                                    class="inline font-semibold text-gray-900 dark:text-white"
+                                />
                                 · {{ (int) ($loan['installments_paid'] ?? 0) }}/{{ (int) ($loan['installments_total'] ?? 0) }}
                                 ({{ (int) ($loan['repay_percent'] ?? 0) }}%)
                             </p>
@@ -240,10 +303,6 @@
                             @endif
                         </span>
                     @endforeach
-
-                    @if (($household['dependents_count'] ?? 0) > count($household['dependents'] ?? []))
-                        <span>{{ trans_choice('+ :count more dependent|+ :count more dependents', ($household['dependents_count'] ?? 0) - count($household['dependents'] ?? []), ['count' => ($household['dependents_count'] ?? 0) - count($household['dependents'] ?? [])]) }}</span>
-                    @endif
                 </div>
             </div>
         @endif

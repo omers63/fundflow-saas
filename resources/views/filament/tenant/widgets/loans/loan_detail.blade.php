@@ -34,16 +34,16 @@ $showDisburseProgress = (float) ($snapshot['approved'] ?? 0) > 0 || $isPreDisbur
                     @endif
                 </p>
             @elseif ($isPreDisburse && !$showRepayProgress)
-                <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Approved amount') }}</p>
-                <p class="mt-1 text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white sm:text-3xl">
-                    <x-member::amount :value="$snapshot['approved'] ?? $snapshot['requested'] ?? 0" :currency="$currency" />
-                </p>
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {{ __(':disbursed disbursed · :remaining remaining', [
-        'disbursed' => $snapshot['disbursed_formatted'] ?? '—',
-        'remaining' => $snapshot['remaining_formatted'] ?? '—',
-    ]) }}
-                </p>
+                            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Approved amount') }}</p>
+                            <p class="mt-1 text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white sm:text-3xl">
+                                <x-member::amount :value="$snapshot['approved'] ?? $snapshot['requested'] ?? 0" :currency="$currency" />
+                            </p>
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                {!! \App\Filament\Support\MoneyDisplay::markupForDisplay(__(':disbursed disbursed · :remaining remaining', [
+                    'disbursed' => $snapshot['disbursed_formatted'] ?? '—',
+                    'remaining' => $snapshot['remaining_formatted'] ?? '—',
+                ]), $currency) !!}
+                            </p>
             @else
                 <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('Outstanding balance') }}</p>
                 <p class="mt-1 text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white sm:text-3xl">
@@ -130,9 +130,9 @@ $showDisburseProgress = (float) ($snapshot['approved'] ?? 0) > 0 || $isPreDisbur
 
             @if ($d['guarantor'] ?? null)
                 @php
-                    $guarantorLabel = filled($d['guarantor']['member_number'] ?? null)
-                        ? $d['guarantor']['name'] . ' (' . $d['guarantor']['member_number'] . ')'
-                        : $d['guarantor']['name'];
+        $guarantorLabel = filled($d['guarantor']['member_number'] ?? null)
+            ? $d['guarantor']['name'] . ' (' . $d['guarantor']['member_number'] . ')'
+            : $d['guarantor']['name'];
                 @endphp
                 <span
                     class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-700 dark:border-white/10 dark:bg-gray-800/70 dark:text-gray-200">

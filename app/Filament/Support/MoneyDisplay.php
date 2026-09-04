@@ -41,15 +41,12 @@ final class MoneyDisplay
     }
 
     /**
-     * Symbol safe for plain text (no reliance on U+20C1 font coverage).
-     * When {@see usesSvgSymbol()} is true, HTML paths use SVG; plain text uses the SAR code.
+     * Symbol for plain text (titles, notifications, format strings).
+     * Uses the localized currency label — Arabic SAR resolves to the official riyal sign (U+20C1).
+     * Prefer {@see html()} / {@see symbolMarkup()} in HTML so Arabic can render the SVG glyph.
      */
     public static function plainTextSymbol(?string $currency = null): string
     {
-        if (self::usesSvgSymbol($currency)) {
-            return 'SAR';
-        }
-
         return self::symbol($currency);
     }
 

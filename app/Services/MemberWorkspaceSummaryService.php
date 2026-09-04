@@ -12,6 +12,7 @@ use App\Filament\Tenant\Resources\Members\RelationManagers\LoansRelationManager;
 use App\Filament\Tenant\Resources\Members\RelationManagers\MemberTransactionsTabsRelationManager;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
 use App\Support\Insights\InsightFormatter;
@@ -60,10 +61,8 @@ final class MemberWorkspaceSummaryService
         $member->unsetRelation('fundAccount');
         $member->load(['cashAccount', 'fundAccount', 'parent', 'user']);
 
-        $dependentsCount = $member->dependents()->count();
-        $dependents = $dependentsCount > 0
-            ? $member->dependents()->orderBy('name')->limit(3)->get()
-            : collect();
+        $dependents = $member->dependents()->orderBy('name')->get();
+        $dependentsCount = $dependents->count();
 
         $cycles = app(ContributionCycleService::class);
         $delinquency = app(LoanDelinquencyService::class);
@@ -91,6 +90,24 @@ final class MemberWorkspaceSummaryService
 
         $postedCount = (int) ($lifetimePosted->posted_count ?? 0);
         $postedTotal = (float) ($lifetimePosted->posted_total ?? 0);
+
+        // Same definitions as MemberPortalInsightsService (total loans / value / repayments / collection).
+        $loanPortfolio = Loan::query()
+            ->where('member_id', $member->id)
+            ->toBase()
+            ->selectRaw('count(*) as loans_count')
+            ->selectRaw('coalesce(sum(coalesce(amount_approved, amount_requested, amount, 0)), 0) as loans_value')
+            ->first();
+
+        $loansCount = (int) ($loanPortfolio->loans_count ?? 0);
+        $loansValue = (float) ($loanPortfolio->loans_value ?? 0);
+        $repaymentsTotal = (float) LoanRepayment::query()
+            ->whereIn(
+                'loan_id',
+                Loan::query()->where('member_id', $member->id)->select('id'),
+            )
+            ->sum('amount');
+        $collectionTotal = $postedTotal + $repaymentsTotal;
 
         $activeLoan = Loan::query()
             ->where('member_id', $member->id)
@@ -132,8 +149,6 @@ final class MemberWorkspaceSummaryService
         $cashAccount = $member->cashAccount;
         $fundAccount = $member->fundAccount;
 
-        $dependents = $dependents->values();
-
         $statusKey = (string) $member->status;
         $statusLabel = Member::statusOptions()[$statusKey] ?? ucfirst($statusKey);
 
@@ -167,6 +182,15 @@ final class MemberWorkspaceSummaryService
                     ])
                     : __('No posted contributions yet'),
             ],
+            'totals' => [
+                'loans_count' => $loansCount,
+                'loans_value' => $loansValue,
+                'loans_value_formatted' => InsightFormatter::money($loansValue),
+                'repayments' => $repaymentsTotal,
+                'repayments_formatted' => InsightFormatter::money($repaymentsTotal),
+                'collection' => $collectionTotal,
+                'collection_formatted' => InsightFormatter::money($collectionTotal),
+            ],
             'cycle' => [
                 'period_label' => $periodLabel,
                 'label' => $cycle['label'],
@@ -198,7 +222,6 @@ final class MemberWorkspaceSummaryService
                     ? MemberResource::getUrl('view', ['record' => $member->parent])
                     : null,
                 'dependents' => $dependents
-                    ->take(3)
                     ->map(fn (Member $dependent): array => [
                         'name' => $dependent->name,
                         'url' => MemberResource::getUrl('view', ['record' => $dependent]),

@@ -9,12 +9,13 @@ Members use a **view/edit split**: `ViewMember` is the operator workspace; `Edit
 The dashboard renders in a single Livewire request (cached 30s).
 
 1. **Header** — Overview title, member number, status badge
-2. **KPI cards** — Cash, Fund, Monthly, Lifetime posted contributions
-3. **Open-cycle chip** — Posted / Ready / Need cash / Exempt / Loan EMI
-4. **Arrears chip** — When cheap signals detect overdue installments or prior-period contribution gaps (no full delinquency evaluator on load)
-5. **Active loan card** — Outstanding, installment progress bar, link to Loans tab
-6. **Quick links** — Ledger, Contributions, Loans
-7. **Household strip** — Parent link and dependents when applicable
+2. **KPI cards** — Cash, Fund, Monthly, Lifetime posted contributions  
+3. **Portfolio totals** — Total loans, Total loans value, Loan Repayments Total, Collection Total (posted contributions + repayments)  
+4. **Open-cycle chip** — Posted / Ready / Need cash / Exempt / Loan EMI  
+5. **Arrears chip** — When cheap signals detect overdue installments or prior-period contribution gaps (no full delinquency evaluator on load)  
+6. **Active loan card** — Outstanding, installment progress bar, link to Loans tab  
+7. **Quick links** — Ledger, Contributions, Loans  
+8. **Household strip** — Parent link and dependents when applicable 
 
 ## Header actions (view page)
 

@@ -15,6 +15,7 @@ use App\Filament\Tenant\Resources\Members\RelationManagers\MessagesRelationManag
 use App\Filament\Tenant\Resources\Members\RelationManagers\RepaymentsRelationManager;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\User;
 use App\Services\AccountingService;
 use App\Services\MemberWorkspaceSummaryService;
@@ -73,12 +74,61 @@ test('view member workspace shows inline summary and grouped header actions', fu
         ->assertDontSee('ff-app-insights-kpi-strip', false)
         ->assertSee(__('Overview'))
         ->assertSee(__('Lifetime contributions'))
+        ->assertSee(__('Total loans'))
+        ->assertSee(__('Collection Total'))
         ->assertSee(__('Quick links'))
         ->assertSee(__('Contribute'))
         ->assertSee(__('Treasury'))
         ->assertSee(__('Edit profile'))
         ->assertSee(__('Loans'))
         ->assertSee(__('Messages'));
+});
+
+test('view member workspace summary uses arabic riyal svg instead of SAR code', function () {
+    $admin = User::create([
+        'name' => 'Arabic Money Admin',
+        'email' => 'admin-ar-money@test.com',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+        'preferred_locale' => 'ar',
+    ]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-AR-MONEY',
+        'name' => 'Arabic Money Member',
+        'email' => 'ar-money@fund.test',
+        'monthly_contribution_amount' => 750,
+        'joined_at' => now()->subMonths(3),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+    $member->cashAccount?->update(['balance' => 1250]);
+    Setting::set('general', 'currency', 'SAR');
+
+    app()->setLocale('ar');
+    session()->put('locale', 'ar');
+    Filament::setCurrentPanel('tenant');
+
+    MemberWorkspaceSummaryService::forgetCached((int) $member->id);
+
+    $html = Livewire::actingAs($admin, 'tenant')
+        ->test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->assertSuccessful()
+        ->assertSee('ff-member-workspace-summary', false)
+        ->html();
+
+    expect($html)->toContain('ff-member-workspace-summary')
+        ->toContain('ff-sar-symbol__img')
+        ->and(substr_count($html, 'ff-sar-symbol__img'))->toBeGreaterThanOrEqual(4);
+
+    preg_match('/ff-member-workspace-summary[\s\S]*?<\/section>/', $html, $matches);
+    $summaryHtml = $matches[0] ?? '';
+
+    expect($summaryHtml)->not->toBeEmpty()
+        ->and($summaryHtml)->toContain('ff-sar-symbol__img')
+        ->and($summaryHtml)->not->toMatch('/(?<!ff-)SAR /');
 });
 
 test('view member places allocate as the first treasury header action', function () {
@@ -426,6 +476,7 @@ test('edit member profile page focuses on form fields and links back to workspac
         ->assertSee(__('Membership'))
         ->assertSee('ff-member-workspace-summary', false)
         ->assertSee(__('Overview'))
+        ->assertSee(__('Total loans'))
         ->assertDontSee(__('Treasury'))
         ->assertActionExists('backToWorkspace');
 });
