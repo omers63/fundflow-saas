@@ -4,6 +4,8 @@ Last updated after **full specification completion pass** (workflow docs + `prom
 
 **Related docs**
 
+- [loan-calculator-simulator-production-alignment-plan.md](./loan-calculator-simulator-production-alignment-plan.md) — close gaps between calculator/simulator (golden) and live loan posting
+- [loan-lifecycle-simulator-intent-vs-live.md](./loan-lifecycle-simulator-intent-vs-live.md) — simulator intent vs current production
 - [loan-delinquency-workflow.md](./loan-delinquency-workflow.md) — delinquency, late fees, guarantor liability, scheduled jobs
 - [production-runbook.md](./production-runbook.md) — deploy, cron, migration onboarding paths
 - [prompts.txt](./prompts.txt) — product backlog source of truth
