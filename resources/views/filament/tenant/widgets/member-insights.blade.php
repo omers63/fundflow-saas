@@ -106,7 +106,79 @@ $links = array_values(array_filter([
         'label' => __('Inactive'),
         'url' => $pipeline['members_inactive_url'] ?? MemberResource::listTabUrl('inactive'),
     ],
+    [
+        'label' => __('Cash accounts'),
+        'url' => $pipeline['cash_accounts_url'] ?? null,
+    ],
+    [
+        'label' => __('Loans'),
+        'url' => $pipeline['loans_url'] ?? null,
+    ],
 ]));
+
+$balanceItems = [
+    [
+        'label' => __('Cash'),
+        'amount' => (float) ($d['balances']['cash']['amount'] ?? 0),
+        'currency' => $currency,
+        'url' => $d['balances']['cash']['url'] ?? $pipeline['cash_accounts_url'] ?? null,
+        'value_class' => ($d['balances']['cash']['negative'] ?? false)
+            ? 'text-lg font-extrabold tabular-nums tracking-tight text-rose-600 sm:text-xl dark:text-rose-400'
+            : 'text-lg font-extrabold tabular-nums tracking-tight text-emerald-600 sm:text-xl dark:text-emerald-400',
+    ],
+    [
+        'label' => __('Fund'),
+        'amount' => (float) ($d['balances']['fund']['amount'] ?? 0),
+        'currency' => $currency,
+        'url' => $d['balances']['fund']['url'] ?? $pipeline['fund_accounts_url'] ?? null,
+        'value_class' => ($d['balances']['fund']['negative'] ?? false)
+            ? 'text-lg font-extrabold tabular-nums tracking-tight text-rose-600 sm:text-xl dark:text-rose-400'
+            : 'text-lg font-extrabold tabular-nums tracking-tight text-indigo-600 sm:text-xl dark:text-indigo-400',
+    ],
+    [
+        'label' => __('Monthly'),
+        'amount' => (float) ($d['monthly_total'] ?? 0),
+        'currency' => $currency,
+        'value_class' => 'text-lg font-extrabold tabular-nums tracking-tight text-gray-900 sm:text-xl dark:text-white',
+    ],
+    [
+        'label' => __('Lifetime contributions'),
+        'amount' => (float) ($d['contributions']['posted_total'] ?? 0),
+        'currency' => $currency,
+        'url' => $d['contributions']['url'] ?? $pipeline['contributions_ledger_url'] ?? null,
+        'hint' => $d['contributions']['hint'] ?? null,
+        'value_class' => 'text-lg font-extrabold tabular-nums tracking-tight text-sky-700 sm:text-xl dark:text-sky-300',
+    ],
+];
+
+$portfolioItems = [
+    [
+        'label' => __('Total loans'),
+        'value' => number_format((int) ($d['totals']['loans_count'] ?? 0)),
+        'url' => $d['totals']['loans_url'] ?? $pipeline['loans_url'] ?? null,
+    ],
+    [
+        'label' => __('Total loans value'),
+        'amount' => (float) ($d['totals']['loans_value'] ?? 0),
+        'currency' => $currency,
+        'url' => $d['totals']['loans_url'] ?? $pipeline['loans_url'] ?? null,
+        'value_class' => 'text-lg font-extrabold tabular-nums tracking-tight text-violet-700 sm:text-xl dark:text-violet-300',
+    ],
+    [
+        'label' => __('Loan Repayments Total'),
+        'amount' => (float) ($d['totals']['repayments'] ?? 0),
+        'currency' => $currency,
+        'url' => $d['totals']['loans_url'] ?? $pipeline['loans_url'] ?? null,
+        'value_class' => 'text-lg font-extrabold tabular-nums tracking-tight text-emerald-700 sm:text-xl dark:text-emerald-300',
+    ],
+    [
+        'label' => __('Collection Total'),
+        'amount' => (float) ($d['totals']['collection'] ?? 0),
+        'currency' => $currency,
+        'hint' => __('Contributions + repayments'),
+        'value_class' => 'text-lg font-extrabold tabular-nums tracking-tight text-indigo-700 sm:text-xl dark:text-indigo-300',
+    ],
+];
 @endphp
 
 @component('filament.tenant.partials.ops-overview.shell', [
@@ -115,6 +187,10 @@ $links = array_values(array_filter([
     'wrapperClass' => 'ff-members-list-insights',
 ])
     @include('filament.tenant.widgets.partials.insights-hero', ['hero' => $hero, 'compact' => true])
+
+    @include('filament.tenant.partials.ops-overview.kpi-grid', ['items' => $balanceItems])
+
+    @include('filament.tenant.partials.ops-overview.kpi-grid', ['items' => $portfolioItems])
 
     @include('filament.tenant.partials.ops-overview.kpi-grid', ['items' => $kpiItems])
 

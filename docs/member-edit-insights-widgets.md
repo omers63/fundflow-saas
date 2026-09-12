@@ -48,7 +48,9 @@ The **Accounts** tab was removed; cash/fund cards link to account views instead.
 | Tab badge suppression | `app/Filament/Tenant/Resources/Members/Concerns/SuppressesMemberWorkspaceTabBadges.php` |
 | Delinquency header actions | `app/Filament/Support/MemberDelinquencyActions.php` |
 | Contribution header actions | `app/Filament/Tenant/Resources/Members/Concerns/InteractsWithMemberContributionHeaderActions.php` |
-| List-page insights (unchanged) | `app/Services/MemberInsightsService.php`, `MemberInsightsWidget` |
+- List-page insights (unchanged) | `app/Services/MemberInsightsService.php`, `MemberInsightsWidget`
++ List-page insights (roster + cumulative portfolio) | `app/Services/MemberInsightsService.php`, `MemberInsightsWidget` — Cash/Fund/Monthly/Lifetime contributions and loan portfolio totals across all members, same definitions as this workspace summary
+
 
 ## Refresh behavior
 

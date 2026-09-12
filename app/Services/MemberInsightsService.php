@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Filament\Tenant\Resources\Accounts\AccountResource;
 use App\Filament\Tenant\Resources\Contributions\ContributionResource;
+use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\MembershipApplications\MembershipApplicationResource;
+use App\Models\Tenant\Account;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
 use App\Services\Loans\LoanDelinquencyService;
@@ -15,6 +20,7 @@ use App\Services\Tenant\MemberListTabService;
 use App\Support\BusinessDay;
 use App\Support\CollectionInsightsCache;
 use App\Support\Insights\DualProgressTrendBuilder;
+use App\Support\Insights\InsightFormatter;
 
 final class MemberInsightsService
 {
@@ -25,7 +31,7 @@ final class MemberInsightsService
     {
         return CollectionInsightsCache::remember(
             CollectionInsightsCache::DOMAIN_MEMBERS,
-            'roster',
+            'roster.v2',
             fn (): array => $this->computeSnapshot(),
         );
     }
@@ -69,6 +75,7 @@ final class MemberInsightsService
             ->value('aggregate');
 
         $avgContribution = (float) (Member::query()->active()->avg('monthly_contribution_amount') ?? 0);
+        $monthlyTotal = (float) (Member::query()->active()->sum('monthly_contribution_amount') ?? 0);
 
         $zeroCashMembers = Member::query()->activeWithZeroCash()->count();
 
@@ -123,6 +130,12 @@ final class MemberInsightsService
             ->all();
 
         $currency = Setting::get('general', 'currency', 'USD');
+        $portfolio = $this->portfolioTotals();
+
+        $cashAccountsUrl = AccountResource::getUrl('index', ['tab' => 'cash']);
+        $fundAccountsUrl = AccountResource::getUrl('index', ['tab' => 'fund']);
+        $contributionsUrl = ContributionResource::listUrl('ledger');
+        $loansUrl = LoanResource::listUrl('portfolio');
 
         return [
             'total' => $total,
@@ -138,11 +151,42 @@ final class MemberInsightsService
             'dependents' => $dependents,
             'with_active_loans' => $withActiveLoans,
             'avg_contribution' => $avgContribution,
+            'monthly_total' => $monthlyTotal,
             'zero_cash_members' => $zeroCashMembers,
             'status_breakdown' => $statusBreakdown,
             'attention_queue' => $attentionQueue,
             'trend' => $this->sixMonthJoinTrend(),
             'sparkline' => $this->weeklyJoinSparkline(),
+            'balances' => [
+                'cash' => [
+                    'amount' => $portfolio['cash_total'],
+                    'negative' => $portfolio['cash_total'] < 0,
+                    'url' => $cashAccountsUrl,
+                ],
+                'fund' => [
+                    'amount' => $portfolio['fund_total'],
+                    'negative' => $portfolio['fund_total'] < 0,
+                    'url' => $fundAccountsUrl,
+                ],
+            ],
+            'contributions' => [
+                'posted_count' => $portfolio['posted_count'],
+                'posted_total' => $portfolio['posted_total'],
+                'hint' => $portfolio['posted_count'] > 0
+                    ? __(':count posted · :amount', [
+                        'count' => number_format($portfolio['posted_count']),
+                        'amount' => InsightFormatter::money($portfolio['posted_total']),
+                    ])
+                    : __('No posted contributions yet'),
+                'url' => $contributionsUrl,
+            ],
+            'totals' => [
+                'loans_count' => $portfolio['loans_count'],
+                'loans_value' => $portfolio['loans_value'],
+                'repayments' => $portfolio['repayments'],
+                'collection' => $portfolio['collection'],
+                'loans_url' => $loansUrl,
+            ],
             'fund' => [
                 'currency' => $currency,
                 'avg_contribution' => $avgContribution,
@@ -163,8 +207,69 @@ final class MemberInsightsService
                 'applications_pending_url' => MembershipApplicationResource::listTabUrl('pending'),
                 'applications_approved_url' => MembershipApplicationResource::listTabUrl('approved'),
                 'contributions_url' => ContributionResource::listUrl('contributions', ['status' => ['value' => 'pending']]),
+                'contributions_ledger_url' => $contributionsUrl,
+                'cash_accounts_url' => $cashAccountsUrl,
+                'fund_accounts_url' => $fundAccountsUrl,
+                'loans_url' => $loansUrl,
                 'delinquency_url' => MemberResource::listTabUrl('delinquent'),
             ],
+        ];
+    }
+
+    /**
+     * Cumulative pool / portfolio figures aligned with {@see MemberWorkspaceSummaryService}.
+     *
+     * @return array{
+     *     cash_total: float,
+     *     fund_total: float,
+     *     posted_count: int,
+     *     posted_total: float,
+     *     loans_count: int,
+     *     loans_value: float,
+     *     repayments: float,
+     *     collection: float
+     * }
+     */
+    private function portfolioTotals(): array
+    {
+        $cashTotal = (float) Account::query()
+            ->memberAccounts()
+            ->where('type', 'cash')
+            ->sum('balance');
+
+        $fundTotal = (float) Account::query()
+            ->memberAccounts()
+            ->where('type', 'fund')
+            ->sum('balance');
+
+        $lifetimePosted = Contribution::query()
+            ->posted()
+            ->toBase()
+            ->selectRaw('count(*) as posted_count, coalesce(sum(amount), 0) as posted_total')
+            ->first();
+
+        $postedCount = (int) ($lifetimePosted->posted_count ?? 0);
+        $postedTotal = (float) ($lifetimePosted->posted_total ?? 0);
+
+        $loanPortfolio = Loan::query()
+            ->toBase()
+            ->selectRaw('count(*) as loans_count')
+            ->selectRaw('coalesce(sum(coalesce(amount_approved, amount_requested, amount, 0)), 0) as loans_value')
+            ->first();
+
+        $loansCount = (int) ($loanPortfolio->loans_count ?? 0);
+        $loansValue = (float) ($loanPortfolio->loans_value ?? 0);
+        $repaymentsTotal = (float) LoanRepayment::query()->sum('amount');
+
+        return [
+            'cash_total' => $cashTotal,
+            'fund_total' => $fundTotal,
+            'posted_count' => $postedCount,
+            'posted_total' => $postedTotal,
+            'loans_count' => $loansCount,
+            'loans_value' => $loansValue,
+            'repayments' => $repaymentsTotal,
+            'collection' => $postedTotal + $repaymentsTotal,
         ];
     }
 

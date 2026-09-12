@@ -54,7 +54,11 @@ test('member insights overview uses ops overview chrome', function () {
         ->html();
 
     expect($html)->toContain('ff-ops-overview')
-        ->toContain(__('Overview'));
+        ->toContain(__('Overview'))
+        ->toContain(__('Cash'))
+        ->toContain(__('Fund'))
+        ->toContain(__('Lifetime contributions'))
+        ->toContain(__('Collection Total'));
 });
 
 test('member insights overview money cells use arabic riyal svg when currency is sar', function () {
@@ -74,7 +78,9 @@ test('member insights overview money cells use arabic riyal svg when currency is
         ->html();
 
     expect($html)->toContain('ff-ops-overview')
-        ->toContain('ff-sar-symbol__img');
+        ->toContain('ff-sar-symbol__img')
+        ->toContain(__('Cash'))
+        ->toContain(__('Lifetime contributions'));
 });
 
 test('fund outs list mounts ops overview widget with money markup', function () {

@@ -1,8 +1,10 @@
 <?php
 
 use App\Models\Tenant\Account;
+use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\LoanRepayment;
 use App\Models\Tenant\Member;
 use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
@@ -185,4 +187,91 @@ test('insights migration pending matches roster tab counts', function () {
         ->and($snapshot['migration_pending'])->toBeGreaterThan(0)
         ->and($snapshot['total'])->toBe($tabs['all'])
         ->and($snapshot['active'])->toBe($tabs['active']);
+});
+
+test('insights snapshot includes cumulative balances and portfolio totals', function () {
+    $accounting = app(AccountingService::class);
+
+    $one = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+    ]);
+    $two = Member::factory()->create([
+        'status' => 'active',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+    ]);
+    $inactive = Member::factory()->create([
+        'status' => 'inactive',
+        'monthly_contribution_amount' => 2000,
+        'joined_at' => now()->subYear(),
+    ]);
+
+    $accounting->createMemberAccounts($one);
+    $accounting->createMemberAccounts($two);
+    $accounting->createMemberAccounts($inactive);
+    $one->cashAccount?->update(['balance' => 1500]);
+    $one->fundAccount?->update(['balance' => 2500]);
+    $two->cashAccount?->update(['balance' => 500]);
+    $two->fundAccount?->update(['balance' => 1000]);
+    $inactive->cashAccount?->update(['balance' => 100]);
+
+    Contribution::query()->create([
+        'member_id' => $one->id,
+        'period' => Contribution::periodDate(1, (int) now()->year),
+        'amount' => 1000,
+        'status' => 'posted',
+        'posted_at' => now()->subMonths(2),
+    ]);
+    Contribution::query()->create([
+        'member_id' => $two->id,
+        'period' => Contribution::periodDate(2, (int) now()->year),
+        'amount' => 500,
+        'status' => 'posted',
+        'posted_at' => now()->subMonth(),
+    ]);
+    Contribution::query()->create([
+        'member_id' => $one->id,
+        'period' => Contribution::periodDate(3, (int) now()->year),
+        'amount' => 1000,
+        'status' => 'pending',
+        'posted_at' => null,
+    ]);
+
+    $loan = Loan::factory()->for($one)->create([
+        'status' => 'active',
+        'amount_requested' => 10_000,
+        'amount_approved' => 12_000,
+        'amount_disbursed' => 12_000,
+        'disbursed_at' => now()->subMonths(2),
+    ]);
+
+    LoanRepayment::query()->create([
+        'loan_id' => $loan->id,
+        'amount' => 1500,
+        'paid_at' => now()->subMonth(),
+    ]);
+    LoanRepayment::query()->create([
+        'loan_id' => $loan->id,
+        'amount' => 500,
+        'paid_at' => now()->subDays(10),
+    ]);
+
+    CollectionInsightsCache::bump(CollectionInsightsCache::DOMAIN_MEMBERS);
+
+    $snapshot = app(MemberInsightsService::class)->snapshot();
+
+    expect($snapshot)->toHaveKeys(['balances', 'contributions', 'totals', 'monthly_total'])
+        ->and($snapshot['balances']['cash']['amount'])->toBe(2100.0)
+        ->and($snapshot['balances']['fund']['amount'])->toBe(3500.0)
+        ->and($snapshot['monthly_total'])->toBe(1500.0)
+        ->and($snapshot['contributions']['posted_count'])->toBe(2)
+        ->and($snapshot['contributions']['posted_total'])->toBe(1500.0)
+        ->and($snapshot['totals']['loans_count'])->toBe(1)
+        ->and($snapshot['totals']['loans_value'])->toBe(12_000.0)
+        ->and($snapshot['totals']['repayments'])->toBe(2000.0)
+        ->and($snapshot['totals']['collection'])->toBe(3500.0)
+        ->and($snapshot['balances']['cash']['url'])->toBeString()->not->toBeEmpty()
+        ->and($snapshot['totals']['loans_url'])->toBeString()->not->toBeEmpty();
 });
