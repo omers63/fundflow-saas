@@ -23,6 +23,8 @@
 /vendor
 /lang/vendor/filament/
 /lang/vendor/filament-panels/
+/tmp
+/graphify-out
 Homestead.json
 Homestead.yaml
 Thumbs.db
