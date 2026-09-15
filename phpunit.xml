@@ -36,5 +36,8 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!-- Never use the live central DB for RefreshDatabase / migrate:fresh -->
+        <env name="DB_DATABASE" value="fundflow_testing"/>
+        <env name="SCHEDULE_TENANT_IDS" value=""/>
     </php>
 </phpunit>
