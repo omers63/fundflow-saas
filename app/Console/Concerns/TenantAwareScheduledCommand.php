@@ -36,13 +36,13 @@ trait TenantAwareScheduledCommand
     {
         $explicit = $this->option('tenants');
         $explicit = is_array($explicit)
-            ? array_values(array_filter(array_map('strval', $explicit), static fn(string $id): bool => $id !== ''))
+            ? array_values(array_filter(array_map('strval', $explicit), static fn (string $id): bool => $id !== ''))
             : [];
 
         $fromEnv = array_values(array_filter(array_map(
-            static fn(string $id): string => trim($id),
+            static fn (string $id): string => trim($id),
             explode(',', (string) env('SCHEDULE_TENANT_IDS', '')),
-        ), static fn(string $id): bool => $id !== ''));
+        ), static fn (string $id): bool => $id !== ''));
 
         $ids = $explicit !== [] ? $explicit : $fromEnv;
 
