@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\PaymentGatewayAdapter;
+use App\Contracts\ReceiptOcrDriver;
 use App\Events\DatabaseNotificationsSentNow;
 use App\Filament\Infolists\Components\TextEntry as AppTextEntry;
 use App\Filament\Support\Action as AppAction;
@@ -31,9 +33,14 @@ use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Transaction;
 use App\Observers\LoanInstallmentObserver;
 use App\Observers\TransactionObserver;
+use App\Services\Gateway\GatewayAdapterResolver;
+use App\Services\Ocr\CloudReceiptOcrDriver;
+use App\Services\Ocr\FakeReceiptOcrDriver;
 use App\Session\WallClockDatabaseSessionHandler;
 use App\Support\ArabicDisplaySettings;
 use App\Support\ArabicTypography;
+use App\Support\DepositOcrSettings;
+use App\Support\DisbursementBatchPermissions;
 use Filament\Actions\Action as FilamentAction;
 use Filament\Actions\ViewAction;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse;
@@ -70,6 +77,7 @@ use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Session\SessionManager;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -87,6 +95,19 @@ class AppServiceProvider extends ServiceProvider
             LogoutResponse::class,
             FilamentLogoutResponse::class,
         );
+
+        $this->app->bind(PaymentGatewayAdapter::class, function ($app): PaymentGatewayAdapter {
+            return $app->make(GatewayAdapterResolver::class)->driver();
+        });
+
+        $this->app->bind(ReceiptOcrDriver::class, function (): ReceiptOcrDriver {
+            $driver = DepositOcrSettings::driver();
+
+            return match ($driver) {
+                'cloud' => $this->app->make(CloudReceiptOcrDriver::class),
+                default => $this->app->make(FakeReceiptOcrDriver::class),
+            };
+        });
 
         $this->app->afterResolving('session', function (SessionManager $manager): void {
             $manager->extend('database', function (): WallClockDatabaseSessionHandler {
@@ -130,6 +151,10 @@ class AppServiceProvider extends ServiceProvider
                 DatabaseNotificationsSentNow::dispatch($notifiable);
             }
         });
+
+        Gate::define(DisbursementBatchPermissions::VIEW, fn($user): bool => (bool) ($user->is_admin ?? false));
+        Gate::define(DisbursementBatchPermissions::CREATE, fn($user): bool => (bool) ($user->is_admin ?? false));
+        Gate::define(DisbursementBatchPermissions::APPROVE, fn($user): bool => (bool) ($user->is_admin ?? false));
 
         // ApplyMemberNotificationLocaleListener, LogNotificationDeliveryListener, and
         // LogWebPushDeliveryListener are auto-discovered from app/Listeners — do not

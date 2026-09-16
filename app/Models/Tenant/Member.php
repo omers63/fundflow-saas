@@ -191,6 +191,11 @@ class Member extends Model
         return $this->hasMany(Loan::class);
     }
 
+    public function savingsGoals(): HasMany
+    {
+        return $this->hasMany(MemberSavingsGoal::class);
+    }
+
     public function guaranteedLoans(): HasMany
     {
         return $this->hasMany(Loan::class, 'guarantor_member_id');

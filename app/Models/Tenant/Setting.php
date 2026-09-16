@@ -2,6 +2,7 @@
 
 namespace App\Models\Tenant;
 
+use App\Services\Governance\MotionEnforcementGate;
 use App\Support\LoanSettings;
 use Illuminate\Database\Eloquent\Model;
 
@@ -20,8 +21,10 @@ class Setting extends Model
             ->value('value') ?? $default;
     }
 
-    public static function set(string $group, string $key, mixed $value): void
+    public static function set(string $group, string $key, mixed $value, ?int $approvedMotionId = null): void
     {
+        app(MotionEnforcementGate::class)->assertSettingChangeAllowed($group, $key, $approvedMotionId);
+
         static::updateOrCreate(
             ['group' => $group, 'key' => $key],
             ['value' => $value],

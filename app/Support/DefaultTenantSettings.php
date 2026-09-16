@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support;
 
 use App\Models\Tenant\Setting;
+use App\Support\Security\SecuritySettings;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -167,6 +168,7 @@ final class DefaultTenantSettings
         self::seedMissingGroupKeys(ReconciliationDigestSettings::GROUP, ReconciliationDigestSettings::defaults());
         self::seedMissingGroupKeys(FiscalSettings::GROUP, FiscalSettings::defaults());
         self::seedMissingGroupKeys(ArabicDisplaySettings::GROUP, ArabicDisplaySettings::defaults());
+        self::seedMissingGroupKeys(SecuritySettings::GROUP, SecuritySettings::defaults());
 
         self::seedMissingGroupKeys(ContributionPolicySettings::GROUP_DELINQUENCY, ContributionPolicySettings::delinquencyDefaults());
         self::seedMissingGroupKeys(ContributionPolicySettings::GROUP_COLLECTION, ContributionPolicySettings::collectionDefaults());

@@ -13,6 +13,7 @@ use App\Models\Tenant\SmsTransaction;
 use App\Models\Tenant\Transaction;
 use App\Notifications\Tenant\AccountTransactionReversedNotification;
 use App\Services\FiscalClose\FiscalClosePeriodResolver;
+use App\Support\Billing\TenantBillingStatus;
 use App\Support\BusinessDay;
 use App\Support\ContributionPolicySettings;
 use App\Support\MemberLedgerDescriptionTranslator;
@@ -1399,6 +1400,8 @@ class AccountingService
         ?DateTimeInterface $transactedAt = null,
         ?int $memberId = null,
     ): Transaction {
+        $this->assertBillingAllowsMoneyMutation();
+
         if ($amount <= 0.00001) {
             throw new InvalidArgumentException(__('Amount must be greater than zero.'));
         }
@@ -1448,6 +1451,8 @@ class AccountingService
         ?DateTimeInterface $transactedAt = null,
         ?int $memberId = null,
     ): Transaction {
+        $this->assertBillingAllowsMoneyMutation();
+
         if ($amount <= 0.00001) {
             throw new InvalidArgumentException(__('Amount must be greater than zero.'));
         }
@@ -1497,6 +1502,8 @@ class AccountingService
         ?DateTimeInterface $transactedAt = null,
         ?int $memberId = null,
     ): Transaction {
+        $this->assertBillingAllowsMoneyMutation();
+
         if ($amount <= 0.00001) {
             throw new InvalidArgumentException(__('Amount must be greater than zero.'));
         }
@@ -1546,6 +1553,8 @@ class AccountingService
         ?DateTimeInterface $transactedAt = null,
         ?int $memberId = null,
     ): Transaction {
+        $this->assertBillingAllowsMoneyMutation();
+
         if ($amount <= 0.00001) {
             throw new InvalidArgumentException(__('Amount must be greater than zero.'));
         }
@@ -1586,6 +1595,11 @@ class AccountingService
      * Fund deposit accept tags only the member leg with {@see FundPosting}; the pool mirror must not
      * share that reference or paired-journal validation sees two credits and no debits.
      */
+    private function assertBillingAllowsMoneyMutation(): void
+    {
+        app(TenantBillingStatus::class)->assertCanMutateMoney();
+    }
+
     private function masterPoolMirrorReference(?Model $memberLegReference): ?Model
     {
         if ($memberLegReference instanceof FundPosting) {

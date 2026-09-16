@@ -13,6 +13,7 @@ use App\Filament\Support\TableToolbar;
 use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Models\Tenant\Member;
 use App\Models\Tenant\Setting;
+use App\Services\Risk\MlRiskScoreService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Tables\Columns\TextColumn;
@@ -62,6 +63,22 @@ class MembersTable
                     ->color(fn (int $state): string => $state > 0 ? 'info' : 'gray')
                     ->searchable(false)
                     ->sortable(),
+                TextColumn::make('risk_score')
+                    ->label(__('Risk'))
+                    ->state(function (Member $record): string {
+                        $score = app(MlRiskScoreService::class)->score($record);
+
+                        return $score['score'] . ' · ' . __($score['band']);
+                    })
+                    ->badge()
+                    ->color(function (Member $record): string {
+                        $score = app(MlRiskScoreService::class)->score($record);
+
+                        return app(MlRiskScoreService::class)->bandColor($score['band']);
+                    })
+                    ->toggleable()
+                    ->searchable(false)
+                    ->sortable(false),
                 TextColumn::make('email')
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -98,6 +115,31 @@ class MembersTable
                             'loan_repayment' => $query->withActiveLoanRepaymentObligation(),
                             default => $query,
                         };
+                    }),
+                SelectFilter::make('risk_band')
+                    ->label(__('Risk band'))
+                    ->options([
+                        'low' => __('low'),
+                        'medium' => __('medium'),
+                        'high' => __('high'),
+                        'critical' => __('critical'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        $band = $data['value'] ?? null;
+
+                        if (!is_string($band) || $band === '') {
+                            return $query;
+                        }
+
+                        $risk = app(MlRiskScoreService::class);
+                        $ids = Member::query()
+                            ->where('status', 'active')
+                            ->pluck('id')
+                            ->filter(fn($id): bool => $risk->score(Member::query()->findOrFail($id))['band'] === $band)
+                            ->values()
+                            ->all();
+
+                        return $query->whereIn('id', $ids);
                     }),
                 SelectFilter::make('parent_member_id')
                     ->label(__('Parent'))

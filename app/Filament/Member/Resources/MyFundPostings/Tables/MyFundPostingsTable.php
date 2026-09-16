@@ -2,6 +2,7 @@
 
 namespace App\Filament\Member\Resources\MyFundPostings\Tables;
 
+use App\Filament\Member\Support\MemberGatewayPayFilamentActions;
 use App\Filament\Member\Support\MemberPendingRequestFilamentActions;
 use App\Filament\Support\DateColumnRangeFilter;
 use App\Filament\Support\TableGrouping;
@@ -54,7 +55,7 @@ class MyFundPostingsTable
                         MemberPendingRequestFilamentActions::cancelSelectedDeposits(),
                         TableToolbar::refreshBulkAction(),
                     ])),
-                [ViewFundPostingAction::makeForMemberPortal(), MemberPendingRequestFilamentActions::cancelDeposit()],
+                [ViewFundPostingAction::makeForMemberPortal(), MemberGatewayPayFilamentActions::payPendingDeposit(), MemberPendingRequestFilamentActions::cancelDeposit()],
             ),
             TableGrouping::fundPostings(includeMember: false),
         );

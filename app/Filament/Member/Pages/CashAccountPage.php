@@ -6,6 +6,7 @@ namespace App\Filament\Member\Pages;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Resources\MyFundPostings\Schemas\MyFundPostingForm;
+use App\Filament\Member\Support\MemberGatewayPayFilamentActions;
 use App\Filament\Member\Support\MemberNavigation;
 use App\Filament\Member\Support\MemberWithdrawalFilamentActions;
 use App\Filament\Pages\Page;
@@ -132,6 +133,10 @@ class CashAccountPage extends Page implements HasForms
      */
     protected function getHeaderActions(): array
     {
-        return MemberWithdrawalFilamentActions::headerActions();
+        return [
+            MemberGatewayPayFilamentActions::payContribution(),
+            MemberGatewayPayFilamentActions::payFeeArrears(),
+            ...MemberWithdrawalFilamentActions::headerActions(),
+        ];
     }
 }

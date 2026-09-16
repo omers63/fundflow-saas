@@ -6,6 +6,7 @@ namespace App\Services\FiscalClose;
 
 use App\Models\Tenant\FiscalClose;
 use App\Models\Tenant\User;
+use App\Services\ProfitDistribution\ProfitDistributionService;
 use App\Support\BusinessDay;
 use App\Support\FiscalSettings;
 use Carbon\Carbon;
@@ -21,6 +22,7 @@ class FiscalCloseService
         protected FiscalCloseRollForwardService $rollForward,
         protected FiscalClosePurgeService $purge,
         protected FiscalCloseExportService $exports,
+        protected ProfitDistributionService $distributions,
     ) {}
 
     public function findOrStartDraft(string $fiscalYearLabel, Carbon $periodEnd): FiscalClose
@@ -71,6 +73,12 @@ class FiscalCloseService
             throw new InvalidArgumentException(__('Books are already closed through :date.', [
                 'date' => $closedThrough->toFormattedDateString(),
             ]));
+        }
+
+        if ($this->distributions->hasBlockingOpenRuns()) {
+            throw new InvalidArgumentException(
+                __('Cannot start fiscal close while a draft or approved profit distribution is still open. Post or reverse it first.'),
+            );
         }
 
         return FiscalClose::query()->create([

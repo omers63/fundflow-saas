@@ -7,6 +7,7 @@ use App\Filament\Support\DatabaseNotificationsRefresh;
 use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Support\TenantNavigation;
 use App\Http\Middleware\AuthenticateFilamentPanel;
+use App\Http\Middleware\EnforceTenantAdminTwoFactor;
 use App\Http\Middleware\StartWallClockSession;
 use App\Http\Middleware\UseWallClockForSessions;
 use App\Livewire\Tenant\TenantAdminLoginPage;
@@ -96,6 +97,7 @@ class TenantPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 AuthenticateFilamentPanel::class,
+                EnforceTenantAdminTwoFactor::class,
             ]));
     }
 }

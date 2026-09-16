@@ -1,0 +1,178 @@
+openapi: 3.0.3
+info:
+  title: FundFlow Tenant API
+  version: 1.1.0
+  description: Tenant REST API (Bearer token). Tenancy is resolved by host domain. Write routes require scoped abilities.
+servers:
+  - url: https://{tenant_domain}/api/v1
+    variables:
+      tenant_domain:
+        default: acme.example.com
+security:
+  - bearerAuth: []
+paths:
+  /members:
+    get:
+      summary: List members
+      operationId: listMembers
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: per_page
+          schema: { type: integer, maximum: 100 }
+      responses:
+        '200': { description: Paginated members }
+  /members/{member}:
+    get:
+      summary: Show member
+      operationId: showMember
+      parameters:
+        - in: path
+          name: member
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Member }
+  /balances:
+    get:
+      summary: List member balances
+      operationId: listBalances
+      responses:
+        '200': { description: Paginated balances }
+  /balances/{member}:
+    get:
+      summary: Show member balances
+      operationId: showBalance
+      parameters:
+        - in: path
+          name: member
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Balances }
+  /contributions:
+    get:
+      summary: List contributions
+      operationId: listContributions
+      responses:
+        '200': { description: Paginated contributions }
+  /loans:
+    get:
+      summary: List loans
+      operationId: listLoans
+      responses:
+        '200': { description: Paginated loans }
+  /statements:
+    get:
+      summary: List monthly statements
+      operationId: listStatements
+      parameters:
+        - in: query
+          name: member_id
+          schema: { type: integer }
+        - in: query
+          name: period
+          schema: { type: string }
+      responses:
+        '200': { description: Paginated statements }
+  /statements/{statement}:
+    get:
+      summary: Show monthly statement
+      operationId: showStatement
+      parameters:
+        - in: path
+          name: statement
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Statement }
+  /gateway-payments:
+    post:
+      summary: Create gateway payment intent
+      operationId: createGatewayPayment
+      description: Requires ability payments:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [member_id, purpose, amount]
+              properties:
+                member_id: { type: integer }
+                purpose: { type: string }
+                amount: { type: number }
+      responses:
+        '201': { description: Payment intent created }
+        '403': { description: Missing ability }
+  /motions/{motion}/votes:
+    post:
+      summary: Cast motion vote
+      operationId: castMotionVote
+      description: Requires ability votes:write
+      parameters:
+        - in: path
+          name: motion
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [member_id, choice]
+              properties:
+                member_id: { type: integer }
+                choice: { type: string }
+      responses:
+        '201': { description: Vote cast }
+  /savings-goals:
+    post:
+      summary: Create savings goal
+      operationId: createSavingsGoal
+      description: Requires ability goals:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [member_id, title, target_amount]
+              properties:
+                member_id: { type: integer }
+                title: { type: string }
+                target_amount: { type: number }
+                target_date: { type: string, format: date }
+                notes: { type: string }
+      responses:
+        '201': { description: Goal created }
+  /disbursement-batches/{batch}/ack:
+    post:
+      summary: Import SARIE / bank acknowledgement
+      operationId: importDisbursementAck
+      description: Requires ability disbursements:write. Does not bypass dual-control approve/download.
+      parameters:
+        - in: path
+          name: batch
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contents]
+              properties:
+                contents: { type: string, description: CSV or pain.002-lite XML }
+      responses:
+        '200': { description: Ack import result }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Token from tenant admin API & webhooks page (hashed at rest).

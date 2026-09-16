@@ -22,9 +22,11 @@ use App\Services\Loans\LoanSplitExcessFundCashOutService;
 use App\Services\Loans\LoanThresholdInstallmentWaiverService;
 use App\Services\Loans\LoanTransferPreview;
 use App\Services\LoanService;
+use App\Services\Risk\MlRiskScoreService;
 use App\Support\BusinessDay;
 use App\Support\Lang;
 use App\Support\LoanSettings;
+use App\Support\RiskSettings;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
@@ -58,6 +60,28 @@ final class LoanFilamentActions
                 'approved_at' => BusinessDay::now(),
             ])
             ->schema(fn (Loan $record): array => [
+                Placeholder::make('risk_badge')
+                    ->label(__('Borrower risk'))
+                    ->content(function () use ($record): HtmlString {
+                        $record->loadMissing('member');
+                        $member = $record->member;
+
+                        if ($member === null) {
+                            return new HtmlString('—');
+                        }
+
+                        $score = app(MlRiskScoreService::class)->score($member);
+                        $factors = collect($score['factors'])
+                            ->take(3)
+                            ->map(fn(array $f): string => e($f['label']) . ' (+' . $f['points'] . ')')
+                            ->implode('<br>');
+
+                        return new HtmlString(
+                            '<strong>' . e((string) $score['score']) . ' · ' . e(__($score['band'])) . '</strong>'
+                            . ($factors !== '' ? '<div class="mt-1 text-xs opacity-80">' . $factors . '</div>' : '')
+                        );
+                    })
+                    ->columnSpanFull(),
                 TextInput::make('amount_approved')
                     ->label(__('Approved amount'))
                     ->numeric()
@@ -94,6 +118,25 @@ final class LoanFilamentActions
                     ->columnSpanFull(),
             ])
             ->action(function (Loan $record, array $data, Action $action, LoanLifecycleService $lifecycle): void {
+                $record->loadMissing('member');
+                $member = $record->member;
+
+                if ($member !== null && RiskSettings::blockLoanApprovalAtCritical()) {
+                    $score = app(MlRiskScoreService::class)->score($member);
+
+                    if ($score['band'] === 'critical') {
+                        Notification::make()
+                            ->title(__('Cannot approve'))
+                            ->body(__('Borrower risk is critical (:score). Use an eligibility override or lower risk first.', [
+                                'score' => $score['score'],
+                            ]))
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+                }
+
                 if (
                     ! ActionModalFailure::attemptThrowable(
                         $action,

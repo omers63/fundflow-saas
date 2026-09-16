@@ -8,6 +8,8 @@ use App\Http\Controllers\Tenant\ContributionImportSampleController;
 use App\Http\Controllers\Tenant\DatabaseBackupDownloadController;
 use App\Http\Controllers\Tenant\DirectMessageAttachmentController;
 use App\Http\Controllers\Tenant\FiscalCloseExportDownloadController;
+use App\Http\Controllers\Tenant\GatewayFakeCompleteController;
+use App\Http\Controllers\Tenant\GatewayWebhookController;
 use App\Http\Controllers\Tenant\LegacyLoanImportSampleController;
 use App\Http\Controllers\Tenant\LegacyMemberImportSampleController;
 use App\Http\Controllers\Tenant\LegacyPaymentClassifiedDownloadController;
@@ -29,6 +31,7 @@ use App\Http\Controllers\Tenant\TenantManifestController;
 use App\Http\Controllers\Tenant\TermsConditionsDownloadController;
 use App\Livewire\Tenant\ApplicationStatusPage;
 use App\Livewire\Tenant\MembershipEnrollmentWizard;
+use App\Livewire\Tenant\TenantAdminTwoFactorChallengePage;
 use Illuminate\Support\Facades\Route;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
@@ -68,6 +71,9 @@ Route::middleware([
 
     Route::redirect('/login', '/member/login')->name('tenant.login');
 
+    Route::get('/admin/two-factor-challenge', TenantAdminTwoFactorChallengePage::class)
+        ->name('tenant.admin.two-factor-challenge');
+
     Route::get('/downloads/terms-and-conditions', TermsConditionsDownloadController::class)
         ->name('tenant.downloads.terms-and-conditions');
 
@@ -99,6 +105,9 @@ Route::middleware([
         ->name('tenant.manifest');
 
     Route::get('/offline', fn () => view('offline'));
+
+    Route::post('/webhooks/payments/{provider}', GatewayWebhookController::class)
+        ->name('tenant.webhooks.payments');
 
     Route::get('/storage/{path}', function (string $path) {
         return redirect(tenant_asset($path), 301);
@@ -139,6 +148,9 @@ Route::middleware([
 
             Route::delete('/member/webpush/subscribe', [MemberWebPushSubscriptionController::class, 'destroy'])
                 ->name('tenant.member.webpush.subscribe.destroy');
+
+            Route::post('/member/payments/gateway/{payment}/fake-complete', GatewayFakeCompleteController::class)
+                ->name('tenant.member.payments.gateway.fake-complete');
         });
 
         Route::get('/admin/statements/{statement}/pdf', [StatementPdfController::class, 'admin'])

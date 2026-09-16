@@ -21,6 +21,7 @@ use App\Models\Tenant\Transaction;
 use App\Notifications\Tenant\ReconciliationExceptionRaisedNotification;
 use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanLedgerService;
+use App\Services\Webhooks\WebhookDispatcher;
 use App\Support\BatchPostingGate;
 use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
@@ -2041,6 +2042,18 @@ class ReconciliationService
                     'error' => $e->getMessage(),
                 ]);
             }
+        }
+
+        try {
+            app(WebhookDispatcher::class)->dispatch('recon.exception.raised', [
+                'exception_id' => $exception->id,
+                'exception_code' => $exception->exception_code,
+                'domain' => $exception->domain,
+                'severity' => $exception->severity,
+                'amount_delta' => $exception->amount_delta,
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
         }
 
         return $exception;

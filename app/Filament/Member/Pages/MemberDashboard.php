@@ -7,6 +7,7 @@ namespace App\Filament\Member\Pages;
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Member\Support\ReturnToParentPortalAction;
 use App\Filament\Member\Widgets\MemberPortalDashboardWidget;
+use App\Filament\Member\Widgets\MemberSavingsGoalsWidget;
 use App\Filament\Member\Widgets\MembershipFreezeStatusWidget;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -44,6 +45,7 @@ class MemberDashboard extends BaseDashboard
     {
         return [
             MembershipFreezeStatusWidget::class,
+            MemberSavingsGoalsWidget::class,
             MemberPortalDashboardWidget::class,
         ];
     }

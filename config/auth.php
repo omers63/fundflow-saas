@@ -117,4 +117,8 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    'step_up_ttl_minutes' => (int) env('STEP_UP_TTL_MINUTES', 15),
+
+    'passkeys_allow_soft_verify' => (bool) env('PASSKEYS_ALLOW_SOFT_VERIFY', true),
+
 ];

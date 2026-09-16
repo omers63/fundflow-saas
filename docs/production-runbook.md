@@ -159,8 +159,42 @@ Job run history lives in **System → Automation** (not in `scheduler.log`).
 | **Migration workflow** | `/admin/migration-workflow` |
 | Reconciliation | `/admin/reconciliation-exceptions` |
 | Jobs | `/admin/jobs` |
+| Gateway payments | `/admin/gateway-payments` |
+| Disbursement batches | `/admin/disbursement-batches` |
 
 After navigation changes, run `php artisan optimize:clear` if menus look stale.
+
+## Payment gateway & bulk disbursement (Phase A)
+
+### Env
+
+| Variable | Notes |
+|----------|--------|
+| `GATEWAY_DRIVER` | `fake` (local/testing default), `moyasar`, or `hyperpay` |
+| `GATEWAY_CURRENCY` | Default `SAR` |
+| `MOYASAR_SECRET_KEY` / `MOYASAR_PUBLISHABLE_KEY` / `MOYASAR_WEBHOOK_SECRET` | Moyasar sandbox/live |
+| `HYPERPAY_ENTITY_ID` / `HYPERPAY_ACCESS_TOKEN` / `HYPERPAY_WEBHOOK_SECRET` | HyperPay / OPPWA |
+| `GATEWAY_FAKE_WEBHOOK_SECRET` | Signature for Fake webhook (`X-Gateway-Signature`) |
+| `STEP_UP_TTL_MINUTES` | Password re-auth window for batch approve/download (default `15`) |
+
+### Webhooks
+
+Per tenant domain (tenancy initialized by host):
+
+`POST https://<tenant-domain>/webhooks/payments/{fake|moyasar|hyperpay}`
+
+CSRF is exempt. Signature headers: Fake `X-Gateway-Signature`, Moyasar `X-Moyasar-Signature` (or `X-Webhook-Secret`), HyperPay `X-Hyperpay-Signature`.
+
+**Fake complete:** `POST /member/payments/gateway/{payment}/fake-complete` is member-auth only and allowed when `APP_ENV` is `local`/`testing` or `GATEWAY_DRIVER=fake`. Do not enable Fake completion on production with real drivers.
+
+### Ops UI
+
+| Task | Path |
+|------|------|
+| Gateway payments (read-only) | `/admin/gateway-payments` |
+| Disbursement batches | `/admin/disbursement-batches` |
+
+Approve / download on disbursement batches require **Confirm step-up** (password) within `STEP_UP_TTL_MINUTES`. Builder cannot approve their own batch. Gates `disbursement_batches.view|create|approve` are registered (currently granted to tenant `is_admin`; ready for Shield later).
 
 ## Migration onboarding (legacy members)
 

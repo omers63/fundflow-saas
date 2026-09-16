@@ -21,6 +21,9 @@ final class BankStatementBuckets
     /** Inbound membership / renewal fee transfers awaiting bank match (like member postings). */
     public const MEMBERSHIP_SUBSCRIPTION_FEES = 'membership-subscription-fees';
 
+    /** Cleared gateway-collected member cash credits (happy path — no open match). */
+    public const GATEWAY_PAYMENTS = 'gateway-payments';
+
     /** Historical cut-off balance placeholders — not bank-match targets. */
     public const IMPORT_CUTOFF_BALANCES = 'import-cutoff-balances';
 
@@ -44,6 +47,7 @@ final class BankStatementBuckets
         self::MASTER_INVEST_DISBURSEMENTS,
         self::MASTER_INVEST_RETURNS,
         self::MEMBERSHIP_SUBSCRIPTION_FEES,
+        self::GATEWAY_PAYMENTS,
     ];
 
     /**
