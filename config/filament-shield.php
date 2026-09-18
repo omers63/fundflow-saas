@@ -71,6 +71,10 @@ return [
     'super_admin' => [
         'enabled' => true,
         'name' => 'super_admin',
+        // Must stay false in this app: Shield registers a global Gate::before that
+        // calls hasRole() on every authenticated user. Tenant User models do not
+        // use Spatie roles, so enabling this crashes the tenant admin panel.
+        // Central super_admin bypass is registered in AppServiceProvider instead.
         'define_via_gate' => false,
         'intercept_gate' => 'before',
     ],

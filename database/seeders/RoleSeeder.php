@@ -2,9 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Models\Central\Permission;
+use App\Models\Central\Role;
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
 
 class RoleSeeder extends Seeder
 {
@@ -48,7 +48,10 @@ class RoleSeeder extends Seeder
 
         $userRole->syncPermissions($permissions);
 
-        // Super Admin gets all permissions implicitly via Gate::before or Shield's logic,
-        // but typically Shield handles super_admin having full access automatically.
+        // Keep an explicit full permission set on super_admin as well as Gate::before
+        // (filament-shield.super_admin.define_via_gate), so navigation still works if
+        // the gate bypass is disabled or the permission cache is stale.
+        $allPermissions = Permission::query()->where('guard_name', 'web')->get();
+        $superAdminRole->syncPermissions($allPermissions);
     }
 }

@@ -11,7 +11,7 @@
                     <label class="member-login-label" for="admin-2fa-code">{{ __('Authentication code') }}</label>
                     <input id="admin-2fa-code" wire:model="code" type="text" autocomplete="one-time-code"
                         inputmode="numeric"
-                        placeholder="{{ __('123456') }}"
+                        placeholder="123456"
                         class="member-login-input @error('code') member-login-input--error @enderror">
                     @error('code')
                         <p class="member-login-error">{{ $message }}</p>

@@ -129,6 +129,10 @@ final class AppTranslationCatalog
             return false;
         }
 
+        if (preg_match('/^\d+$/', $key)) {
+            return false;
+        }
+
         if (preg_match('/^(and|or|the|from|with|using|before|after|at|in|on|to|for|not|optional|e\.g\.|tables?|files?|days?|status|period|loans?|members?|monthly|daily|single|male|female|other|required|default|access|error|success|warning|critical|tab|code|term|year|size|type|format|driver|domain)$/i', $key)) {
             return false;
         }
@@ -147,6 +151,14 @@ final class AppTranslationCatalog
         $missing = [];
 
         foreach (self::translationKeys() as $key) {
+            if (!is_string($key)) {
+                continue;
+            }
+
+            if (self::shouldSkipArabicScriptCheck($key)) {
+                continue;
+            }
+
             if (! array_key_exists($key, $arabic)) {
                 $missing[] = $key;
             }
@@ -207,8 +219,19 @@ final class AppTranslationCatalog
                 'DejaVu Serif',
                 'PHP-FPM',
                 'Reverb',
+                'HTTP',
+                'URL',
+                'CSV: item_id_or_iban,status(accepted|rejected),reference,reason',
+                'SHA-256: :hash',
+                'pain.001 XML',
+                'Columns: provider_ref,amount,status,paid_at,member_number',
             ], true)
         ) {
+            return true;
+        }
+
+        // Machine-oriented CSV / protocol column hints.
+        if (str_starts_with($key, 'CSV:') || str_contains($key, 'pain.00')) {
             return true;
         }
 

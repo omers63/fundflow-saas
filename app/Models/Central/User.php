@@ -40,7 +40,10 @@ class User extends Authenticatable implements FilamentUser
 
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->hasVerifiedEmail();
+        // Central panel only. MustVerifyEmail is not enabled app-wide; requiring
+        // hasVerifiedEmail() here locked out operators whose accounts were created
+        // without email_verified_at (login succeeded then immediately bounced).
+        return $panel->getId() === 'admin';
     }
 
     /**
