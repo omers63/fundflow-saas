@@ -344,6 +344,56 @@ test('collected contributions exclude loan-exempt members for the period', funct
         ->and($exempt->fresh()->isExemptFromContributions($month, $year))->toBeTrue();
 });
 
+test('collected contributions include legacy imported rows during loan repayment', function () {
+    $month = 10;
+    $year = 2025;
+
+    $member = Member::create([
+        'member_number' => 'MEM-31-LEGACY',
+        'name' => 'Legacy Split Payment',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => Carbon::parse('2024-01-01'),
+        'status' => 'active',
+    ]);
+    $this->accounting->createMemberAccounts($member);
+
+    Loan::create([
+        'member_id' => $member->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 10,
+        'term_months' => 5,
+        'monthly_repayment' => 500,
+        'total_repaid' => 500,
+        'status' => 'active',
+        'applied_at' => Carbon::parse('2025-08-01'),
+        'disbursed_at' => Carbon::parse('2025-08-01'),
+        'first_repayment_month' => 10,
+        'first_repayment_year' => 2025,
+    ]);
+
+    $legacy = Contribution::withoutEvents(fn (): Contribution => Contribution::create([
+        'member_id' => $member->id,
+        'period' => Contribution::periodDate($month, $year),
+        'amount' => 1000,
+        'amount_collected' => 1000,
+        'status' => 'posted',
+        'collection_status' => ContributionCollectionStatus::COLLECTED,
+        'posted_at' => Carbon::parse('2025-10-15'),
+        'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+        'notes' => 'Legacy migration contribution [legacy-import:MEM-31-LEGACY|2025-10-15|1500|contribution|2025-10]',
+    ]));
+
+    expect($member->fresh()->isExemptFromContributions($month, $year))->toBeTrue()
+        ->and($this->cycles->postedContributionsQueryForPeriod($month, $year)->pluck('id'))
+        ->toContain($legacy->id)
+        ->and($this->cycles->postedContributionCount($month, $year))->toBe(1)
+        ->and($this->cycles->pendingMembersQueryForPeriod($month, $year)->whereKey($member->id)->exists())
+        ->toBeFalse();
+});
+
 test('collected contributions query includes partially paid pending rows', function () {
     Carbon::setTestNow(Carbon::create(2026, 5, 20));
 

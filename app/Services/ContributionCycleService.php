@@ -16,6 +16,7 @@ use App\Support\BusinessDay;
 use App\Support\CollectionInsightsCache;
 use App\Support\ContributionCollectionStatus;
 use App\Support\ContributionExemptionPolicy;
+use App\Support\LegacyImportedContribution;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -441,7 +442,7 @@ class ContributionCycleService
         /** @var list<int> $ids */
         $ids = CollectionInsightsCache::remember(
             CollectionInsightsCache::DOMAIN_CONTRIBUTIONS,
-            "collected_contribution_ids:{$cacheKey}",
+            "collected_contribution_ids.v2:{$cacheKey}",
             fn (): array => $this->computeCollectedContributionIdsForPeriod($month, $year),
         );
 
@@ -486,7 +487,13 @@ class ContributionCycleService
                     return false;
                 }
 
-                return ! $policy->isContributionExemptForCycle($member, $month, $year);
+                if (! $policy->isContributionExemptForCycle($member, $month, $year)) {
+                    return true;
+                }
+
+                // Live EMI/grace collections stay off Collected; legacy split payments
+                // were posted on purpose and must still appear for the cycle.
+                return LegacyImportedContribution::isContribution($contribution);
             })
             ->pluck('id')
             ->map(fn (mixed $id): int => (int) $id)
