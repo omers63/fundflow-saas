@@ -106,7 +106,7 @@ class ContributionResource extends Resource
         return match ($tab) {
             'cycle' => __('Contributions'),
             'ledger', 'contributions' => __('Ledger'),
-            'collect' => __('To collect'),
+            'collect' => __('Uncollected'),
             'collected' => __('Collected'),
             'arrears' => __('Arrears'),
             default => __('Contributions'),
@@ -390,14 +390,12 @@ class ContributionResource extends Resource
      */
     public static function availableCycleSegments(?string $cycleKey = null): array
     {
-        return self::isViewingOpenCycle($cycleKey)
-            ? ['collect', 'collected']
-            : ['arrears', 'collected'];
+        return ['collected', 'collect', 'arrears'];
     }
 
     public static function defaultCycleSegment(?string $cycleKey = null): string
     {
-        return self::isViewingOpenCycle($cycleKey) ? 'collect' : 'arrears';
+        return 'collect';
     }
 
     public static function normalizeCycleSegment(?string $segment, ?string $cycleKey = null): string
@@ -441,7 +439,15 @@ class ContributionResource extends Resource
         [$month, $year] = self::resolveListCycle();
 
         return app(ContributionCycleService::class)
-            ->postedContributionCount($month, $year);
+            ->postedContributionCount($month, $year, afterCycleEnd: false);
+    }
+
+    public static function arrearsContributionCount(): int
+    {
+        [$month, $year] = self::resolveListCycle();
+
+        return app(ContributionCycleService::class)
+            ->postedContributionCount($month, $year, afterCycleEnd: true);
     }
 
     public static function openCyclePendingCount(): int

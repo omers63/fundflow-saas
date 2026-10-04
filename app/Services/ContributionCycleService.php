@@ -410,7 +410,10 @@ class ContributionCycleService
             ->all();
     }
 
-    public function postedContributionsQueryForPeriod(int $month, int $year): Builder
+    /**
+     * @param  bool|null  $afterCycleEnd  null = all collected; false = collected by the cycle end; true = collected after it (arrears)
+     */
+    public function postedContributionsQueryForPeriod(int $month, int $year, ?bool $afterCycleEnd = null): Builder
     {
         $ids = $this->collectedContributionIdsForPeriod($month, $year);
 
@@ -418,13 +421,27 @@ class ContributionCycleService
             return Contribution::query()->whereRaw('0 = 1');
         }
 
-        return Contribution::query()
+        $query = Contribution::query()
             ->whereIn('id', $ids)
             ->with('member');
+
+        if ($afterCycleEnd === null) {
+            return $query;
+        }
+
+        $end = $this->cycleDueEndAt($month, $year);
+
+        return $afterCycleEnd
+            ? $query->where('posted_at', '>', $end)
+            : $query->where(fn (Builder $q): Builder => $q->whereNull('posted_at')->orWhere('posted_at', '<=', $end));
     }
 
-    public function postedContributionCount(int $month, int $year): int
+    public function postedContributionCount(int $month, int $year, ?bool $afterCycleEnd = null): int
     {
+        if ($afterCycleEnd !== null) {
+            return $this->postedContributionsQueryForPeriod($month, $year, $afterCycleEnd)->count();
+        }
+
         return count($this->collectedContributionIdsForPeriod($month, $year));
     }
 

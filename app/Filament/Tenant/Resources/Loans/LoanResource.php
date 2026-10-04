@@ -138,17 +138,17 @@ class LoanResource extends Resource
             ->pendingMemberCount($month, $year);
     }
 
-    public static function collectedEmiInstallmentCount(): int
+    public static function collectedEmiInstallmentCount(bool $afterCycleEnd = false): int
     {
         [$month, $year] = self::resolveListCycle();
-        $cacheKey = sprintf('%04d-%02d', $year, $month);
+        $cacheKey = sprintf('%04d-%02d:%d', $year, $month, $afterCycleEnd);
 
         if (array_key_exists($cacheKey, self::$collectedEmiCountCache)) {
             return self::$collectedEmiCountCache[$cacheKey];
         }
 
         return self::$collectedEmiCountCache[$cacheKey] = app(LoanEmiCollectionCatalogService::class)
-            ->collectedInstallmentCount($month, $year);
+            ->collectedInstallmentCount($month, $year, $afterCycleEnd);
     }
 
     public static function emiArrearsInstallmentCount(): int
@@ -170,14 +170,12 @@ class LoanResource extends Resource
      */
     public static function availableCycleSegments(?string $cycleKey = null): array
     {
-        return self::isViewingOpenCycle($cycleKey)
-            ? ['collect', 'collected']
-            : ['arrears', 'collected'];
+        return ['collected', 'collect', 'arrears'];
     }
 
     public static function defaultCycleSegment(?string $cycleKey = null): string
     {
-        return self::isViewingOpenCycle($cycleKey) ? 'collect' : 'arrears';
+        return 'collect';
     }
 
     public static function normalizeCycleSegment(?string $segment, ?string $cycleKey = null): string

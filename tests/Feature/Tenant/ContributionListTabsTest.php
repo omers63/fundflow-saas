@@ -452,7 +452,7 @@ test('collected table sorts by member number', function () {
     Carbon::setTestNow();
 });
 
-test('open cycle shows to collect not arrears; past cycle shows arrears not to collect', function () {
+test('every cycle exposes collected, uncollected and arrears segments', function () {
     Carbon::setTestNow(Carbon::create(2026, 5, 20));
 
     $cycles = app(ContributionCycleService::class);
@@ -461,82 +461,86 @@ test('open cycle shows to collect not arrears; past cycle shows arrears not to c
     $previous = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
     $previousKey = $cycles->contributionCycleKey((int) $previous->month, (int) $previous->year);
 
-    Livewire::test(ListContributions::class)
-        ->set('selectedCycle', $openKey)
-        ->set('cycleSegment', 'collect')
-        ->assertSuccessful()
-        ->assertSee(__('To collect'), false)
-        ->assertSet('cycleSegment', 'collect');
+    foreach ([$openKey, $previousKey] as $key) {
+        expect(ContributionResource::availableCycleSegments($key))->toBe(['collected', 'collect', 'arrears'])
+            ->and(ContributionResource::normalizeCycleSegment('arrears', $key))->toBe('arrears')
+            ->and(ContributionResource::normalizeCycleSegment('bogus', $key))->toBe('collect');
 
-    expect(ContributionResource::availableCycleSegments($openKey))->toBe(['collect', 'collected'])
-        ->and(ContributionResource::normalizeCycleSegment('arrears', $openKey))->toBe('collect');
-
-    Livewire::test(ListContributions::class)
-        ->set('selectedCycle', $previousKey)
-        ->set('cycleSegment', 'collect')
-        ->assertSet('cycleSegment', 'arrears')
-        ->assertSuccessful()
-        ->assertSee(__('Arrears'), false)
-        ->assertSee(__('Arrears – :period', [
-            'period' => $cycles->periodLabel((int) $previous->month, (int) $previous->year),
-        ]), false);
-
-    expect(ContributionResource::availableCycleSegments($previousKey))->toBe(['arrears', 'collected'])
-        ->and(ContributionResource::normalizeCycleSegment('collect', $previousKey))->toBe('arrears');
+        Livewire::test(ListContributions::class)
+            ->set('selectedCycle', $key)
+            ->assertSuccessful()
+            ->assertSee(__('Collected'), false)
+            ->assertSee(__('Uncollected'), false)
+            ->assertSee(__('Arrears'), false);
+    }
 
     Carbon::setTestNow();
 });
 
-test('cycle arrears segment lists unpaid members for the selected past cycle only', function () {
+test('cycle segments split collected on time, uncollected and collected after the cycle ended', function () {
     Carbon::setTestNow(Carbon::create(2026, 5, 20));
 
     $cycles = app(ContributionCycleService::class);
     $julyKey = $cycles->contributionCycleKey(7, 2025);
-    $julyLabel = $cycles->periodLabel(7, 2025);
+    $accounting = app(AccountingService::class);
 
-    $owing = Member::factory()->create([
-        'status' => 'active',
-        'monthly_contribution_amount' => 500,
-        'joined_at' => Carbon::parse('2024-01-01'),
-    ]);
-    $paid = Member::factory()->create([
-        'status' => 'active',
-        'monthly_contribution_amount' => 500,
-        'joined_at' => Carbon::parse('2024-01-01'),
-    ]);
+    $make = function () use ($accounting): Member {
+        $member = Member::factory()->create([
+            'status' => 'active',
+            'monthly_contribution_amount' => 500,
+            'joined_at' => Carbon::parse('2024-01-01'),
+        ]);
+        $accounting->createMemberAccounts($member);
 
-    app(AccountingService::class)->createMemberAccounts($owing);
-    app(AccountingService::class)->createMemberAccounts($paid);
+        return $member;
+    };
 
-    Contribution::factory()->for($paid)->create([
+    $owing = $make();
+    $onTime = $make();
+    $late = $make();
+
+    $post = fn (Member $member, Carbon $at) => Contribution::factory()->for($member)->create([
         'period' => Contribution::periodDate(7, 2025),
         'amount' => 500,
         'amount_due' => 500,
         'amount_collected' => 500,
         'status' => 'posted',
         'collection_status' => ContributionCollectionStatus::COLLECTED,
-        'posted_at' => now(),
+        'posted_at' => $at,
     ]);
+
+    $onTimeRow = $post($onTime, Carbon::parse('2025-07-10'));
+    $lateRow = $post($late, Carbon::parse('2025-09-01'));
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'cycle')
+        ->set('selectedCycle', $julyKey)
+        ->set('cycleSegment', 'collect')
+        ->assertCanSeeTableRecords([$owing])
+        ->assertCanNotSeeTableRecords([$onTime, $late]);
+
+    Livewire::test(ListContributions::class)
+        ->set('activeTab', 'cycle')
+        ->set('selectedCycle', $julyKey)
+        ->set('cycleSegment', 'collected')
+        ->assertCanSeeTableRecords([$onTimeRow])
+        ->assertCanNotSeeTableRecords([$lateRow]);
 
     Livewire::test(ListContributions::class)
         ->set('activeTab', 'cycle')
         ->set('selectedCycle', $julyKey)
         ->set('cycleSegment', 'arrears')
-        ->assertSuccessful()
-        ->assertSee(__('Arrears'), false)
-        ->assertCanSeeTableRecords([$owing])
-        ->assertCanNotSeeTableRecords([$paid])
-        ->assertSee($julyLabel, false);
+        ->assertCanSeeTableRecords([$lateRow])
+        ->assertCanNotSeeTableRecords([$onTimeRow]);
 
-    $arrearsIds = $cycles->pendingMembersQueryForPeriod(7, 2025)->pluck('id');
-
-    expect($arrearsIds)->toContain($owing->id)
-        ->and($arrearsIds)->not->toContain($paid->id);
+    expect($cycles->postedContributionCount(7, 2025, afterCycleEnd: false))->toBe(1)
+        ->and($cycles->postedContributionCount(7, 2025, afterCycleEnd: true))->toBe(1)
+        ->and($cycles->postedContributionCount(7, 2025))->toBe(2);
 
     Carbon::setTestNow();
 });
 
-test('contribution cycle arrears table supports member filter', function () {
+test('contribution cycle uncollected table supports member filter for a past cycle', function () {
     Carbon::setTestNow(Carbon::create(2026, 5, 20));
 
     $cycles = app(ContributionCycleService::class);
@@ -562,7 +566,7 @@ test('contribution cycle arrears table supports member filter', function () {
     Livewire::test(ListContributions::class)
         ->set('activeTab', 'cycle')
         ->set('selectedCycle', $julyKey)
-        ->set('cycleSegment', 'arrears')
+        ->set('cycleSegment', 'collect')
         ->assertSuccessful()
         ->assertCanSeeTableRecords([$alpha, $beta])
         ->filterTable('member_id', $alpha->id)

@@ -141,9 +141,13 @@ class LoanEmiCollectionCatalogService
         return $this->membersWithCollectableEmisQuery($month, $year)->count();
     }
 
-    public function collectedInstallmentCount(int $month, int $year): int
+    public function collectedInstallmentCount(int $month, int $year, ?bool $afterCycleEnd = null): int
     {
         $cacheKey = sprintf('%04d-%02d', $year, $month);
+
+        if ($afterCycleEnd !== null) {
+            return $this->collectedInstallmentsQuery($month, $year, $afterCycleEnd)->count();
+        }
 
         return (int) CollectionInsightsCache::remember(
             CollectionInsightsCache::DOMAIN_LOAN_EMI,
@@ -995,11 +999,19 @@ class LoanEmiCollectionCatalogService
         );
     }
 
-    public function collectedInstallmentsQuery(int $month, int $year): Builder
+    /**
+     * @param  bool|null  $afterCycleEnd  null = all collected; false = paid by the cycle end; true = paid after it (arrears)
+     */
+    public function collectedInstallmentsQuery(int $month, int $year, ?bool $afterCycleEnd = null): Builder
     {
         [$start, $end] = $this->cycles->cycleDueDateBounds($month, $year);
+        $cycleEnd = $this->cycles->cycleDueEndAt($month, $year);
 
         return LoanInstallment::query()
+            ->when($afterCycleEnd === true, fn (Builder $q): Builder => $q->where('paid_at', '>', $cycleEnd))
+            ->when($afterCycleEnd === false, fn (Builder $q): Builder => $q->where(
+                fn (Builder $w): Builder => $w->whereNull('paid_at')->orWhere('paid_at', '<=', $cycleEnd),
+            ))
             ->where(function (Builder $query): void {
                 $query->where('status', 'paid')
                     ->orWhere(function (Builder $query): void {

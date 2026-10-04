@@ -259,7 +259,7 @@ final class LoanEmiCollectionTables
         return $query->whereIn('members.id', $ids === [] ? [0] : $ids);
     }
 
-    public static function configureCollectedTable(Table $table): Table
+    public static function configureCollectedTable(Table $table, bool $afterCycleEnd = false): Table
     {
         $catalog = app(LoanEmiCollectionCatalogService::class);
         [$month, $year] = LoanResource::resolveListCycle();
@@ -267,8 +267,8 @@ final class LoanEmiCollectionTables
 
         return TableGrouping::apply(
             $table
-                ->query(fn () => $catalog->collectedInstallmentsQuery($month, $year))
-                ->heading(__('Collected – :period', [
+                ->query(fn () => $catalog->collectedInstallmentsQuery($month, $year, $afterCycleEnd))
+                ->heading(__($afterCycleEnd ? 'Arrears – :period' : 'Collected – :period', [
                     'period' => $catalog->periodLabel($month, $year),
                 ]))
                 ->columns([
@@ -370,14 +370,6 @@ final class LoanEmiCollectionTables
 
     public static function configureArrearsTable(Table $table): Table
     {
-        $catalog = app(LoanEmiCollectionCatalogService::class);
-        [$month, $year] = LoanResource::resolveListCycle();
-
-        return self::configurePendingMembersTable(
-            $table,
-            __('Arrears – :period', ['period' => $catalog->periodLabel($month, $year)]),
-            includeLoanNumber: true,
-            includeCollectionFilters: true,
-        );
+        return self::configureCollectedTable($table, afterCycleEnd: true);
     }
 }

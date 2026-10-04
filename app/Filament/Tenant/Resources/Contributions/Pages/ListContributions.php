@@ -182,10 +182,10 @@ class ListContributions extends ListRecords
         }
 
         return match (ContributionResource::resolveCycleSegment()) {
-            'collected' => __('Contributions already posted for :period.', [
+            'collected' => __('Contributions collected within :period.', [
                 'period' => $periodLabel,
             ]),
-            'arrears' => __('Members who still owe for :period. Apply from cash balance or post manually on the ledger.', [
+            'arrears' => __('Contributions for :period collected after the cycle ended.', [
                 'period' => $periodLabel,
             ]),
             default => __('Members who still owe for :period. Apply from cash balance or post manually on the ledger.', [
@@ -257,7 +257,7 @@ class ListContributions extends ListRecords
 
     protected function cycleTabBadge(): ?string
     {
-        if (! in_array(ContributionResource::resolveCycleSegment(), ['collect', 'arrears'], true)) {
+        if (ContributionResource::resolveCycleSegment() !== 'collect') {
             return null;
         }
 

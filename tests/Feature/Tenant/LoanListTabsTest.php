@@ -615,7 +615,7 @@ test('delinquency workspace exposes maintenance actions on overdue view', functi
         ->assertNotified();
 });
 
-test('collection arrears segment lists unpaid members for the selected past cycle', function () {
+test('collection segments split on-time, uncollected and after-cycle-end installments for a past cycle', function () {
     Setting::set('contribution', 'cycle_start_day', '6');
 
     Carbon::setTestNow(Carbon::parse('2025-11-20'));
@@ -698,30 +698,48 @@ test('collection arrears segment lists unpaid members for the selected past cycl
         'paid_at' => Carbon::parse('2025-10-20'),
     ]);
 
-    expect(LoanResource::availableCycleSegments($octoberKey))->toBe(['arrears', 'collected'])
+    $lateInstallment = LoanInstallment::create([
+        'loan_id' => $paidLoan->id,
+        'installment_number' => 2,
+        'amount' => 1000,
+        'due_date' => Carbon::parse('2025-11-05'),
+        'status' => 'paid',
+        'paid_at' => Carbon::parse('2025-11-12'),
+    ]);
+
+    expect(LoanResource::availableCycleSegments($octoberKey))->toBe(['collected', 'collect', 'arrears'])
         ->and(LoanResource::listTabUrl('arrears', cycle: $octoberKey))->toContain('segment=arrears')
         ->and($catalog->pendingMemberCount(10, 2025))->toBe(1)
-        ->and($catalog->emiArrearsInstallmentCount(10, 2025, false))->toBe(1);
+        ->and($catalog->collectedInstallmentCount(10, 2025, afterCycleEnd: false))->toBe(1)
+        ->and($catalog->collectedInstallmentCount(10, 2025, afterCycleEnd: true))->toBe(1);
+
+    Livewire::test(ListLoans::class)
+        ->set('selectedCycle', $octoberKey)
+        ->set('collectionSegment', 'collect')
+        ->assertSuccessful()
+        ->assertCanSeeTableRecords([$owing])
+        ->assertCanNotSeeTableRecords([$paid]);
 
     Livewire::test(ListLoans::class)
         ->set('selectedCycle', $octoberKey)
         ->set('collectionSegment', 'arrears')
         ->assertSuccessful()
         ->assertSet('collectionSegment', 'arrears')
-        ->assertSee(__('Arrears'), false)
         ->assertSee(__('Arrears – :period', [
             'period' => $cycles->periodLabel(10, 2025),
         ]), false)
-        ->assertSee(__('Members who still owe EMI for :period. Apply from cash balance.', [
-            'period' => $cycles->periodLabel(10, 2025),
-        ]), false)
-        ->assertCanSeeTableRecords([$owing])
-        ->assertCanNotSeeTableRecords([$paid]);
+        ->assertCanSeeTableRecords([$lateInstallment]);
+
+    Livewire::test(ListLoans::class)
+        ->set('selectedCycle', $octoberKey)
+        ->set('collectionSegment', 'collected')
+        ->assertSuccessful()
+        ->assertCanNotSeeTableRecords([$lateInstallment]);
 
     Carbon::setTestNow();
 });
 
-test('loan cycle arrears table shows loan number and supports member filter', function () {
+test('loan cycle uncollected table shows loan number and supports member filter for a past cycle', function () {
     Setting::set('contribution', 'cycle_start_day', '6');
 
     Carbon::setTestNow(Carbon::parse('2025-11-20'));
@@ -796,7 +814,7 @@ test('loan cycle arrears table shows loan number and supports member filter', fu
 
     Livewire::test(ListLoans::class)
         ->set('selectedCycle', $octoberKey)
-        ->set('collectionSegment', 'arrears')
+        ->set('collectionSegment', 'collect')
         ->assertSuccessful()
         ->assertCanSeeTableRecords([$alpha, $beta])
         ->assertSee('#'.$alphaLoan->id, false)
@@ -894,7 +912,7 @@ test('loan to collect table shows loan number and supports member filter', funct
     Carbon::setTestNow();
 });
 
-test('open cycle shows to collect not arrears; past cycle shows arrears not to collect', function () {
+test('every loan cycle exposes collected, uncollected and arrears segments', function () {
     Carbon::setTestNow(Carbon::create(2026, 5, 20));
 
     $cycles = app(ContributionCycleService::class);
@@ -903,28 +921,18 @@ test('open cycle shows to collect not arrears; past cycle shows arrears not to c
     $previous = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
     $previousKey = $cycles->contributionCycleKey((int) $previous->month, (int) $previous->year);
 
-    Livewire::test(ListLoans::class)
-        ->set('selectedCycle', $openKey)
-        ->set('collectionSegment', 'collect')
-        ->assertSuccessful()
-        ->assertSee(__('To collect'), false)
-        ->assertSet('collectionSegment', 'collect');
+    foreach ([$openKey, $previousKey] as $key) {
+        expect(LoanResource::availableCycleSegments($key))->toBe(['collected', 'collect', 'arrears'])
+            ->and(LoanResource::normalizeCycleSegment('arrears', $key))->toBe('arrears')
+            ->and(LoanResource::normalizeCycleSegment('bogus', $key))->toBe('collect');
 
-    expect(LoanResource::availableCycleSegments($openKey))->toBe(['collect', 'collected'])
-        ->and(LoanResource::normalizeCycleSegment('arrears', $openKey))->toBe('collect');
-
-    Livewire::test(ListLoans::class)
-        ->set('selectedCycle', $previousKey)
-        ->set('collectionSegment', 'collect')
-        ->assertSet('collectionSegment', 'arrears')
-        ->assertSuccessful()
-        ->assertSee(__('Arrears'), false)
-        ->assertSee(__('Arrears – :period', [
-            'period' => $cycles->periodLabel((int) $previous->month, (int) $previous->year),
-        ]), false);
-
-    expect(LoanResource::availableCycleSegments($previousKey))->toBe(['arrears', 'collected'])
-        ->and(LoanResource::normalizeCycleSegment('collect', $previousKey))->toBe('arrears');
+        Livewire::test(ListLoans::class)
+            ->set('selectedCycle', $key)
+            ->assertSuccessful()
+            ->assertSee(__('Collected'), false)
+            ->assertSee(__('Uncollected'), false)
+            ->assertSee(__('Arrears'), false);
+    }
 
     Carbon::setTestNow();
 });

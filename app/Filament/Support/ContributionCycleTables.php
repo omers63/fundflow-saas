@@ -249,25 +249,18 @@ final class ContributionCycleTables
 
     public static function configureCycleArrearsTable(Table $table): Table
     {
-        $cycles = app(ContributionCycleService::class);
-        [$month, $year] = ContributionResource::resolveListCycle();
-
-        return self::configurePendingMembersTable(
-            $table,
-            __('Arrears – :period', ['period' => $cycles->periodLabel($month, $year)]),
-            includeCollectionFilters: true,
-        );
+        return self::configureCollectedTable($table, afterCycleEnd: true);
     }
 
-    public static function configureCollectedTable(Table $table): Table
+    public static function configureCollectedTable(Table $table, bool $afterCycleEnd = false): Table
     {
         $cycles = app(ContributionCycleService::class);
         [$month, $year] = ContributionResource::resolveListCycle();
         $currency = Setting::get('general', 'currency', 'USD');
 
         return TableGrouping::apply($table
-            ->query(fn (): Builder => $cycles->postedContributionsQueryForPeriod($month, $year))
-            ->heading(__('Collected – :period', ['period' => $cycles->periodLabel($month, $year)]))
+            ->query(fn (): Builder => $cycles->postedContributionsQueryForPeriod($month, $year, $afterCycleEnd))
+            ->heading(__($afterCycleEnd ? 'Arrears – :period' : 'Collected – :period', ['period' => $cycles->periodLabel($month, $year)]))
             ->defaultSort('posted_at', 'desc')
             ->columns([
                 MemberTableColumns::relationNumber(),

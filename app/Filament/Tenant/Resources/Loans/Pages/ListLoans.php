@@ -153,10 +153,10 @@ class ListLoans extends ListRecords
     {
         return match (LoanResource::resolvePrimaryTab()) {
             'collection' => match (LoanResource::resolveCollectionSegment()) {
-                'collected' => __('Installments already collected from member cash for :period.', [
+                'collected' => __('Installments collected within :period.', [
                     'period' => LoanResource::resolveListCycleLabel(),
                 ]),
-                'arrears' => __('Members who still owe EMI for :period. Apply from cash balance.', [
+                'arrears' => __('Installments for :period collected after the cycle ended.', [
                     'period' => LoanResource::resolveListCycleLabel(),
                 ]),
                 default => __('Members with pending EMIs for :period. Apply from cash balance.', [
@@ -222,7 +222,7 @@ class ListLoans extends ListRecords
 
     protected function collectionPendingBadge(): ?string
     {
-        if (! in_array(LoanResource::resolveCollectionSegment(), ['collect', 'arrears'], true)) {
+        if (LoanResource::resolveCollectionSegment() !== 'collect') {
             return null;
         }
 
