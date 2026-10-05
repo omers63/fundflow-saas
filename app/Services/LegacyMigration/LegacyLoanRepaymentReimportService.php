@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\LegacyMigration;
 
+use App\Support\LegacyImportedLoan;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\LoanRepayment;
@@ -58,6 +59,7 @@ final class LegacyLoanRepaymentReimportService
 
             $deletedRepayments = LoanRepayment::query()->count();
             LoanRepayment::query()->delete();
+            LegacyImportedLoan::flushMemo();
 
             $resetInstallments = LoanInstallment::query()
                 ->where('status', 'paid')

@@ -12,6 +12,14 @@ use App\Models\Tenant\LoanRepayment;
  */
 final class LegacyImportedLoan
 {
+    /** @var array<int, bool> */
+    private static array $memo = [];
+
+    public static function flushMemo(): void
+    {
+        self::$memo = [];
+    }
+
     public static function isLoan(Loan|int $loan): bool
     {
         $loanId = $loan instanceof Loan ? (int) $loan->getKey() : $loan;
@@ -20,7 +28,7 @@ final class LegacyImportedLoan
             return false;
         }
 
-        return LoanRepayment::query()
+        return self::$memo[$loanId] ??= LoanRepayment::query()
             ->where('loan_id', $loanId)
             ->where(function ($query): void {
                 $query->where('notes', 'like', '%legacy-import:%')

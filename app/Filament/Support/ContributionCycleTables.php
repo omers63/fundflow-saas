@@ -46,9 +46,10 @@ final class ContributionCycleTables
                 return $query->with([
                     'parent',
                     'cashAccount',
+                    'loans',
                     'contributions' => fn ($contributionQuery) => $contributionQuery
                         ->forPeriod($month, $year)
-                        ->where('status', 'pending'),
+                        ->whereIn('status', ['pending', 'posted']),
                 ]);
             })
             ->columns([
@@ -261,6 +262,7 @@ final class ContributionCycleTables
         return TableGrouping::apply($table
             ->query(fn (): Builder => $cycles->postedContributionsQueryForPeriod($month, $year, $afterCycleEnd))
             ->heading(__($afterCycleEnd ? 'Arrears – :period' : 'Collected – :period', ['period' => $cycles->periodLabel($month, $year)]))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('member.loans'))
             ->defaultSort('posted_at', 'desc')
             ->columns([
                 MemberTableColumns::relationNumber(),

@@ -39,7 +39,7 @@ afterEach(function () {
     Carbon::setTestNow();
 });
 
-test('switching between past cycles keeps arrears layout and shows period heading', function () {
+test('switching between past cycles keeps the uncollected layout and shows period heading', function () {
     $cycles = app(ContributionCycleService::class);
     [$openMonth, $openYear] = $cycles->currentOpenPeriod();
     $firstPast = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
@@ -59,11 +59,11 @@ test('switching between past cycles keeps arrears layout and shows period headin
     Livewire::test(ListContributions::class)
         ->set('selectedCycle', $firstKey)
         ->assertSuccessful()
-        ->assertSet('cycleSegment', 'arrears')
+        ->assertSet('cycleSegment', 'collect')
         ->assertSee($firstLabel, false)
         ->set('selectedCycle', $secondKey)
         ->assertSuccessful()
-        ->assertSet('cycleSegment', 'arrears')
+        ->assertSet('cycleSegment', 'collect')
         ->assertSee($secondLabel, false);
 });
 

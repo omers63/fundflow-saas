@@ -3,6 +3,7 @@
 namespace App\Models\Tenant;
 
 use App\Services\Governance\MotionEnforcementGate;
+use App\Models\Tenant\Builders\SettingBuilder;
 use App\Support\LoanSettings;
 use Illuminate\Database\Eloquent\Model;
 
@@ -14,11 +15,52 @@ class Setting extends Model
         'value',
     ];
 
+    /**
+     * Per-process snapshot of the settings table, keyed by tenant: tenant id => group => key => value.
+     *
+     * @var array<string, array<string, array<string, mixed>>>
+     */
+    private static array $memo = [];
+
+    protected static function booted(): void
+    {
+        static::saved(static fn () => static::flushMemo());
+        static::deleted(static fn () => static::flushMemo());
+    }
+
+    public function newEloquentBuilder($query): SettingBuilder
+    {
+        return new SettingBuilder($query);
+    }
+
+    public static function flushMemo(): void
+    {
+        self::$memo = [];
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private static function snapshot(): array
+    {
+        $tenantKey = (string) (function_exists('tenant') ? tenant('id') : '');
+
+        if (! isset(self::$memo[$tenantKey])) {
+            $rows = [];
+
+            foreach (static::query()->get(['group', 'key', 'value']) as $row) {
+                $rows[$row->group][$row->key] = $row->value;
+            }
+
+            self::$memo[$tenantKey] = $rows;
+        }
+
+        return self::$memo[$tenantKey];
+    }
+
     public static function get(string $group, string $key, mixed $default = null): mixed
     {
-        return static::where('group', $group)
-            ->where('key', $key)
-            ->value('value') ?? $default;
+        return (self::snapshot()[$group][$key] ?? null) ?? $default;
     }
 
     public static function set(string $group, string $key, mixed $value, ?int $approvedMotionId = null): void
@@ -36,9 +78,7 @@ class Setting extends Model
      */
     public static function getGroup(string $group): array
     {
-        return static::where('group', $group)
-            ->pluck('value', 'key')
-            ->all();
+        return self::snapshot()[$group] ?? [];
     }
 
     public static function contributionCycleStartDay(): int

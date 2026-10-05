@@ -146,13 +146,13 @@ class LoanEmiCollectionCatalogService
         $cacheKey = sprintf('%04d-%02d', $year, $month);
 
         if ($afterCycleEnd !== null) {
-            return $this->collectedInstallmentsQuery($month, $year, $afterCycleEnd)->count();
+            $cacheKey .= ':'.(int) $afterCycleEnd;
         }
 
         return (int) CollectionInsightsCache::remember(
             CollectionInsightsCache::DOMAIN_LOAN_EMI,
             "collected_installment_count:{$cacheKey}",
-            fn (): int => $this->collectedInstallmentsQuery($month, $year)->count(),
+            fn (): int => $this->collectedInstallmentsQuery($month, $year, $afterCycleEnd)->count(),
         );
     }
 
