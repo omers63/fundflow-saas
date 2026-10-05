@@ -45,6 +45,11 @@ final class SyntheticBankStatementFactory
         return $this->forFilename(BankStatementBuckets::MEMBERSHIP_SUBSCRIPTION_FEES);
     }
 
+    public function gatewayPayments(): BankStatement
+    {
+        return $this->forFilename(BankStatementBuckets::GATEWAY_PAYMENTS);
+    }
+
     public function forFilename(string $filename): BankStatement
     {
         return BankStatement::firstOrCreate(
@@ -68,6 +73,7 @@ final class SyntheticBankStatementFactory
             BankStatementBuckets::MASTER_INVEST_DISBURSEMENTS => __('Master invest disbursements'),
             BankStatementBuckets::MASTER_INVEST_RETURNS => __('Master invest returns'),
             BankStatementBuckets::MEMBERSHIP_SUBSCRIPTION_FEES => __('Membership subscription fees'),
+            BankStatementBuckets::GATEWAY_PAYMENTS => __('Gateway payments'),
             default => throw new InvalidArgumentException(__('Unsupported synthetic statement bucket: :filename', [
                 'filename' => $filename,
             ])),

@@ -17,6 +17,9 @@ class FundPosting extends Model
         'amount',
         'reference',
         'attachment',
+        'ocr_extraction',
+        'ocr_confidence',
+        'ocr_match_status',
         'comments',
         'status',
         'admin_remarks',
@@ -30,6 +33,8 @@ class FundPosting extends Model
         return [
             'posting_date' => 'date',
             'amount' => 'decimal:2',
+            'ocr_extraction' => 'array',
+            'ocr_confidence' => 'decimal:2',
             'reviewed_at' => 'datetime',
         ];
     }

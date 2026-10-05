@@ -15,17 +15,17 @@ trait TranslatesFilamentNavigationLabels
 {
     public static function getModelLabel(): string
     {
-        return Lang::formatUiLabel(__(static::untranslatedModelLabel()));
+        return Lang::translateUi(static::untranslatedModelLabel());
     }
 
     public static function getPluralModelLabel(): string
     {
-        return Lang::formatUiLabel(__(static::untranslatedPluralModelLabel()));
+        return Lang::translateUi(static::untranslatedPluralModelLabel());
     }
 
     public static function getNavigationLabel(): string
     {
-        return Lang::formatUiLabel(__(parent::getNavigationLabel()));
+        return Lang::translateUi(parent::getNavigationLabel());
     }
 
     public static function getNavigationGroup(): string|UnitEnum|null
@@ -40,7 +40,7 @@ trait TranslatesFilamentNavigationLabels
             return $group;
         }
 
-        return Lang::formatUiLabel(__($group));
+        return Lang::translateUi($group);
     }
 
     /**

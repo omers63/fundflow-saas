@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Member\Resources\MyLoans\Pages;
 
 use App\Filament\Member\Resources\MyLoans\MyLoanResource;
+use App\Filament\Member\Support\MemberGatewayPayFilamentActions;
 use App\Filament\Support\MemberLoanFilamentActions;
 use App\Models\Tenant\Loan;
 use App\Services\Loans\LoanGuarantorReplacementService;
@@ -45,6 +46,7 @@ class ViewMyLoan extends ViewRecord
         ];
 
         if ($this->record->status === 'active') {
+            $actions[] = MemberGatewayPayFilamentActions::payEmi($this->record);
             $actions[] = $this->payOpenPeriodRepaymentAction();
             $actions[] = $this->earlySettleAction();
         }

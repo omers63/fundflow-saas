@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Tenant\BankTransaction;
+use App\Services\Disbursement\DisbursementBatchService;
 use App\Support\BusinessDay;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +36,11 @@ final class BankTransactionClearanceService
                 'is_cleared' => true,
                 'cleared_at' => $clearedAt,
             ], $importedUpdates));
+
+            app(DisbursementBatchService::class)
+                ->markItemClearedFromBankTransaction($uncleared);
+            app(DisbursementBatchService::class)
+                ->markItemClearedFromBankTransaction($imported);
         });
     }
 
@@ -58,6 +64,9 @@ final class BankTransactionClearanceService
             }
 
             $uncleared->update($updates);
+
+            app(DisbursementBatchService::class)
+                ->markItemClearedFromBankTransaction($uncleared);
         });
     }
 

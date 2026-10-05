@@ -21,6 +21,7 @@ use App\Notifications\Tenant\LoanRejectedNotification;
 use App\Notifications\Tenant\LoanSubmittedNotification;
 use App\Notifications\Tenant\NewLoanApplicationNotification;
 use App\Services\OperationalReviewWorkflowService;
+use App\Services\Webhooks\WebhookDispatcher;
 use App\Support\BusinessDay;
 use App\Support\LoanExcessFundSettlementOption;
 use App\Support\LoanFundingStrategy;
@@ -284,6 +285,16 @@ final class LoanLifecycleService
             installments: $count,
             dueDate: $at->copy()->addMonths($count)->format('d M Y'),
         ));
+
+        try {
+            app(WebhookDispatcher::class)->dispatch('loan.approved', [
+                'loan_id' => $loan->id,
+                'member_id' => $loan->member_id,
+                'amount_approved' => $amountApproved,
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     public function rejectLoan(Loan $loan, string $reason): void

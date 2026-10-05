@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AuthenticateTenantApiToken;
 use App\Http\Middleware\EnforceMemberPortalMaintenance;
 use App\Http\Middleware\InitializeTenancyByDomainEarly;
 use App\Http\Middleware\SetApplicationLocale;
@@ -36,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
             // Tenant routes
             Route::middleware('web')->group(base_path('routes/tenant.php'));
+            require base_path('routes/tenant_api.php');
         }
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -66,6 +68,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->alias([
             'member-portal-maintenance' => EnforceMemberPortalMaintenance::class,
+            'tenant.api' => AuthenticateTenantApiToken::class,
+        ]);
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/payments/*',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

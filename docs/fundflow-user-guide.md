@@ -5,6 +5,8 @@
 
 Use this as the single handbook to share with your fund’s users. Technical repair manuals for accountants remain separate.
 
+For gateway payments, bulk disbursement, governance, profit distribution, risk, OCR, API/webhooks, savings goals, and security/PDPL, see **[manual-advanced-features.md](manual-advanced-features.md)**.
+
 ---
 
 ## Table of contents

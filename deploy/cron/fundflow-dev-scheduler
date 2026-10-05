@@ -1,0 +1,15 @@
+# Laravel scheduler for FundFlow SaaS — development checkout only.
+# Install:
+#   sudo cp deploy/cron/fundflow-dev-scheduler /etc/cron.d/fundflow-dev-scheduler
+#   sudo chmod 644 /etc/cron.d/fundflow-dev-scheduler
+#   sudo chown root:root /etc/cron.d/fundflow-dev-scheduler
+#   touch /var/www/dev-fundflow-saas/storage/logs/scheduler.log
+#   sudo chown www-data:www-data /var/www/dev-fundflow-saas/storage/logs/scheduler.log
+#
+# Requires SCHEDULE_TENANT_IDS=dev in /var/www/dev-fundflow-saas/.env so this
+# cron never runs against live samman/testing tenants.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+* * * * * www-data cd /var/www/dev-fundflow-saas && /usr/bin/php artisan schedule:run -q >> /var/www/dev-fundflow-saas/storage/logs/scheduler.log 2>&1

@@ -31,6 +31,9 @@ Schedule::command('bank:auto-match')->everyMinute()->withoutOverlapping();
 Schedule::command('sms:auto-match-ops')->everyMinute()->withoutOverlapping();
 Schedule::command('delinquency:send-digest')->everyMinute()->withoutOverlapping();
 Schedule::command('fund:send-status-digest')->everyMinute()->withoutOverlapping();
+Schedule::command('risk:send-watchlist-digest')->everyMinute()->withoutOverlapping();
+Schedule::command('billing:meter-usage')->dailyAt('02:15')->withoutOverlapping();
+Schedule::command('savings:nudge-behind-goals')->weeklyOn(1, '09:00')->withoutOverlapping();
 Schedule::command('announcements:dispatch-scheduled')
     ->everyMinute()
     ->withoutOverlapping()

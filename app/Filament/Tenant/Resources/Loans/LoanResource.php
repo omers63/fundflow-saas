@@ -47,6 +47,10 @@ class LoanResource extends Resource
 
     protected static ?string $navigationLabel = 'Loans';
 
+    protected static ?string $modelLabel = 'Loan';
+
+    protected static ?string $pluralModelLabel = 'Loans';
+
     protected static ?int $navigationSort = 1;
 
     /**

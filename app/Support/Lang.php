@@ -12,7 +12,8 @@ use Illuminate\Support\Str;
 final class Lang
 {
     /**
-     * Title-case UI labels so each word starts with an uppercase letter (e.g. "member name" → "Member Name").
+     * Title-case Latin UI labels. Leave Arabic (and other non-Latin) copy unchanged —
+     * Str::title() is for English display polish and must not rewrite translated text.
      */
     public static function formatUiLabel(string $label): string
     {
@@ -22,7 +23,61 @@ final class Lang
             return $label;
         }
 
+        if (preg_match('/\p{Arabic}|\p{Hebrew}|\p{Cyrillic}|\p{Han}/u', $label) === 1) {
+            return $label;
+        }
+
+        // Keep Latin acronyms / machine tokens (HTTP, URL, CSV, PHP-FPM, …).
+        if (preg_match('/^[A-Z0-9]+(?:[.\-][A-Z0-9]+)*$/', $label) === 1) {
+            return $label;
+        }
+
         return Str::title($label);
+    }
+
+    /**
+     * Translate a UI string, trying common casing variants used across Filament
+     * (get_model_label → "loan", navigationLabel → "Loans", headline → "Loan").
+     *
+     * @param  array<string, string|int|float>  $replace
+     */
+    public static function translateUi(string $key, array $replace = []): string
+    {
+        $key = trim($key);
+
+        if ($key === '') {
+            return '';
+        }
+
+        foreach (self::translationCandidates($key) as $candidate) {
+            $translated = __($candidate, $replace);
+
+            if ($translated !== $candidate) {
+                return self::formatUiLabel($translated);
+            }
+        }
+
+        return self::formatUiLabel($key);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function translationCandidates(string $key): array
+    {
+        $candidates = [
+            $key,
+            Str::ucfirst($key),
+            Str::title($key),
+            Str::headline($key),
+            Str::lower($key),
+        ];
+
+        if (str_contains($key, '_')) {
+            $candidates[] = Str::headline(str_replace('_', ' ', $key));
+        }
+
+        return array_values(array_unique(array_filter($candidates, fn(string $value): bool => $value !== '')));
     }
 
     /**
@@ -36,7 +91,7 @@ final class Lang
             return '';
         }
 
-        return self::formatUiLabel(__($key, $replace));
+        return self::translateUi($key, $replace);
     }
 
     /**
@@ -86,7 +141,7 @@ final class Lang
         $out = [];
 
         foreach ($options as $key => $value) {
-            $out[$key] = is_string($value) ? self::formatUiLabel(__($value)) : $value;
+            $out[$key] = is_string($value) ? self::translateUi($value) : $value;
         }
 
         return $out;

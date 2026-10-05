@@ -13,6 +13,7 @@ use App\Notifications\Tenant\FundPostingAcceptedNotification;
 use App\Notifications\Tenant\FundPostingBankClearedNotification;
 use App\Notifications\Tenant\FundPostingRejectedNotification;
 use App\Notifications\Tenant\NewFundPostingNotification;
+use App\Services\Ocr\ThreeWayDepositMatchService;
 use App\Support\AutomationScheduleSettings;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -91,7 +92,13 @@ class FundPostingService
             return $posting->fresh() ?? $posting;
         }
 
-        return $posting;
+        try {
+            app(ThreeWayDepositMatchService::class)->maybeAutoAccept($posting->fresh() ?? $posting);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return $posting->fresh() ?? $posting;
     }
 
     /**

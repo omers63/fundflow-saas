@@ -2,8 +2,8 @@
 
 | Field | Value |
 |-------|-------|
-| **Version** | 1.0 |
-| **Status** | Proposed (not started) |
+| **Version** | 1.7 |
+| **Status** | Complete for product scope (A–E + deferred finishers) — see [manual-advanced-features.md](manual-advanced-features.md) |
 | **Date** | September 2026 |
 | **Audience** | Product, operations, and developers planning next major work |
 | **Related** | [fund-flow-implementation.md](fund-flow-implementation.md) · [reconciliation-bank-sms-clearing-plan.md](reconciliation-bank-sms-clearing-plan.md) · [loan-delinquency-workflow.md](loan-delinquency-workflow.md) · [fiscal-year-end-close.md](fiscal-year-end-close.md) · [communications-platform.md](communications-platform.md) · [accounting master/member sync](../.cursor/rules/accounting-master-member-sync.mdc) |
@@ -54,11 +54,15 @@ Ordered by impact on trust, money movement, and retention.
 
 ### 1. Payment-gateway collection (Mada / Apple Pay / SADAD) with auto-posting
 
+**Status:** Done (Phase A + finisher) — Fake + Moyasar + HyperPay + SADAD adapters; `SadadSettings` registration; SADAD settlement CSV import → paid + cash post; webhook posting with cash+master mirror; member Pay now; admin Gateway payments list.
+
 **Why first:** Every inflow today depends on a member bank transfer plus admin matching of a statement or SMS line. That is the largest operational cost and a primary source of reconciliation exceptions.
 
 **Outcome:** Member pays contribution, EMI, fee, or arrears in-portal; webhook posts cash with master mirror and an auto-cleared bank evidence line; admin only handles exceptions.
 
 ### 2. Bulk disbursement files (SARIE / bank bulk-transfer export)
+
+**Status:** Done (Phase A + finisher) — `DisbursementBatch` dual-control page, Al Rajhi CSV + pain.001 stub, IBAN gate, clearance without re-ledger, SARIE/pain.002-lite ack import (`SarieAckImportService` + Import ack action).
 
 **Why:** Cash-outs, fund-outs, loan disbursements, and expense payouts are approved in-app but paid one-by-one in the bank portal.
 
@@ -66,11 +70,15 @@ Ordered by impact on trust, money movement, and retention.
 
 ### 3. Governance: annual meeting, votes, and board decisions
 
+**Status:** Done (Phase B + finisher) — Meetings/motions/votes, quorum settings, member vote portal, proxy/absentee grants (`MotionProxyGrant`), enforcement on protected `Setting::set` and large expenses/distributions, minutes publish + PDF.
+
 **Why:** Jamʿiyas need documented decisions for tier/fee changes, large expenses, and member exclusions. Nothing tracks that today.
 
 **Outcome:** Meetings, motions, member votes with quorum; settings/expense mutations above a threshold require an approved motion.
 
 ### 4. Profit / return distribution engine (extends Master Invest)
+
+**Status:** Done (Phase B) — Preview by fund-balance weight, approve/post/reverse via fund mirrors, motion gate above threshold. Fiscal close blocked while draft/approved distributions are open (`hasBlockingOpenRuns()`).
 
 **Why:** Invest in/out and returns are recorded, but returns are not distributed to members.
 
@@ -78,11 +86,15 @@ Ordered by impact on trust, money movement, and retention.
 
 ### 5. Risk scoring and early-warning (rules first, ML later)
 
+**Status:** Done (Phase C + finisher) — `MemberRiskScoreService` (explainable factors), `MlRiskScoreService` label blend + `MemberRiskOutcome`, members list Risk column/filter, loan approve risk badge + optional critical block, weekly `risk:send-watchlist-digest`.
+
 **Why:** Delinquency is mostly detected after the fact; late-payment signals already exist.
 
 **Outcome:** Per-member and guarantor risk scores on approval, list filters, and a weekly watch-list digest.
 
 ### 6. Public REST API + webhooks (Sanctum, versioned)
+
+**Status:** Done (Phase D + finisher) — Tenant-scoped hashed API tokens (Sanctum-style, no cross-tenant), `/api/v1` read + write (`payments:write`, `votes:write`, `goals:write`, `disbursements:write`), HMAC-SHA256 webhooks + delivery log UI, OpenAPI `docs/openapi-tenant-v1.yaml`.
 
 **Why:** No tenant API surface exists for BI tools or partner systems.
 
@@ -90,11 +102,15 @@ Ordered by impact on trust, money movement, and retention.
 
 ### 7. Receipt OCR and three-way match
 
+**Status:** Done (Phase C + finisher) — `ReceiptOcrDriver` + Fake + `CloudReceiptOcrDriver` (HTTP), OCR fields on `FundPosting`, three-way match (receipt + bank + SMS), auto-accept off by default (`deposit_ocr.auto_accept_enabled`).
+
 **Why:** Deposit accept still requires an admin to read attachments and match manually.
 
 **Outcome:** OCR extracts amount/IBAN/reference/date; high-confidence three-way match (receipt + SMS + statement) auto-accepts.
 
 ### 8. Member-facing savings goals and planning
+
+**Status:** Done (Phase D) — `MemberSavingsGoal` CRUD, progress from live fund balance, projection/behind-schedule, portal page + dashboard widget, loan-readiness card, weekly `savings:nudge-behind-goals`.
 
 **Why:** Portal is transactional; goals improve engagement and contribution consistency.
 
@@ -102,11 +118,15 @@ Ordered by impact on trust, money movement, and retention.
 
 ### 9. Security hardening for admins
 
+**Status:** Done (Phase E + finisher) — TOTP 2FA (enroll/confirm/challenge + optional enforce policy), WebAuthn-lite passkeys (`PasskeyService` + soft verify for tests), admin session list/revoke, member PDPL data export + closure/anonymization workflow. StepUpGuard remains for batch actions.
+
 **Why:** High-value disbursement and export actions need stronger guarantees for PDPL and ops trust.
 
 **Outcome:** TOTP/passkey 2FA, device sessions, step-up re-auth for bulk payouts; member data-export / closure requests.
 
 ### 10. Tenant-level plan & billing (SaaS side)
+
+**Status:** Done (Phase D + finisher) — `TenantFeatureGate` (plan `data.features`; hides gateway/API UI when unpaid), `TenantBillingStatus` grace → read-only (blocks pool-mirror money posts), `billing:meter-usage` nightly, central `SaasBillingService` invoice + fake self-serve checkout (`SaasBillingPage` / `SaasCheckoutController`).
 
 **Why:** Only valuable once external tenants are paying.
 
@@ -468,7 +488,7 @@ Charge tenants for the product once there is a commercial need.
 - Feature flags hide unpaid modules without breaking ledger integrity.
 - Read-only mode blocks money mutations, not login or exports.
 
-**Defer** until at least one paying external tenant exists.
+**Defer** commercial invoice PDF / self-serve upgrade until at least one paying external tenant exists. Feature gates and read-only enforcement are live.
 
 ---
 
@@ -489,7 +509,7 @@ Apply to every feature above:
 - Redesigning the tenant home dashboard product surface (separate from ops list overviews).
 - Replacing double-entry with a simplified single-ledger mode.
 - Full open-banking AISP/PISP (Lean etc.) before gateway + bulk files prove value.
-- ML risk models before rules-based scores ship and accumulate labeled outcomes.
+- ML risk models before rules-based scores ship and accumulate labeled outcomes (rules + label-blend MVP now ships; certified models remain external).
 
 ---
 
@@ -498,3 +518,8 @@ Apply to every feature above:
 | Version | Date | Notes |
 |---------|------|-------|
 | 1.0 | Sep 2026 | Initial recommendations + implementation plans |
+| 1.4 | Sep 2026 | Phase D: API/webhooks, savings goals, billing stub |
+| 1.5 | Sep 2026 | Phase E: TOTP 2FA, sessions, PDPL privacy |
+| 1.6 | Sep 2026 | Gap close + [manual-advanced-features.md](manual-advanced-features.md) |
+| 1.7 | Sep 2026 | Deferred finishers: SADAD, SARIE ack, proxy votes, cloud OCR, ML risk, passkeys, SaaS checkout, write API |
+| 1.8 | Sep 2026 | Arabic UI catalog for finishers (`lang/ar.json`) |

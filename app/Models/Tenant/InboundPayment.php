@@ -15,6 +15,8 @@ class InboundPayment extends Model
 
     public const TYPE_INVEST_RETURN = 'invest_return';
 
+    public const TYPE_GATEWAY = 'gateway';
+
     public const STATUS_PENDING = 'pending';
 
     public const STATUS_COMPLETED = 'completed';
@@ -28,6 +30,8 @@ class InboundPayment extends Model
     public const METHOD_CHECK = 'check';
 
     public const METHOD_CASH = 'cash';
+
+    public const METHOD_GATEWAY = 'gateway';
 
     public const METHOD_OTHER = 'other';
 
@@ -111,6 +115,7 @@ class InboundPayment extends Model
         return [
             self::TYPE_DEPOSIT => __('Member deposit'),
             self::TYPE_INVEST_RETURN => __('Invest return'),
+            self::TYPE_GATEWAY => __('Gateway payment'),
         ];
     }
 
@@ -136,6 +141,7 @@ class InboundPayment extends Model
             self::METHOD_WIRE => __('Wire'),
             self::METHOD_CHECK => __('Check'),
             self::METHOD_CASH => __('Cash'),
+            self::METHOD_GATEWAY => __('Payment gateway'),
             self::METHOD_OTHER => __('Other'),
         ];
     }

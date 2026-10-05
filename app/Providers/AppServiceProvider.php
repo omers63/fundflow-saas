@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\PaymentGatewayAdapter;
+use App\Contracts\ReceiptOcrDriver;
 use App\Events\DatabaseNotificationsSentNow;
 use App\Filament\Infolists\Components\TextEntry as AppTextEntry;
 use App\Filament\Support\Action as AppAction;
@@ -27,13 +29,20 @@ use App\Filament\Tenant\Support\TenantPortalActionModal;
 use App\Filament\Tenant\Support\TenantPortalViewModal;
 use App\Http\Responses\FilamentLogoutResponse;
 use App\Listeners\RecordSystemJobRunListener;
+use App\Models\Central\User as CentralUser;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Transaction;
 use App\Observers\LoanInstallmentObserver;
 use App\Observers\TransactionObserver;
+use App\Services\Gateway\GatewayAdapterResolver;
+use App\Services\Ocr\CloudReceiptOcrDriver;
+use App\Services\Ocr\FakeReceiptOcrDriver;
 use App\Session\WallClockDatabaseSessionHandler;
 use App\Support\ArabicDisplaySettings;
 use App\Support\ArabicTypography;
+use App\Support\DepositOcrSettings;
+use App\Support\DisbursementBatchPermissions;
+use App\Support\Lang;
 use Filament\Actions\Action as FilamentAction;
 use Filament\Actions\ViewAction;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse;
@@ -70,6 +79,8 @@ use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Session\SessionManager;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Lang as LangFacade;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -87,6 +98,19 @@ class AppServiceProvider extends ServiceProvider
             LogoutResponse::class,
             FilamentLogoutResponse::class,
         );
+
+        $this->app->bind(PaymentGatewayAdapter::class, function ($app): PaymentGatewayAdapter {
+            return $app->make(GatewayAdapterResolver::class)->driver();
+        });
+
+        $this->app->bind(ReceiptOcrDriver::class, function (): ReceiptOcrDriver {
+            $driver = DepositOcrSettings::driver();
+
+            return match ($driver) {
+                'cloud' => $this->app->make(CloudReceiptOcrDriver::class),
+                default => $this->app->make(FakeReceiptOcrDriver::class),
+            };
+        });
 
         $this->app->afterResolving('session', function (SessionManager $manager): void {
             $manager->extend('database', function (): WallClockDatabaseSessionHandler {
@@ -129,6 +153,38 @@ class AppServiceProvider extends ServiceProvider
             if ($notifiable instanceof Model || $notifiable instanceof Authenticatable) {
                 DatabaseNotificationsSentNow::dispatch($notifiable);
             }
+        });
+
+        Gate::define(DisbursementBatchPermissions::VIEW, fn($user): bool => (bool) ($user->is_admin ?? false));
+        Gate::define(DisbursementBatchPermissions::CREATE, fn($user): bool => (bool) ($user->is_admin ?? false));
+        Gate::define(DisbursementBatchPermissions::APPROVE, fn($user): bool => (bool) ($user->is_admin ?? false));
+
+        // Central-only super_admin bypass. Do not use Filament Shield's define_via_gate:
+        // it calls hasRole() on every user, including tenant users without Spatie roles.
+        Gate::before(function (mixed $user, string $ability): ?bool {
+            if ($user instanceof CentralUser && $user->hasRole('super_admin')) {
+                return true;
+            }
+
+            return null;
+        });
+
+        // Filament translateLabel() / get_model_label() often pass lowercase keys ("loan")
+        // while ar.json historically stores Title Case ("Loan"). Resolve casing variants.
+        LangFacade::handleMissingKeysUsing(function (string $key, array $replace, ?string $locale, bool $fallback): ?string {
+            foreach (Lang::translationCandidates($key) as $candidate) {
+                if ($candidate === $key) {
+                    continue;
+                }
+
+                $translated = LangFacade::get($candidate, $replace, $locale, $fallback);
+
+                if ($translated !== $candidate) {
+                    return $translated;
+                }
+            }
+
+            return null;
         });
 
         // ApplyMemberNotificationLocaleListener, LogNotificationDeliveryListener, and

@@ -8,6 +8,7 @@ use App\Models\Tenant\Account;
 use App\Models\Tenant\BankStatement;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\ExpenseDisbursement;
+use App\Services\Governance\MotionEnforcementGate;
 use App\Support\BusinessDay;
 use Carbon\Carbon;
 use DateTimeInterface;
@@ -37,12 +38,15 @@ final class MasterExpenseDisbursementService
         string $description,
         ?DateTimeInterface $transactedAt = null,
         ?int $createdBy = null,
+        ?int $approvedMotionId = null,
     ): ExpenseDisbursement {
         $this->assertMasterExpenseAccount($masterExpense);
 
         if ($amount <= 0) {
             throw new InvalidArgumentException(__('Amount must be greater than zero.'));
         }
+
+        app(MotionEnforcementGate::class)->assertExpenseAllowed($amount, $approvedMotionId);
 
         if ($amount > (float) $masterExpense->balance) {
             throw new InvalidArgumentException(__('Amount exceeds the available expense balance.'));

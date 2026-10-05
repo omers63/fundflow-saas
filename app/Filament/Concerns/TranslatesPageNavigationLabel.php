@@ -8,6 +8,6 @@ trait TranslatesPageNavigationLabel
 {
     public static function getNavigationLabel(): string
     {
-        return Lang::formatUiLabel(__(parent::getNavigationLabel()));
+        return Lang::translateUi(parent::getNavigationLabel());
     }
 }

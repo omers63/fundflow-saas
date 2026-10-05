@@ -1,0 +1,3 @@
+item_id,status,reference,reason
+17,accepted,ACK1,
+18,rejected,ACK2,insufficient funds

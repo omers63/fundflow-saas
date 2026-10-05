@@ -5,6 +5,7 @@
 | Document | Description |
 |----------|-------------|
 | **[fundflow-user-guide.md](fundflow-user-guide.md)** | Accounting structure, how money flows for all features, member portal ops, and admin ops — one document for end users |
+| **[manual-advanced-features.md](manual-advanced-features.md)** | Advanced features handbook: gateway, disbursement, governance, distribution, risk, OCR, API, goals, security/PDPL |
 
 ## Full manuals (unabridged by audience)
 

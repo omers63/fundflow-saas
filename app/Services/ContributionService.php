@@ -9,6 +9,7 @@ use App\Models\Tenant\Member;
 use App\Notifications\Tenant\ContributionPostedNotification;
 use App\Services\Loans\LateFeeService;
 use App\Services\Loans\LoanRepaymentService;
+use App\Services\Webhooks\WebhookDispatcher;
 use App\Support\BusinessDay;
 use App\Support\ContributionCollectionStatus;
 use App\Support\LoanSettings;
@@ -198,6 +199,17 @@ class ContributionService
 
         if (! self::postedNotificationsSuppressed()) {
             $this->notifyMemberOfPostedContribution($contribution);
+        }
+
+        try {
+            app(WebhookDispatcher::class)->dispatch('contribution.posted', [
+                'contribution_id' => $contribution->id,
+                'member_id' => $contribution->member_id,
+                'amount' => (float) $contribution->amount,
+                'period' => $contribution->period,
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
         }
     }
 

@@ -7,7 +7,10 @@ Server-side configuration templates for production.
 | File | Purpose |
 |------|---------|
 | `nginx/fundflow-saas.conf` | SaaS vhost: PHP 8.4, HTTP/2, 25 MB body, Reverb `/app/`, FastCGI timeouts |
+| `nginx/fundflow-saas-dev.conf` | Development subdomain `dev.fundflow-saas.osamman.com` → `/var/www/dev-fundflow-saas` |
 | `nginx/reverb-app-location.conf` | WebSocket location snippet only |
+| `supervisor/fundflow-dev-queue.conf` | Queue worker for the development checkout (`DB_QUEUE_TABLE=jobs_dev`) |
+| `cron/fundflow-dev-scheduler` | Scheduler for the development checkout (`SCHEDULE_TENANT_IDS=dev`) |
 | `php/99-fundflow-production.ini` | FPM memory 256 M, uploads 20 M, opcache |
 | `php/php8.4-fpm-pool-www.conf` | Pool reference (`pm.max_children=20`, recycle, slowlog) |
 
