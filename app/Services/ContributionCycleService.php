@@ -296,6 +296,16 @@ class ContributionCycleService
             return false;
         }
 
+        // The cycle tables eager-load the period's pending and posted rows, so answer from them.
+        if ($member->relationLoaded('contributions')) {
+            $periodKey = Contribution::periodDate($month, $year);
+
+            return ! $member->contributions->contains(
+                fn (Contribution $row): bool => Contribution::normalizePeriodKey($row->period) === $periodKey
+                    && $row->status === 'posted',
+            );
+        }
+
         return ! Contribution::query()
             ->where('member_id', $member->id)
             ->forPeriod($month, $year)
@@ -439,7 +449,11 @@ class ContributionCycleService
     public function postedContributionCount(int $month, int $year, ?bool $afterCycleEnd = null): int
     {
         if ($afterCycleEnd !== null) {
-            return $this->postedContributionsQueryForPeriod($month, $year, $afterCycleEnd)->count();
+            return (int) CollectionInsightsCache::remember(
+                CollectionInsightsCache::DOMAIN_CONTRIBUTIONS,
+                sprintf('posted_count:%04d-%02d:%d', $year, $month, $afterCycleEnd),
+                fn (): int => $this->postedContributionsQueryForPeriod($month, $year, $afterCycleEnd)->count(),
+            );
         }
 
         return count($this->collectedContributionIdsForPeriod($month, $year));
@@ -751,11 +765,13 @@ class ContributionCycleService
             );
         }
 
-        $contribution ??= Contribution::query()
-            ->where('member_id', $member->id)
-            ->forPeriod($month, $year)
-            ->where('status', 'pending')
-            ->first();
+        if ($contribution === null && ! $member->relationLoaded('contributions')) {
+            $contribution = Contribution::query()
+                ->where('member_id', $member->id)
+                ->forPeriod($month, $year)
+                ->where('status', 'pending')
+                ->first();
+        }
 
         if ($contribution !== null) {
             if ($syncLateFees) {

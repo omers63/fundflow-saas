@@ -2,6 +2,7 @@
 
 namespace App\Models\Tenant;
 
+use App\Support\LegacyImportedLoan;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,6 +10,12 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class LoanRepayment extends Model
 {
+    protected static function booted(): void
+    {
+        static::saved(static fn () => LegacyImportedLoan::flushMemo());
+        static::deleted(static fn () => LegacyImportedLoan::flushMemo());
+    }
+
     use HasFactory;
 
     protected $fillable = [

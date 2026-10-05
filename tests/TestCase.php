@@ -2,6 +2,8 @@
 
 namespace Tests;
 
+use App\Models\Tenant\Setting;
+use App\Support\LegacyImportedLoan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Tests\Concerns\InitializesTenancy;
@@ -19,6 +21,9 @@ abstract class TestCase extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        Setting::flushMemo();
+        LegacyImportedLoan::flushMemo();
     }
 
     protected function connectionsToTransact(): array

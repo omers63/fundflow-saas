@@ -28,12 +28,14 @@ use App\Filament\Tenant\Support\TenantPortalViewModal;
 use App\Http\Responses\FilamentLogoutResponse;
 use App\Listeners\RecordSystemJobRunListener;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\Setting;
 use App\Models\Tenant\Transaction;
 use App\Observers\LoanInstallmentObserver;
 use App\Observers\TransactionObserver;
 use App\Session\WallClockDatabaseSessionHandler;
 use App\Support\ArabicDisplaySettings;
 use App\Support\ArabicTypography;
+use App\Support\LegacyImportedLoan;
 use Filament\Actions\Action as FilamentAction;
 use Filament\Actions\ViewAction;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse;
@@ -67,6 +69,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Events\NotificationSent;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Session\SessionManager;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
@@ -115,6 +118,12 @@ class AppServiceProvider extends ServiceProvider
 
         LoanInstallment::observe(LoanInstallmentObserver::class);
         Transaction::observe(TransactionObserver::class);
+
+        // Long-lived queue workers must not serve settings changed by web requests.
+        Event::listen(JobProcessing::class, static function (): void {
+            Setting::flushMemo();
+            LegacyImportedLoan::flushMemo();
+        });
 
         Event::listen(CommandStarting::class, [RecordSystemJobRunListener::class, 'handleStarting']);
         Event::listen(CommandFinished::class, [RecordSystemJobRunListener::class, 'handleFinished']);

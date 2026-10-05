@@ -40,7 +40,7 @@ afterEach(function () {
     Carbon::setTestNow();
 });
 
-test('switching between past loan cycles keeps arrears layout and shows period heading', function () {
+test('switching between past loan cycles keeps the uncollected layout and shows period heading', function () {
     $cycles = app(ContributionCycleService::class);
     [$openMonth, $openYear] = $cycles->currentOpenPeriod();
     $firstPast = Carbon::create($openYear, $openMonth, 1)->subMonthNoOverflow();
@@ -53,11 +53,11 @@ test('switching between past loan cycles keeps arrears layout and shows period h
     Livewire::test(ListLoans::class)
         ->set('selectedCycle', $firstKey)
         ->assertSuccessful()
-        ->assertSet('collectionSegment', 'arrears')
+        ->assertSet('collectionSegment', 'collect')
         ->assertSee($firstLabel, false)
         ->set('selectedCycle', $secondKey)
         ->assertSuccessful()
-        ->assertSet('collectionSegment', 'arrears')
+        ->assertSet('collectionSegment', 'collect')
         ->assertSee($secondLabel, false);
 });
 
