@@ -68,7 +68,7 @@ test('legacy emi collect tab url redirects to collection segment', function () {
     $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
         ->assertSuccessful()
         ->assertSee(__('Collection'), false)
-        ->assertSee(__('To collect'), false);
+        ->assertSee(__('Uncollected'), false);
 });
 
 test('legacy overdue installments tab url maps to delinquency workspace', function () {
