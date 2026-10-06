@@ -20,6 +20,7 @@
 /storage/*.key
 /storage/pail
 /storage/tenant*/app/livewire-tmp/
+/storage/tenanttesting/
 /vendor
 /lang/vendor/filament/
 /lang/vendor/filament-panels/
