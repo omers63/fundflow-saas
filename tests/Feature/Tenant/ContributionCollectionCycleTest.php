@@ -648,7 +648,9 @@ test('dismiss pre-cutoff pending contributions reverses posted late fees from ma
     $dismissed = $this->collection->dismissPreCutoffPendingContributions($member);
 
     expect($dismissed)->toBe(1)
-        ->and(Contribution::query()->find($contributionId))->toBeNull()
+        // The row is kept as waived (reason cutoff) instead of being deleted.
+        ->and(Contribution::query()->find($contributionId)?->status)->toBe('waived')
+        ->and(Contribution::query()->find($contributionId)?->waive_reason)->toBe('cutoff')
         ->and(Contribution::query()->where('member_id', $member->id)->where('status', 'pending')->count())->toBe(0)
         ->and((float) Account::query()->where('is_master', true)->where('type', 'fees')->value('balance'))->toBe(0.0);
 });

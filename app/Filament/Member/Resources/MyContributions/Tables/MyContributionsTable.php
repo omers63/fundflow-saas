@@ -42,7 +42,7 @@ class MyContributionsTable
                         ->label(__('Status'))
                         ->options([
                             'pending' => __('Pending'),
-                            'posted' => __('Posted'),
+                            'posted' => __('Paid'),
                             'failed' => __('Failed'),
                         ]),
                     DateColumnRangeFilter::make('period', __('Contribution period')),

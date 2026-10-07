@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
@@ -58,6 +59,7 @@ class ContributionArrearsClearanceService
                 'amount_due' => $member->monthly_contribution_amount,
                 'amount_collected' => 0,
                 'status' => 'waived',
+                'waive_reason' => LateSettledArrearsTableStyling::WAIVE_REASON_ADMIN_CLEARANCE,
                 'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
                 'notes' => $waivedNote,
                 'is_late' => false,
@@ -84,6 +86,7 @@ class ContributionArrearsClearanceService
 
         $contribution->update([
             'status' => 'waived',
+            'waive_reason' => LateSettledArrearsTableStyling::WAIVE_REASON_ADMIN_CLEARANCE,
             'amount_collected' => 0,
             'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
             'notes' => trim($note),

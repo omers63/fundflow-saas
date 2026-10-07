@@ -180,7 +180,7 @@ test('collected segment includes partially paid contributions', function () {
         ->set('cycleSegment', 'collected')
         ->assertSuccessful()
         ->assertCanSeeTableRecords([$partial])
-        ->assertTableColumnFormattedStateSet('status', __('Partially paid'), $partial);
+        ->assertTableColumnFormattedStateSet('status', __('Paid (partial)'), $partial);
 
     Carbon::setTestNow();
 });

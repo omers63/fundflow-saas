@@ -8582,5 +8582,18 @@
     "No records found": "لا توجد سجلات",
     "Group": "مجموعة",
     "Group by": "تجميع حسب",
-    "No posted contributions yet": "لا مساهمات مُرحّلة بعد"
+    "No posted contributions yet": "لا مساهمات مُرحّلة بعد",
+    "Paid (partial)": "مُسدّد (جزئي)",
+    "Paid (early)": "مُسدّد (مبكراً)",
+    "Paid (guarantor)": "مُسدّد (الكفيل)",
+    "Paid (late, legacy)": "مُسدّد (متأخر، ترحيل قديم)",
+    "Settled after the deadline before migration to this system; not counted in late payment history and carries no late fee.": "سُدّد بعد الموعد النهائي قبل الترحيل إلى هذا النظام؛ لا يُحتسب في سجل التأخر ولا تترتب عليه غرامة تأخير.",
+    "Part of the amount is collected; the rest is outstanding": "تم تحصيل جزء من المبلغ والباقي مستحق",
+    "Covered from the guarantor fund": "سُدّد من صندوق الكفيل",
+    "Not enough cash on the collection attempt": "الرصيد النقدي غير كافٍ عند محاولة التحصيل",
+    "Before arrears cutoff; not collected": "قبل تاريخ إيقاف المتأخرات؛ لم يُحصَّل",
+    "Cleared by an administrator; no cash movement": "أُسقط بواسطة المسؤول؛ دون حركة نقدية",
+    "Small balance written off under the waiver threshold": "رصيد صغير شُطب ضمن حد الإعفاء",
+    "Paid in advance; this cycle was skipped": "سُدّد مقدماً؛ تم تخطي هذه الدورة",
+    "Waived at fiscal close": "أُعفي عند الإقفال المالي"
 }

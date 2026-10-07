@@ -111,6 +111,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Payment status badges with their own colour (Paid (guarantor), Paid (late, legacy)).
+        \Filament\Support\Facades\FilamentColor::register([
+            'violet' => \Filament\Support\Colors\Color::Violet,
+            'orange' => \Filament\Support\Colors\Color::Orange,
+        ]);
+
         Blade::anonymousComponentPath(
             resource_path('views/components/member-portal'),
             'member',

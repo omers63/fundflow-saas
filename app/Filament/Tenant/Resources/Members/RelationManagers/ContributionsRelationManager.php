@@ -73,7 +73,7 @@ class ContributionsRelationManager extends RelationManager
                     SelectFilter::make('status')
                         ->options([
                             'pending' => __('Pending'),
-                            'posted' => __('Posted'),
+                            'posted' => __('Paid'),
                             'failed' => __('Failed'),
                         ]),
                     DateColumnRangeFilter::make('period', 'Contribution period'),

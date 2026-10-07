@@ -69,7 +69,7 @@ class ContributionsTable
                     SelectFilter::make('status')
                         ->options([
                             'pending' => __('Pending'),
-                            'posted' => __('Posted'),
+                            'posted' => __('Paid'),
                             'failed' => __('Failed'),
                             'waived' => __('Waived'),
                         ]),
