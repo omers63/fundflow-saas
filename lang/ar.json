@@ -8608,5 +8608,7 @@
     "Collected :collected is above the EMI amount :amount": "المحصّل :collected أعلى من قيمة القسط :amount",
     "(legacy-migrated payment)": "(دفعة مُرحّلة من النظام القديم)",
     "Settled as part of a full early settlement of the loan": "سُدّد ضمن سداد مبكر كامل للقرض",
-    "Settled as part of a partial early settlement of the loan": "سُدّد ضمن سداد مبكر جزئي للقرض"
+    "Settled as part of a partial early settlement of the loan": "سُدّد ضمن سداد مبكر جزئي للقرض",
+    "The whole loan was settled ahead of schedule": "سُدّد القرض بالكامل قبل الموعد المحدد",
+    ":count EMI settled ahead of schedule in a partial early settlement|:count EMIs settled ahead of schedule in a partial early settlement": "سُدّد :count قسط قبل الموعد ضمن سداد مبكر جزئي|سُدّدت :count أقساط قبل الموعد ضمن سداد مبكر جزئي"
 }

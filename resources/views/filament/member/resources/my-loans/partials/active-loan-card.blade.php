@@ -17,6 +17,9 @@
     @if ($collapsible)
         <x-slot:summary>
             <x-member::chip :variant="$loan['status_variant'] ?? 'gray'">{{ $loan['status_label'] }}</x-member::chip>
+            @if (! empty($loan['early_settlement']))
+                <x-member::chip variant="blue" :title="$loan['early_settlement']['hint']">{{ $loan['early_settlement']['label'] }}</x-member::chip>
+            @endif
             @if (filled($loan['meta'] ?? null))
                 <span class="ff-member-dashboard-meta">{{ $loan['meta'] }}</span>
             @endif
@@ -39,6 +42,9 @@
                 <x-member::amount :value="$loan['outstanding']" :currency="$currency" class="text-xl font-bold" />
                 @unless ($collapsible)
                     <x-member::chip :variant="$loan['status_variant'] ?? 'green'">{{ $loan['status_label'] }}</x-member::chip>
+                    @if (! empty($loan['early_settlement']))
+                        <x-member::chip variant="blue" :title="$loan['early_settlement']['hint']">{{ $loan['early_settlement']['label'] }}</x-member::chip>
+                    @endif
                 @endunless
             </div>
             <p class="ff-member-loan-card__meta-line ff-member-dashboard-meta">{{ $loan['installments_label'] }}</p>

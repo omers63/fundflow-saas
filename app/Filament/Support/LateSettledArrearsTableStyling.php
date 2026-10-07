@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Support;
 
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Models\Tenant\Setting;
 use App\Services\AccountingService;
@@ -382,6 +383,31 @@ final class LateSettledArrearsTableStyling
         }
 
         return $flags;
+    }
+
+    /**
+     * Loan-level early settlement highlight for loan lists and cards: full when the loan was settled early,
+     * partial when some EMIs were settled ahead of schedule (roll-up or skipped cycles) and the loan carried on.
+     *
+     * @return array{code: string, label: string, color: string, hint: string}|null
+     */
+    public static function loanEarlySettlementChip(Loan $loan): ?array
+    {
+        $installments = $loan->installments();
+
+        if ($loan->status === 'early_settled' || (clone $installments)->where('settled_via', 'early_full')->exists()) {
+            return ['code' => 'early_settlement_full', 'label' => __('Early settlement (full)'), 'color' => 'info', 'hint' => __('The whole loan was settled ahead of schedule')];
+        }
+
+        $early = (clone $installments)
+            ->where(fn ($query) => $query->where('settled_via', 'early_partial')->orWhere('waive_reason', self::WAIVE_REASON_EARLY_SKIP))
+            ->count();
+
+        if ($early > 0) {
+            return ['code' => 'early_settlement_partial', 'label' => __('Early settlement (partial)'), 'color' => 'info', 'hint' => trans_choice(':count EMI settled ahead of schedule in a partial early settlement|:count EMIs settled ahead of schedule in a partial early settlement', $early, ['count' => $early])];
+        }
+
+        return null;
     }
 
     /**

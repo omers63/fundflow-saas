@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Support;
 
 use App\Models\Tenant\Contribution;
+use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use Filament\Tables\Columns\TextColumn;
 
@@ -14,6 +15,19 @@ use Filament\Tables\Columns\TextColumn;
  */
 final class PaymentChipsColumn
 {
+    /** Loan-level chip: Early settlement (full / partial). */
+    public static function forLoan(): TextColumn
+    {
+        return TextColumn::make('early_settlement')
+            ->label(__('Early settlement'))
+            ->badge()
+            ->state(fn (Loan $record): ?string => LateSettledArrearsTableStyling::loanEarlySettlementChip($record)['label'] ?? null)
+            ->color('info')
+            ->tooltip(fn (Loan $record): ?string => LateSettledArrearsTableStyling::loanEarlySettlementChip($record)['hint'] ?? null)
+            ->placeholder('—')
+            ->toggleable();
+    }
+
     public static function make(): TextColumn
     {
         return TextColumn::make('payment_chips')

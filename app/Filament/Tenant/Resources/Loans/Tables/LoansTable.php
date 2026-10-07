@@ -67,6 +67,7 @@ class LoansTable
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => Loan::statusOptions()[$state] ?? $state)
                     ->color(fn (string $state): string => Loan::statusColor($state)),
+                \App\Filament\Support\PaymentChipsColumn::forLoan(),
                 TextColumn::make('applied_at')
                     ->dateTime()
                     ->sortable(),
