@@ -24,6 +24,8 @@
         'rateNote' => __('C = contributions collected ÷ expected · R = repayments paid ÷ instalments due in that cycle (≥90% green · 50–89% amber · <50% red) · D = loan amount disbursed that cycle (red). Cards follow the 12 cycles in view.'),
         'curveHint' => __('Smooth curves through the tops of the contribution, repayment and disbursement bars'),
         'paidOn' => __('Paid on'),
+        'expected' => __('Expected'),
+        'due' => __('Due'),
         'disbursedOn' => __('Disbursed on'),
         'currency' => $currency ?? '',
     ];
@@ -71,7 +73,7 @@
   }
   function pct(a, b) { return b > 0 ? Math.round((a / b) * 100) + '%' : '—'; }
   return {
-    rows: rows, t: t, start: Math.max(0, rows.length - PER), viewW: 0, H: H,
+    rows: rows, t: t, start: Math.max(0, rows.length - PER), viewW: 0, H: H, sel: null, scrollX: 0,
     showCurve: (function () { try { return localStorage.getItem('ff-member-chart-curve') !== '0'; } catch (e) { return true; } })(),
     init: function () {
       var self = this, el = this.$refs.scroller;
@@ -96,11 +98,39 @@
     onScroll: function () {
       if (this.monthW <= 0) return;
       var el = this.$refs.scroller;
+      this.scrollX = el.scrollLeft;
       this.start = Math.min(Math.max(0, this.rows.length - PER), Math.max(0, Math.round(el.scrollLeft / this.monthW)));
     },
     goTo: function (i) {
       var c = Math.min(Math.max(0, this.rows.length - PER), Math.max(0, i));
       this.$refs.scroller.scrollTo({ left: c * this.monthW, behavior: 'smooth' });
+    },
+    // Touch screens have no hover, so SVG <title> tooltips never show: tapping a cycle column opens this pop-up instead.
+    pick: function (e) {
+      var n = e.target && e.target.closest ? e.target.closest('[data-i]') : null;
+      if (!n) { this.sel = null; return; }
+      var i = +n.getAttribute('data-i');
+      this.sel = this.sel === i ? null : i;
+    },
+    get tipRow() { return this.sel === null ? null : this.rows[this.sel] || null; },
+    get tipStyle() {
+      var w = 210, x = (this.sel + 0.5) * this.monthW - this.scrollX - w / 2;
+      x = Math.max(0, Math.min(x, Math.max(0, this.viewW - w)));
+      return 'left:' + x + 'px;top:4px;width:' + w + 'px';
+    },
+    tipHtml: function () {
+      var r = this.tipRow; if (!r) return '';
+      var esc = function (v) { return String(v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+      var line = function (color, label, amount, list, verb) {
+        var dl = dates(list);
+        return '<div class="mt-1 flex items-start gap-1.5"><span class="mt-1 h-2 w-2 shrink-0 rounded-sm" style="background:' + color + '"></span><div><div>' + esc(label) + ': <span class="font-mono font-semibold">' + fmt(amount) + '</span></div>' +
+          (amount > 0 && dl ? '<div class="text-[10px] text-gray-500">' + esc(verb) + ' ' + esc(dl) + '</div>' : '') + '</div></div>';
+      };
+      return '<div class="font-semibold">' + esc(r.label) + '</div>' +
+        line(COL.c, t.contributions, r.contributionsPosted, r.contributionsPostedOn || [], t.paidOn) +
+        line(COL.r, t.repayments, r.repaymentsPaid, (r.repaymentsPaidOn || []).map(function (x) { return x.on; }), t.paidOn) +
+        line(COL.d, t.disbursed, r.disbursed || 0, (r.disbursedOn || []).map(function (x) { return x.on; }), t.disbursedOn) +
+        '<div class="mt-1 border-t border-gray-200 pt-1 text-[10px] text-gray-500">' + esc(t.expected) + ' ' + fmt(r.contributionsExpected) + ' · ' + esc(t.due) + ' ' + fmt(r.repaymentsDue) + '</div>';
     },
     toggleCurve: function () {
       this.showCurve = !this.showCurve;
@@ -135,6 +165,10 @@
         cs.push([cx, y(r.contributionsPosted)]); rs.push([cx, y(r.repaymentsPaid)]); ds.push([cx, y(r.disbursed || 0)]);
         ce.push([cx, y(r.contributionsExpected)]); rd.push([cx, y(r.repaymentsDue)]);
         out.push('<text x="' + cx + '" y="' + (H - 7) + '" text-anchor="middle" font-size="9" fill="currentColor" fill-opacity="0.7">' + r.label + '</text>');
+      });
+      // Full-height transparent column per cycle = the tap target (and a light highlight for the selected one).
+      this.rows.forEach(function (r, i) {
+        out.push('<rect data-i="' + i + '" x="' + (i * mw) + '" y="0" width="' + mw + '" height="' + (H - XH + 14) + '" fill="' + (self.sel === i ? 'currentColor' : 'transparent') + '" fill-opacity="0.07" style="cursor:pointer"/>');
       });
       var step = function (p) { var d = ''; p.forEach(function (q, i) { d += (i === 0 ? 'M' : 'H' + q[0] + 'V') + (i === 0 ? q[0] + ',' + q[1] : q[1]); }); return d; };
       out.push('<path d="' + step(ce) + '" fill="none" stroke="' + COL.c + '" stroke-width="1.5" stroke-dasharray="4 3"/>');
@@ -197,8 +231,11 @@ JS;
                         <span class="absolute right-1 -translate-y-1/2 text-[9px] tabular-nums" :style="'top:' + tickTop(tk) + 'px'" x-text="compact(tk)"></span>
                     </template>
                 </div>
-                <div x-ref="scroller" @scroll.passive="onScroll()" class="min-w-0 flex-1 overflow-x-auto text-gray-700 dark:text-gray-300">
-                    <div :style="'width:' + innerW + 'px'" x-html="svg()"></div>
+                <div class="relative min-w-0 flex-1" @click.outside="sel = null">
+                    <div x-ref="scroller" @scroll.passive="onScroll()" @click="pick($event)" class="overflow-x-auto text-gray-700 dark:text-gray-300" style="touch-action:pan-x pan-y">
+                        <div :style="'width:' + innerW + 'px'" x-html="svg()"></div>
+                    </div>
+                    <div x-show="tipRow" x-cloak :style="tipStyle" class="pointer-events-none absolute z-10 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-[11px] text-gray-800 shadow-lg dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" x-html="tipHtml()"></div>
                 </div>
             </div>
             <ul class="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-12">
