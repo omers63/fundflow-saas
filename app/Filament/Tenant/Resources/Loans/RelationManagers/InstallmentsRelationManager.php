@@ -63,6 +63,7 @@ class InstallmentsRelationManager extends RelationManager
                     ->tooltip(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
                         ? LateSettledArrearsTableStyling::eligibilityHint()
                         : null),
+                \App\Filament\Support\PaymentChipsColumn::make(),
                 TextColumn::make('paid_at')
                     ->dateTime()
                     ->placeholder(__('—')),

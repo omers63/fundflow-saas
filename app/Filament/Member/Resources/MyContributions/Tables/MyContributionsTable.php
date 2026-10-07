@@ -32,6 +32,7 @@ class MyContributionsTable
                         ->tooltip(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionWasSettledLate($record)
                             ? LateSettledArrearsTableStyling::eligibilityHint()
                             : null),
+                    \App\Filament\Support\PaymentChipsColumn::make(),
                     TextColumn::make('posted_at')
                         ->dateTime()
                         ->placeholder(__('Not posted'))

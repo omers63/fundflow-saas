@@ -281,6 +281,7 @@ final class ContributionCycleTables
                     ->tooltip(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionWasSettledLate($record)
                         ? LateSettledArrearsTableStyling::eligibilityHint()
                         : null),
+                \App\Filament\Support\PaymentChipsColumn::make(),
                 TextColumn::make('posted_at')->dateTime()->placeholder(__('—'))->sortable(),
             ])
             ->recordClasses(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionRecordClasses($record))

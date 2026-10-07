@@ -26,6 +26,7 @@ class LoanInstallment extends Model
         'paid_at',
         'waived_at',
         'waive_reason',
+        'settled_via',
         'status',
         'is_late',
         'late_fee_amount',

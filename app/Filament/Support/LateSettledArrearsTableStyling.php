@@ -6,7 +6,10 @@ namespace App\Filament\Support;
 
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\LoanInstallment;
+use App\Models\Tenant\Setting;
+use App\Services\AccountingService;
 use App\Services\ContributionCycleService;
+use App\Support\ContributionAmountSettings;
 use App\Support\ContributionCollectionStatus;
 use App\Support\InstallmentCollectionStatus;
 use App\Support\LegacyImportedContribution;
@@ -275,6 +278,152 @@ final class LateSettledArrearsTableStyling
     public static function installmentRecordClasses(LoanInstallment $installment): ?string
     {
         return self::installmentWasSettledLate($installment) ? self::LATE_ROW_CLASSES : null;
+    }
+
+    /** @var array<int, array<string, int>> loan id => cycle key => paid EMI count */
+    private static array $paidInCycleMemo = [];
+
+    public static function flushPaymentFlagMemo(): void
+    {
+        self::$paidInCycleMemo = [];
+    }
+
+    /** Contribution cycle a date falls in ("YYYY-MM"): cycle runs from the start day to the day before the next start day. */
+    public static function cycleKeyOf(\Carbon\CarbonInterface $at): string
+    {
+        $startDay = Setting::contributionCycleStartDay();
+
+        return $at->copy()->startOfDay()->subDays($startDay - 1)->format('Y-m');
+    }
+
+    private static function paidInstallmentsInCycle(LoanInstallment $installment): int
+    {
+        if ($installment->status !== 'paid' || $installment->paid_at === null) {
+            return 0;
+        }
+
+        $loanId = (int) $installment->loan_id;
+
+        if (! isset(self::$paidInCycleMemo[$loanId])) {
+            $counts = [];
+
+            LoanInstallment::query()
+                ->where('loan_id', $loanId)
+                ->where('status', 'paid')
+                ->whereNotNull('paid_at')
+                ->pluck('paid_at')
+                ->each(function ($paidAt) use (&$counts): void {
+                    $key = self::cycleKeyOf(\Illuminate\Support\Carbon::parse($paidAt));
+                    $counts[$key] = ($counts[$key] ?? 0) + 1;
+                });
+
+            self::$paidInCycleMemo[$loanId] = $counts;
+        }
+
+        return self::$paidInCycleMemo[$loanId][self::cycleKeyOf($installment->paid_at)] ?? 0;
+    }
+
+    private static function money(float $n): string
+    {
+        return number_format($n, 2, '.', ',');
+    }
+
+    /**
+     * Highlights for a contribution: above the configured maximum amount.
+     *
+     * @return array<int, array{code: string, label: string, color: string, hint: string}>
+     */
+    public static function contributionFlags(Contribution $contribution): array
+    {
+        $max = (float) ContributionAmountSettings::maxAmount();
+        $amount = (float) $contribution->amount;
+
+        if ($max > 0.00001 && $amount > $max + 0.005) {
+            $hint = __('Contribution :amount is above the maximum :max', ['amount' => self::money($amount), 'max' => self::money($max)])
+                .(LegacyImportedContribution::isContribution($contribution) ? ' '.__('(legacy-migrated payment)') : '');
+
+            return [['code' => 'above_limit', 'label' => __('Above limit'), 'color' => 'warning', 'hint' => $hint]];
+        }
+
+        return [];
+    }
+
+    /**
+     * Highlights for an installment: above limit (several EMIs in one cycle, over-collected) and early settlement.
+     *
+     * @return array<int, array{code: string, label: string, color: string, hint: string}>
+     */
+    public static function installmentFlags(LoanInstallment $installment): array
+    {
+        $flags = [];
+        $reasons = [];
+        $count = self::paidInstallmentsInCycle($installment);
+
+        if ($count > 1) {
+            $reasons[] = __(':count EMIs of this loan were paid in the same cycle', ['count' => $count]);
+        }
+
+        $amount = (float) $installment->amount;
+        $collected = (float) ($installment->amount_collected ?? 0);
+
+        if ($installment->status === 'paid' && $amount > 0.00001 && $collected > $amount + 0.01) {
+            $reasons[] = __('Collected :collected is above the EMI amount :amount', ['collected' => self::money($collected), 'amount' => self::money($amount)]);
+        }
+
+        if ($reasons !== []) {
+            $legacy = LegacyImportedLoan::isLoan((int) $installment->loan_id) ? ' '.__('(legacy-migrated payment)') : '';
+            $flags[] = ['code' => 'above_limit', 'label' => __('Above limit'), 'color' => 'warning', 'hint' => implode('; ', $reasons).$legacy];
+        }
+
+        if ($installment->settled_via === 'early_full') {
+            $flags[] = ['code' => 'early_settlement_full', 'label' => __('Early settlement (full)'), 'color' => 'info', 'hint' => __('Settled as part of a full early settlement of the loan')];
+        } elseif ($installment->settled_via === 'early_partial' || $installment->waive_reason === self::WAIVE_REASON_EARLY_SKIP) {
+            $flags[] = ['code' => 'early_settlement_partial', 'label' => __('Early settlement (partial)'), 'color' => 'info', 'hint' => __('Settled as part of a partial early settlement of the loan')];
+        }
+
+        return $flags;
+    }
+
+    /**
+     * Late-fee chip (separate from the main status): due, part paid, paid; null when the row has no fee.
+     *
+     * @return array{code: string, label: string, color: string, hint: string}|null
+     */
+    public static function lateFeeChip(Contribution|LoanInstallment $row): ?array
+    {
+        $assessed = (float) ($row->late_fee_amount ?? 0);
+
+        if ($assessed <= 0.00001) {
+            return null;
+        }
+
+        $accounting = app(AccountingService::class);
+        $collected = $row instanceof Contribution
+            ? (float) $accounting->contributionLateFeeCollectedAmount($row)
+            : (float) $accounting->installmentLateFeeCollectedAmount($row);
+
+        if ($collected <= 0.00001) {
+            return ['code' => 'assessed', 'label' => __('Late fee due'), 'color' => 'warning', 'hint' => __('Late fee')];
+        }
+
+        if ($collected + 0.00001 < $assessed) {
+            return ['code' => 'part_collected', 'label' => __('Late fee part paid'), 'color' => 'warning', 'hint' => __('Late fee')];
+        }
+
+        return ['code' => 'collected', 'label' => __('Late fee paid'), 'color' => 'success', 'hint' => __('Late fee')];
+    }
+
+    /**
+     * Every extra chip for a row: late fee, above limit, early settlement.
+     *
+     * @return array<int, array{code: string, label: string, color: string, hint: string}>
+     */
+    public static function paymentChips(Contribution|LoanInstallment $row): array
+    {
+        $fee = self::lateFeeChip($row);
+        $flags = $row instanceof Contribution ? self::contributionFlags($row) : self::installmentFlags($row);
+
+        return array_values(array_filter([$fee, ...$flags]));
     }
 
     /**

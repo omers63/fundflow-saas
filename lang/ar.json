@@ -8595,5 +8595,18 @@
     "Cleared by an administrator; no cash movement": "أُسقط بواسطة المسؤول؛ دون حركة نقدية",
     "Small balance written off under the waiver threshold": "رصيد صغير شُطب ضمن حد الإعفاء",
     "Paid in advance; this cycle was skipped": "سُدّد مقدماً؛ تم تخطي هذه الدورة",
-    "Waived at fiscal close": "أُعفي عند الإقفال المالي"
+    "Waived at fiscal close": "أُعفي عند الإقفال المالي",
+    "Flags": "التنبيهات",
+    "Above limit": "فوق الحد المسموح",
+    "Early settlement (full)": "سداد مبكر (كامل)",
+    "Early settlement (partial)": "سداد مبكر (جزئي)",
+    "Late fee due": "غرامة تأخير مستحقة",
+    "Late fee part paid": "غرامة تأخير مسدّدة جزئياً",
+    "Late fee paid": "غرامة تأخير مسدّدة",
+    "Contribution :amount is above the maximum :max": "المساهمة :amount أعلى من الحد الأقصى :max",
+    ":count EMIs of this loan were paid in the same cycle": "تم سداد :count أقساط من هذا القرض في الدورة نفسها",
+    "Collected :collected is above the EMI amount :amount": "المحصّل :collected أعلى من قيمة القسط :amount",
+    "(legacy-migrated payment)": "(دفعة مُرحّلة من النظام القديم)",
+    "Settled as part of a full early settlement of the loan": "سُدّد ضمن سداد مبكر كامل للقرض",
+    "Settled as part of a partial early settlement of the loan": "سُدّد ضمن سداد مبكر جزئي للقرض"
 }

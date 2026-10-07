@@ -63,6 +63,7 @@ class ContributionsRelationManager extends RelationManager
                         ->tooltip(fn (Contribution $record): ?string => LateSettledArrearsTableStyling::contributionWasSettledLate($record)
                             ? LateSettledArrearsTableStyling::eligibilityHint()
                             : null),
+                    \App\Filament\Support\PaymentChipsColumn::make(),
                     TextColumn::make('posted_at')
                         ->label(__('Posted'))
                         ->dateTime()

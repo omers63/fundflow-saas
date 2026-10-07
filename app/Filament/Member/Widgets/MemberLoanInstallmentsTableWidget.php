@@ -62,6 +62,7 @@ class MemberLoanInstallmentsTableWidget extends TableWidget
                     ->badge()
                     ->formatStateUsing(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusLabel($record))
                     ->color(fn (string $state, LoanInstallment $record): string => LateSettledArrearsTableStyling::installmentStatusColor($record)),
+                \App\Filament\Support\PaymentChipsColumn::make(),
                 TextColumn::make('paid_at')
                     ->label(__('Collected'))
                     ->dateTime()
