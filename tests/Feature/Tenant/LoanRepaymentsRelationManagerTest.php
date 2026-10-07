@@ -268,7 +268,7 @@ test('guarantor paid installment repayment logs use guarantor paid type', functi
     $repayment = app(LoanRepaymentLogService::class)->recordInstallmentRepayment($installment->fresh());
 
     expect($repayment->notes)->toBe(LoanRepaymentNote::installment(20, true))
-        ->and(LoanRepaymentNote::label($repayment->notes))->toBe(__('Guarantor paid'))
+        ->and(LoanRepaymentNote::label($repayment->notes))->toBe(__('Paid (guarantor)'))
         ->and(LoanRepaymentNote::badgeColor($repayment->notes))->toBe('warning');
 });
 
@@ -296,5 +296,5 @@ test('sync guarantor repayment notes upgrades legacy emi notes', function () {
 
     expect($updated)->toBe(1)
         ->and($loan->fresh()->repayments()->first()->notes)->toBe(LoanRepaymentNote::installment(20, true))
-        ->and(LoanRepaymentNote::label($loan->fresh()->repayments()->first()->notes))->toBe(__('Guarantor paid'));
+        ->and(LoanRepaymentNote::label($loan->fresh()->repayments()->first()->notes))->toBe(__('Paid (guarantor)'));
 });

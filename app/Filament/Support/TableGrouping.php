@@ -258,8 +258,9 @@ final class TableGrouping
                 ->titlePrefixedWithLabel(false)
                 ->getTitleFromRecordUsing(fn (Contribution $record): string => match ($record->status) {
                     'pending' => __('Pending'),
-                    'posted' => __('Posted'),
+                    'posted' => __('Paid'),
                     'failed' => __('Failed'),
+                    'waived' => __('Waived'),
                     default => ucfirst((string) $record->status),
                 }),
             Group::make('period')

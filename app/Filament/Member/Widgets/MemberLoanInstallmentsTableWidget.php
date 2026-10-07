@@ -74,6 +74,7 @@ class MemberLoanInstallmentsTableWidget extends TableWidget
                         'pending' => __('Pending'),
                         'paid' => __('Paid'),
                         'overdue' => __('Overdue'),
+                        'waived' => __('Waived'),
                     ]),
                 DateColumnRangeFilter::make('due_date', __('Due date')),
             ])

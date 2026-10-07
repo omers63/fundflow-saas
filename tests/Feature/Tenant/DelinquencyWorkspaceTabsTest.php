@@ -240,7 +240,7 @@ it('includes completed loans with guarantor-paid installments on the guarantor t
         ->assertCanSeeTableRecords([$loan])
         ->assertSee('Completed Guarantor Borrower', false)
         ->assertSee('#'.$loan->id, false)
-        ->assertSee(__('Guarantor paid'), false);
+        ->assertSee(__('Paid (guarantor)'), false);
 });
 
 it('shows installment-based late count on the guarantor tab instead of the grace counter', function () {

@@ -68,7 +68,7 @@ class InstallmentsRelationManager extends RelationManager
                     ->dateTime()
                     ->placeholder(__('—')),
                 TextColumn::make('paid_by_guarantor')
-                    ->label(__('Guarantor paid'))
+                    ->label(__('Paid (guarantor)'))
                     ->formatStateUsing(fn (bool $state): string => $state ? __('Yes') : __('No'))
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
@@ -78,6 +78,7 @@ class InstallmentsRelationManager extends RelationManager
                         'pending' => __('Pending'),
                         'paid' => __('Paid'),
                         'overdue' => __('Overdue'),
+                        'waived' => __('Waived'),
                     ]),
                 DateColumnRangeFilter::make('due_date', __('Due date')),
             ])

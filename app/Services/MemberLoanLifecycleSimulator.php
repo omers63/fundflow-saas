@@ -1149,7 +1149,7 @@ final class MemberLoanLifecycleSimulator
                 'contribution_due' => __('Contribution due'),
                 'contribution_paid' => __('Contribution paid'),
                 'paid' => __('Regular payment'),
-                'skipped' => __('Skipped'),
+                'skipped' => __('Paid (early)'),
                 'dropped' => __('Removed by roll-up'),
                 default => null,
             },

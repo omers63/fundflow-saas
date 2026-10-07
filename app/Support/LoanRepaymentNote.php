@@ -64,7 +64,7 @@ final class LoanRepaymentNote
         }
 
         if (self::isGuarantorPaid($notes)) {
-            return __('Guarantor paid');
+            return __('Paid (guarantor)');
         }
 
         if (str_contains($notes, 'installment:')) {
