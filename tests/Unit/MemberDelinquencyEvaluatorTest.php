@@ -183,3 +183,31 @@ it('evaluateMany matches single-member evaluate results', function () {
 
     Carbon::setTestNow();
 });
+
+it('counts a pending contribution as a missed cycle but a posted, failed or waived one as settled', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+    Setting::set('delinquency', 'total_miss_lookback_months', 6);
+
+    $member = Member::factory()->create([
+        'joined_at' => Carbon::create(2026, 1, 10),
+        'monthly_contribution_amount' => 5000,
+        'status' => 'active',
+    ]);
+
+    foreach ([1 => 'posted', 2 => 'failed', 3 => 'waived', 4 => 'pending'] as $month => $status) {
+        Contribution::create([
+            'member_id' => $member->id,
+            'period' => Contribution::periodDate($month, 2026),
+            'amount' => 5000,
+            'status' => $status,
+            'payment_method' => Contribution::PAYMENT_METHOD_ADMIN,
+        ]);
+    }
+
+    $stats = app(MemberDelinquencyEvaluator::class)->evaluate($member->fresh());
+
+    // Last closed cycle is April 2026 (pending = missed); Jan–Mar are settled, so the streak is exactly one.
+    expect($stats['last_closed_month'])->toBe(4)
+        ->and($stats['trailing_consecutive'])->toBe(1)
+        ->and($stats['rolling_total'])->toBe(1);
+});
