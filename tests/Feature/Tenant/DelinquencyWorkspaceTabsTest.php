@@ -234,6 +234,12 @@ it('includes completed loans with guarantor-paid installments on the guarantor t
 
     expect(LoanDelinquencyTables::guarantorExposureQuery()->whereKey($loan->id)->exists())->toBeTrue();
 
+    // The Guarantor tab pill counts the rows the tab lists (it used to count only loans at risk, so it was hidden here).
+    app(LoanDelinquencyService::class)->forgetArrearsAggregateCaches();
+    $badges = (new DelinquencyWorkspacePage)->getTabBadges();
+    expect($badges['guarantor'])->toBeGreaterThan(0)
+        ->and($badges['guarantor'])->toBe(LoanDelinquencyTables::guarantorExposureQuery()->count());
+
     Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'guarantor'])
         ->assertSuccessful()
         ->call('loadTable')
