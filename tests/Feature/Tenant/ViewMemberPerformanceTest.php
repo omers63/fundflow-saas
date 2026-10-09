@@ -49,3 +49,32 @@ test('view member workspace shell renders inline summary without insights widget
         ->assertDontSee('ff-member-detail-shell', false)
         ->assertDontSee('ff-app-insights-kpi-strip', false);
 });
+
+test('view member page shows the contributions and repayments lifetime chart', function () {
+    $admin = User::create([
+        'name' => 'Chart Admin',
+        'email' => 'chart-view-member@test.com',
+        'password' => bcrypt('password'),
+        'email_verified_at' => now(),
+        'is_admin' => true,
+    ]);
+
+    $member = Member::create([
+        'member_number' => 'MEM-CHART',
+        'name' => 'Chart Member',
+        'email' => 'chart-member@fund.test',
+        'monthly_contribution_amount' => 500,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    Filament::setCurrentPanel('tenant');
+
+    Livewire::actingAs($admin, 'tenant')
+        ->test(ViewMember::class, ['record' => $member->getRouteKey()])
+        ->assertSuccessful()
+        // The chart's title travels inside the Alpine x-data attribute, so it is HTML-escaped there.
+        ->assertSee(e(__('Contributions & repayments — lifetime')), false);
+});

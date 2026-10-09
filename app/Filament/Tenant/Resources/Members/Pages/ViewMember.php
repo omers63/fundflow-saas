@@ -12,6 +12,7 @@ use App\Filament\Tenant\Resources\Members\MemberResource;
 use App\Filament\Tenant\Resources\Members\Schemas\MemberViewInfolist;
 use App\Models\Tenant\Member;
 use App\Services\Loans\LoanDelinquencyService;
+use App\Services\MemberLifetimeTrendService;
 use App\Services\MemberWorkspaceSummaryService;
 use App\Services\Tenant\ImpersonationService;
 use App\Support\ArabicDisplaySettings;
@@ -100,6 +101,8 @@ class ViewMember extends ViewRecord
             SchemaView::make('filament.tenant.pages.member-workspace-summary')
                 ->viewData(fn (): array => [
                     'summary' => $this->workspaceSummary(),
+                    // Contributions & repayments — lifetime chart (cycle buckets), below the workspace summary.
+                    'lifetimeRows' => app(MemberLifetimeTrendService::class)->forMember($this->record),
                 ]),
             $this->getRelationManagersContentComponent(),
         ]);
