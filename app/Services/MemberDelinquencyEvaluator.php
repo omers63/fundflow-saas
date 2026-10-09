@@ -473,8 +473,11 @@ class MemberDelinquencyEvaluator
 
         $grouped = [];
 
+        // Only settled rows (posted / failed / waived) mean the period is not a miss — the same rule as the Arrears list.
+        // A pending row is still unpaid.
         Contribution::query()
             ->whereIn('member_id', $memberIds)
+            ->whereIn('status', ['posted', 'failed', 'waived'])
             ->whereBetween('period', [$earliestLiability->toDateString(), $endOfLastClosed->toDateString()])
             ->get(['member_id', 'period'])
             ->each(function (Contribution $contribution) use (&$grouped): void {

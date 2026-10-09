@@ -343,7 +343,9 @@ class DelinquencyWorkspacePage extends Page implements HasTable
 
                 return [
                     'overdue' => LoanResource::overdueInstallmentsCount(),
-                    'guarantor' => LoanResource::guarantorExposureCount(),
+                    // The pill counts the rows the Guarantor tab lists (exposure: transferred, paid by the guarantor, or past
+                    // grace with overdue EMIs). The sidebar badge keeps the narrower at-risk count, so it stays "action needed".
+                    'guarantor' => LoanDelinquencyTables::guarantorExposureQuery()->count(),
                     'policy' => count($delinquency->policyQueueMemberIds()),
                 ];
             },

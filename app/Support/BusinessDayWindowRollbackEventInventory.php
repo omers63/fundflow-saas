@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\BankTransaction;
 use App\Models\Tenant\CashOutRequest;
@@ -133,7 +134,7 @@ final class BusinessDayWindowRollbackEventInventory
                 $this->memberName($row->member),
                 $this->money((float) ($row->amount_collected > 0 ? $row->amount_collected : $row->amount)),
                 $this->dateTime($row->posted_at ?? $row->paid_at),
-                $row->status,
+                LateSettledArrearsTableStyling::contributionStatusLabel($row),
                 $this->periodLabel($row->period),
             ))),
             $this->section('installments', __('EMIs'), $installments->map(fn (LoanInstallment $row): array => $this->event(
@@ -141,7 +142,7 @@ final class BusinessDayWindowRollbackEventInventory
                 $this->memberName($row->loan?->member),
                 $this->money((float) ($row->amount_collected > 0 ? $row->amount_collected : $row->amount)),
                 $this->dateTime($row->paid_at),
-                $row->paid_by_guarantor ? __('Guarantor paid') : $row->status,
+                LateSettledArrearsTableStyling::installmentStatusLabel($row),
                 $this->joinMeta([
                     __('EMI #:number', ['number' => $row->installment_number]),
                     __('Loan #:id', ['id' => $row->loan_id]),

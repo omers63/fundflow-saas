@@ -146,7 +146,7 @@ test('open cycle status shows partially paid for partial EMI collection', functi
 
     $status = DependentOpenCycleStatus::resolve($member->fresh(), $openMonth, $openYear);
 
-    expect($status['label'])->toBe(__('EMI: :status', ['status' => __('Partially paid')]))
+    expect($status['label'])->toBe(__('EMI: :status', ['status' => __('Paid (partial)')]))
         ->and($status['color'])->toBe('warning');
 
     Carbon::setTestNow();

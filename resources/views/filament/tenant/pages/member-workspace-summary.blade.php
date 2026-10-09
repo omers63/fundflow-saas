@@ -307,4 +307,11 @@
             </div>
         @endif
     </section>
+
+    @if (! empty($lifetimeRows ?? []))
+        @include('filament.partials.insights.member-lifetime-chart', [
+            'rows' => $lifetimeRows,
+            'currency' => $currency,
+        ])
+    @endif
 </div>

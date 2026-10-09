@@ -217,6 +217,16 @@ $currency = $currency ?? null;
             </div>
         @endif
 
+        @php
+            $lifetimeMember = \App\Support\Tenant\CurrentMember::get();
+        @endphp
+        @if ($lifetimeMember)
+            @include('filament.partials.insights.member-lifetime-chart', [
+                'rows' => app(\App\Services\MemberLifetimeTrendService::class)->forMember($lifetimeMember),
+                'currency' => $currency ?? null,
+            ])
+        @endif
+
         @if (!empty($d['recent_activity']))
             <x-member::panel :title="__('Recent transactions')" :link="$d['activity_url'] ?? null"
                 :link-label="__('All')">

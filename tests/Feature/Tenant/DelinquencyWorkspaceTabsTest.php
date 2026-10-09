@@ -234,13 +234,19 @@ it('includes completed loans with guarantor-paid installments on the guarantor t
 
     expect(LoanDelinquencyTables::guarantorExposureQuery()->whereKey($loan->id)->exists())->toBeTrue();
 
+    // The Guarantor tab pill counts the rows the tab lists (it used to count only loans at risk, so it was hidden here).
+    app(LoanDelinquencyService::class)->forgetArrearsAggregateCaches();
+    $badges = (new DelinquencyWorkspacePage)->getTabBadges();
+    expect($badges['guarantor'])->toBeGreaterThan(0)
+        ->and($badges['guarantor'])->toBe(LoanDelinquencyTables::guarantorExposureQuery()->count());
+
     Livewire::test(DelinquencyWorkspacePage::class, ['sideTab' => 'guarantor'])
         ->assertSuccessful()
         ->call('loadTable')
         ->assertCanSeeTableRecords([$loan])
         ->assertSee('Completed Guarantor Borrower', false)
         ->assertSee('#'.$loan->id, false)
-        ->assertSee(__('Guarantor paid'), false);
+        ->assertSee(__('Paid (guarantor)'), false);
 });
 
 it('shows installment-based late count on the guarantor tab instead of the grace counter', function () {

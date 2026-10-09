@@ -55,6 +55,7 @@ class InstallmentsRelationManager extends RelationManager
                     ->tooltip(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
                         ? LateSettledArrearsTableStyling::eligibilityHint()
                         : null),
+                \App\Filament\Support\PaymentChipsColumn::make(),
                 TextColumn::make('paid_at')
                     ->dateTime()
                     ->placeholder(__('—')),
@@ -65,6 +66,7 @@ class InstallmentsRelationManager extends RelationManager
                         'pending' => __('Pending'),
                         'paid' => __('Paid'),
                         'overdue' => __('Overdue'),
+                        'waived' => __('Waived'),
                     ]),
                 DateColumnRangeFilter::make('due_date', __('Due date')),
             ])

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Exceptions\InsufficientMemberCashForCollectionException;
 use App\Models\Tenant\Contribution;
 use App\Models\Tenant\Member;
@@ -953,15 +954,18 @@ class ContributionCollectionCycleService
 
                         $contribution->transactions()->delete();
 
+                        // Kept as a waived row (reason cutoff) instead of being deleted, so the history shows why
+                        // the cycle is not owed.
                         $contribution->update([
+                            'status' => 'waived',
+                            'waive_reason' => LateSettledArrearsTableStyling::WAIVE_REASON_CUTOFF,
+                            'collection_status' => ContributionCollectionStatus::PENDING,
                             'late_fee_amount' => null,
                             'late_fee_tier' => null,
                             'overdue_since' => null,
                             'is_late' => false,
                             'notes' => trim(($contribution->notes ?? '').' '.__('Dismissed: before contribution arrears cut-off.')),
                         ]);
-
-                        DB::table('contributions')->where('id', $contribution->id)->delete();
                     });
 
                     $dismissed++;

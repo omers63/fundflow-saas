@@ -209,5 +209,15 @@ $hasFundProgress = $snapshot['fund_minimum_pct'] !== null;
                     </div>
                 </div>
             @endif
+
+            @php
+                $lifetimeMember = $this->memberId ? \App\Models\Tenant\Member::query()->find($this->memberId) : null;
+            @endphp
+            @if ($lifetimeMember)
+                @include('filament.partials.insights.member-lifetime-chart', [
+                    'rows' => app(\App\Services\MemberLifetimeTrendService::class)->forMember($lifetimeMember),
+                    'currency' => $currency,
+                ])
+            @endif
     @endif
 </div>

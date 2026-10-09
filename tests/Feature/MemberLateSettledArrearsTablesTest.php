@@ -70,7 +70,7 @@ test('member contributions table shows late settled posted rows in red styling l
         ->assertCanSeeTableRecords(
             Contribution::query()->where('member_id', $this->member->id)->get()
         )
-        ->assertSee(__('Posted (late)'));
+        ->assertSee(__('Paid (late)'));
 });
 
 test('member repayments table shows paid late installments with late label', function () {

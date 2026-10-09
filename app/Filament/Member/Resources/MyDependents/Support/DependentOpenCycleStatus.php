@@ -159,7 +159,7 @@ final class DependentOpenCycleStatus
                 fn (LoanInstallment $installment): bool => LateSettledArrearsTableStyling::installmentIsPartiallyPaid($installment),
             )
         ) {
-            return ['label' => __('Partially paid'), 'color' => 'warning'];
+            return ['label' => __('Paid (partial)'), 'color' => 'warning'];
         }
 
         if ($installments->contains(fn (LoanInstallment $installment): bool => $installment->status === 'overdue')) {
@@ -175,14 +175,20 @@ final class DependentOpenCycleStatus
      */
     private static function summarizePaidInstallments(Collection $installments): array
     {
-        $late = $installments->contains(
-            fn (LoanInstallment $installment): bool => LateSettledArrearsTableStyling::installmentWasSettledLate($installment),
+        // Worst state first: late, legacy-late, guarantor; otherwise plain Paid.
+        $states = $installments->map(
+            fn (LoanInstallment $installment): array => LateSettledArrearsTableStyling::installmentPaymentState($installment),
         );
 
-        return [
-            'label' => $late ? __('Paid (late)') : __('Paid'),
-            'color' => $late ? 'danger' : 'success',
-        ];
+        foreach (['paid_late', 'paid_late_legacy', 'paid_guarantor'] as $code) {
+            $match = $states->firstWhere('code', $code);
+
+            if ($match !== null) {
+                return ['label' => $match['label'], 'color' => $match['color']];
+            }
+        }
+
+        return ['label' => __('Paid'), 'color' => 'success'];
     }
 
     /**

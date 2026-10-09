@@ -36,6 +36,7 @@ class Contribution extends Model
         'status',
         'posted_at',
         'paid_at',
+        'waive_reason',
         'payment_method',
         'reference_number',
         'notes',

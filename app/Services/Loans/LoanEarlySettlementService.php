@@ -2,6 +2,7 @@
 
 namespace App\Services\Loans;
 
+use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Filament\Support\MoneyDisplay;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
@@ -144,6 +145,7 @@ class LoanEarlySettlementService
                     $installment->update([
                         'status' => 'paid',
                         'paid_at' => $at,
+                        'settled_via' => 'early_full',
                         'amount_collected' => (float) $installment->amount,
                         'collection_status' => 'collected',
                         'is_late' => $isLate,
@@ -326,6 +328,7 @@ class LoanEarlySettlementService
         $installment->update([
             'status' => 'paid',
             'paid_at' => $at,
+            'settled_via' => 'early_partial',
             'amount_collected' => (float) $installment->amount,
             'collection_status' => 'collected',
             'is_late' => $isLate,
@@ -356,6 +359,8 @@ class LoanEarlySettlementService
         $installment->update([
             'status' => 'waived',
             'waived_at' => $at,
+            'waive_reason' => LateSettledArrearsTableStyling::WAIVE_REASON_EARLY_SKIP,
+            'settled_via' => 'early_partial',
             'amount_collected' => $principal,
             'collection_status' => 'collected',
             'is_late' => false,
@@ -381,6 +386,7 @@ class LoanEarlySettlementService
             $installment->update([
                 'status' => 'paid',
                 'paid_at' => $at,
+                'settled_via' => 'early_partial',
                 'amount_collected' => (float) $installment->amount,
                 'collection_status' => 'collected',
                 'late_fee_amount' => $lateFee > 0 ? $lateFee : 0,
@@ -388,6 +394,7 @@ class LoanEarlySettlementService
         } else {
             $installment->update([
                 'amount_collected' => $newCollected,
+                'settled_via' => 'early_partial',
                 'collection_status' => 'partially_pending',
             ]);
         }

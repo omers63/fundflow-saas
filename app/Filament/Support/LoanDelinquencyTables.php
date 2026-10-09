@@ -218,7 +218,7 @@ final class LoanDelinquencyTables
                                 }
 
                                 if ($guarantorPaid) {
-                                    return __('Guarantor paid');
+                                    return __('Paid (guarantor)');
                                 }
 
                                 return $record->late_repayment_count >= $grace
@@ -249,7 +249,7 @@ final class LoanDelinquencyTables
                             ->numeric()
                             ->tooltip(__('Installments that are overdue, marked late, or paid by the guarantor.')),
                         TextColumn::make('guarantor_paid_installments_count')
-                            ->label(__('Guarantor paid'))
+                            ->label(__('Paid (guarantor)'))
                             ->numeric(),
                         TextColumn::make('overdue_installments_count')
                             ->label(__('Overdue'))

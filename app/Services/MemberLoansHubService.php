@@ -164,6 +164,7 @@ final class MemberLoansHubService
             'status' => $loan->status,
             'status_label' => Loan::statusOptions()[$loan->status] ?? $loan->status,
             'status_variant' => in_array($loan->status, ['active', 'approved', 'partially_disbursed'], true) ? 'green' : 'amber',
+            'early_settlement' => \App\Filament\Support\LateSettledArrearsTableStyling::loanEarlySettlementChip($loan),
             'meta' => collect([
                 $loan->approved_at ? __('Approved :date', ['date' => MemberDateDisplay::format($loan->approved_at, 'M Y')]) : null,
                 $loan->loanTier?->label,

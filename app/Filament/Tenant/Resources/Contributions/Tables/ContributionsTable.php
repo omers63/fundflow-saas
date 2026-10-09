@@ -46,6 +46,7 @@ class ContributionsTable
                         ->description(fn (Contribution $record): ?string => $record->status === 'failed'
                             ? __('Insufficient member cash when posting was attempted.')
                             : null),
+                    \App\Filament\Support\PaymentChipsColumn::make(),
                     TextColumn::make('late_fee_tier')
                         ->label(__('Late tier'))
                         ->badge()
@@ -69,7 +70,7 @@ class ContributionsTable
                     SelectFilter::make('status')
                         ->options([
                             'pending' => __('Pending'),
-                            'posted' => __('Posted'),
+                            'posted' => __('Paid'),
                             'failed' => __('Failed'),
                             'waived' => __('Waived'),
                         ]),

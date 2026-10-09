@@ -313,6 +313,7 @@ final class LoanEmiCollectionTables
                         ->tooltip(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
                             ? LateSettledArrearsTableStyling::eligibilityHint()
                             : null),
+                    \App\Filament\Support\PaymentChipsColumn::make(),
                     TextColumn::make('late_fee_amount')
                         ->label(__('Late fee'))
                         ->money($currency)

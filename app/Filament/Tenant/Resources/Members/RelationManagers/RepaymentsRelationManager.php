@@ -78,6 +78,7 @@ class RepaymentsRelationManager extends RelationManager
                         ->tooltip(fn (LoanInstallment $record): ?string => LateSettledArrearsTableStyling::installmentWasSettledLate($record)
                             ? LateSettledArrearsTableStyling::eligibilityHint()
                             : null),
+                    \App\Filament\Support\PaymentChipsColumn::make(),
                     TextColumn::make('paid_at')
                         ->label(__('Paid on'))
                         ->dateTime()

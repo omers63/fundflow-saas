@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Loans;
 
+use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Models\Tenant\Loan;
 use App\Models\Tenant\LoanInstallment;
 use App\Support\BusinessDay;
@@ -94,6 +95,7 @@ final class LoanThresholdInstallmentWaiverService
                     $installment->update([
                         'status' => 'waived',
                         'waived_at' => $at,
+                        'waive_reason' => LateSettledArrearsTableStyling::WAIVE_REASON_THRESHOLD,
                         'amount_collected' => 0,
                         'is_late' => false,
                         'late_fee_amount' => 0,
