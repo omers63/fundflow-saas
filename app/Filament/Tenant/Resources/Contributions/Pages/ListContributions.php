@@ -10,6 +10,7 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Components\RenderHook;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\View;
@@ -199,6 +200,10 @@ class ListContributions extends ListRecords
         return $schema
             ->components([
                 View::make('filament.tenant.resources.contributions.partials.cycle-header'),
+                Livewire::make(ContributionInsightsWidget::class, fn (): array => [
+                    'context' => ContributionResource::resolveInsightsContext(),
+                    'selectedCycle' => $this->selectedCycle,
+                ])->key(fn (): string => 'contribution-insights-'.$this->selectedCycle.'-'.ContributionResource::resolveInsightsContext()),
                 $this->getTabsContentComponent(),
                 View::make('filament.tenant.resources.contributions.partials.workspace-subnav-wrapper'),
                 RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
@@ -216,30 +221,6 @@ class ListContributions extends ListRecords
             ...parent::getPageClasses(),
             'fi-page-collections',
             'ff-tenant-contributions-workspace',
-        ];
-    }
-
-    protected function getHeaderWidgets(): array
-    {
-        return [
-            ContributionInsightsWidget::class,
-        ];
-    }
-
-    public function getHeaderWidgetsColumns(): int|array
-    {
-        return 1;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public function getWidgetData(): array
-    {
-        return [
-            ...parent::getWidgetData(),
-            'context' => ContributionResource::resolveInsightsContext(),
-            'selectedCycle' => $this->selectedCycle,
         ];
     }
 
