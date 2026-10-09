@@ -12,6 +12,7 @@ use App\Models\Tenant\Loan;
 use App\Models\Tenant\Member;
 use App\Support\BusinessDay;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -31,10 +32,73 @@ final class MemberLifetimeTrendService
     public function forMember(Member $member): array
     {
         return Cache::remember(
-            'member_lifetime_trend_cycle2:'.tenant()?->getTenantKey().':'.$member->id.':'.BusinessDay::now()->toDateString(),
+            'member_lifetime_trend_cycle3:'.tenant()?->getTenantKey().':'.$member->id.':'.BusinessDay::now()->toDateString(),
             now()->addMinutes(5),
             fn (): array => $this->build($member),
         );
+    }
+
+    /**
+     * Which cycle a repayment belongs to: the cycle of the EMI it settles. Migrated loans have repayment rows with no
+     * installment link, so each (loan, day) total is allocated over that day's paid installments in installment order, up
+     * to each EMI's amount; any remainder stays with its own payment date. Mirrors Nest allocatePaidEvents.
+     *
+     * @param  Collection<int, LoanRepayment>  $repayments
+     * @param  Collection<int, LoanInstallment>  $installments
+     * @param  list<int>  $loansWithRepayments
+     * @return list<array{anchor: Carbon, on: Carbon, amount: float}>
+     */
+    private function allocatePaidEvents(Collection $repayments, Collection $installments, array $loansWithRepayments): array
+    {
+        $events = [];
+        $cap = static fn (LoanInstallment $i): float => (float) $i->amount_collected > 0 ? (float) $i->amount_collected : (float) $i->amount;
+        $paidAt = static fn (LoanInstallment $i): ?Carbon => $i->paid_at ?? $i->waived_at;
+        $withRepayments = array_flip($loansWithRepayments);
+
+        foreach ($installments as $i) {
+            $on = $paidAt($i);
+            if (isset($withRepayments[$i->loan_id]) || $on === null) {
+                continue;
+            }
+            $events[] = ['anchor' => Carbon::parse($i->due_date), 'on' => Carbon::parse($on), 'amount' => $cap($i)];
+        }
+
+        $groups = [];
+        foreach ($repayments as $r) {
+            $on = Carbon::parse((string) $r->paid_at);
+            $k = $r->loan_id.'|'.$on->format('Y-m-d');
+            $groups[$k] ??= ['on' => $on, 'total' => 0.0];
+            $groups[$k]['total'] += (float) $r->amount;
+        }
+
+        $byLoanDay = [];
+        foreach ($installments as $i) {
+            $on = $paidAt($i);
+            if (! isset($withRepayments[$i->loan_id]) || $on === null) {
+                continue;
+            }
+            $byLoanDay[$i->loan_id.'|'.Carbon::parse($on)->format('Y-m-d')][] = $i;
+        }
+
+        foreach ($groups as $k => $group) {
+            $remaining = $group['total'];
+            $list = collect($byLoanDay[$k] ?? [])->sortBy('installment_number');
+            foreach ($list as $inst) {
+                if ($remaining <= 0.005) {
+                    break;
+                }
+                $take = min($remaining, $cap($inst));
+                if ($take > 0.005) {
+                    $events[] = ['anchor' => Carbon::parse($inst->due_date), 'on' => $group['on'], 'amount' => $take];
+                    $remaining -= $take;
+                }
+            }
+            if ($remaining > 0.005) {
+                $events[] = ['anchor' => $group['on'], 'on' => $group['on'], 'amount' => $remaining];
+            }
+        }
+
+        return $events;
     }
 
     /**
@@ -89,16 +153,25 @@ final class MemberLifetimeTrendService
         $withRepayments = $loanIds === []
             ? []
             : LoanRepayment::query()->whereIn('loan_id', $loanIds)->distinct()->pluck('loan_id')->all();
-        $repayRows = $withRepayments === []
-            ? collect()
-            : LoanRepayment::query()->whereIn('loan_id', $withRepayments)->whereBetween('paid_at', [$start, $end])->get(['amount', 'paid_at']);
-        $paidInst = $loanIds === []
-            ? collect()
-            : LoanInstallment::query()
-                ->whereIn('loan_id', array_values(array_diff($loanIds, $withRepayments)))
-                ->where('status', 'paid')
-                ->whereBetween('paid_at', [$start, $end])
-                ->get(['amount', 'amount_collected', 'paid_at']);
+        // A repayment belongs to the cycle of the EMI it settles (due date), not the cycle the money arrived in; capped at
+        // the open cycle. Totals are unchanged, only redistributed over cycles.
+        $openKey = sprintf('%04d-%02d', $openYear, $openMonth);
+        $credited = [];
+        if ($loanIds !== []) {
+            $allRepay = $withRepayments === []
+                ? collect()
+                : LoanRepayment::query()->whereIn('loan_id', $withRepayments)->whereNotNull('paid_at')->get(['loan_id', 'amount', 'paid_at']);
+            $allPaid = LoanInstallment::query()
+                ->whereIn('loan_id', $loanIds)
+                ->where(fn ($q) => $q->where('status', 'paid')->orWhere(fn ($w) => $w->where('status', 'waived')->where('amount_collected', '>', 0)))
+                ->get(['loan_id', 'installment_number', 'due_date', 'amount', 'amount_collected', 'paid_at', 'waived_at']);
+
+            foreach ($this->allocatePaidEvents($allRepay, $allPaid, $withRepayments) as $event) {
+                [$em, $ey] = $this->cycles->cyclePeriodForDueDate($event['anchor']);
+                $key = sprintf('%04d-%02d', $ey, $em);
+                $credited[$key > $openKey ? $openKey : $key][] = $event;
+            }
+        }
         $dueInst = $loanIds === []
             ? collect()
             : LoanInstallment::query()
@@ -128,11 +201,10 @@ final class MemberLifetimeTrendService
             $periodRow = $monthContribs->first();
             $expected = $liable ? (float) ($periodRow?->amount_due ?? $periodRow?->amount ?? $monthly) : 0.0;
 
-            $repaid = (float) $repayRows->filter(fn ($r): bool => $inCycle($r->paid_at))->sum(fn ($r): float => (float) $r->amount)
-                + (float) $paidInst->filter(fn ($r): bool => $inCycle($r->paid_at))
-                    ->sum(fn ($r): float => (float) $r->amount_collected > 0 ? (float) $r->amount_collected : (float) $r->amount);
-            $repaidCount = $repayRows->filter(fn ($r): bool => $inCycle($r->paid_at))->count()
-                + $paidInst->filter(fn ($r): bool => $inCycle($r->paid_at))->count();
+            $cycleEvents = collect($credited[$key] ?? []);
+            $timingOf = static fn (Carbon $on): ?string => $on->lt($cs) ? 'early' : ($on->gt($ce) ? 'late' : null);
+            $repaid = (float) $cycleEvents->sum('amount');
+            $repaidCount = $cycleEvents->count();
             $due = (float) $dueInst->filter(fn ($r): bool => $inCycle($r->due_date))->sum(fn ($r): float => (float) $r->amount);
             $disbursed = (float) $disbursements->filter(fn ($r): bool => $inCycle($r->disbursed_at))->sum(fn ($r): float => (float) $r->amount);
 
@@ -148,13 +220,14 @@ final class MemberLifetimeTrendService
                 'repaymentRate' => $due > 0 ? (int) round(($repaid / $due) * 100) : null,
                 'disbursed' => round($disbursed, 2),
                 // "Paid on" dates for the chart pop-ups.
+                // Contributions always belong to their own period's cycle; the date is shown with early / late.
                 'contributionsPostedOn' => $posted
-                    ->map(fn (Contribution $c): ?string => ($c->posted_at ?? $c->paid_at)?->format('Y-m-d'))
-                    ->filter()->sort()->values()->all(),
-                'repaymentsPaidOn' => $repayRows->filter(fn ($r): bool => $inCycle($r->paid_at))
-                    ->map(fn ($r): array => ['on' => Carbon::parse((string) $r->paid_at)->format('Y-m-d'), 'amount' => (float) $r->amount])
-                    ->concat($paidInst->filter(fn ($r): bool => $inCycle($r->paid_at))
-                        ->map(fn ($r): array => ['on' => Carbon::parse((string) $r->paid_at)->format('Y-m-d'), 'amount' => (float) $r->amount_collected > 0 ? (float) $r->amount_collected : (float) $r->amount]))
+                    ->map(fn (Contribution $c): ?Carbon => $c->posted_at ?? $c->paid_at)
+                    ->filter()
+                    ->map(fn (Carbon $on): array => ['on' => $on->format('Y-m-d'), 'timing' => $timingOf($on)])
+                    ->sortBy('on')->values()->all(),
+                'repaymentsPaidOn' => $cycleEvents
+                    ->map(fn (array $e): array => ['on' => $e['on']->format('Y-m-d'), 'amount' => round($e['amount'], 2), 'timing' => $timingOf($e['on'])])
                     ->sortBy('on')->values()->all(),
                 'disbursedOn' => $disbursements->filter(fn ($r): bool => $inCycle($r->disbursed_at))
                     ->map(fn ($r): array => ['on' => Carbon::parse((string) $r->disbursed_at)->format('Y-m-d'), 'amount' => (float) $r->amount])

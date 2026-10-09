@@ -24,6 +24,8 @@
         'rateNote' => __('C = contributions collected ÷ expected · R = repayments paid ÷ instalments due in that cycle (≥90% green · 50–89% amber · <50% red) · D = loan amount disbursed that cycle (red). Cards follow the 12 cycles in view.'),
         'curveHint' => __('Smooth curves through the tops of the contribution, repayment and disbursement bars'),
         'paidOn' => __('Paid on'),
+        'early' => __('early'),
+        'late' => __('late'),
         'expected' => __('Expected'),
         'due' => __('Due'),
         'disbursedOn' => __('Disbursed on'),
@@ -66,10 +68,15 @@
     return best;
   }
   function day(iso) { var p = String(iso).split('-'); var m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return p[2] + ' ' + m[+p[1] - 1] + ' ' + p[0]; }
+  // Items are ISO dates or { on, timing }; a payment made outside its cycle window is marked (early) / (late).
   function dates(list, max) {
     max = max || 4;
     if (!list || !list.length) return '';
-    return list.slice(0, max).map(day).join(', ') + (list.length > max ? ' +' + (list.length - max) + ' more' : '');
+    return list.slice(0, max).map(function (x) {
+      var on = typeof x === 'object' && x !== null ? x.on : x;
+      var tm = typeof x === 'object' && x !== null && x.timing ? ' (' + (x.timing === 'early' ? t.early : t.late) + ')' : '';
+      return day(on) + tm;
+    }).join(', ') + (list.length > max ? ' +' + (list.length - max) + ' more' : '');
   }
   function pct(a, b) { return b > 0 ? Math.round((a / b) * 100) + '%' : '—'; }
   return {
@@ -128,7 +135,7 @@
       };
       return '<div class="font-semibold">' + esc(r.label) + '</div>' +
         line(COL.c, t.contributions, r.contributionsPosted, r.contributionsPostedOn || [], t.paidOn) +
-        line(COL.r, t.repayments, r.repaymentsPaid, (r.repaymentsPaidOn || []).map(function (x) { return x.on; }), t.paidOn) +
+        line(COL.r, t.repayments, r.repaymentsPaid, (r.repaymentsPaidOn || []), t.paidOn) +
         line(COL.d, t.disbursed, r.disbursed || 0, (r.disbursedOn || []).map(function (x) { return x.on; }), t.disbursedOn) +
         '<div class="mt-1 border-t border-gray-200 pt-1 text-[10px] text-gray-500">' + esc(t.expected) + ' ' + fmt(r.contributionsExpected) + ' · ' + esc(t.due) + ' ' + fmt(r.repaymentsDue) + '</div>';
     },
@@ -157,7 +164,7 @@
       var gw = mw * 0.72, bw = gw / 3, cs = [], rs = [], ds = [], ce = [], rd = [];
       this.rows.forEach(function (r, i) {
         var cx = (i + 0.5) * mw, x0 = cx - gw / 2;
-        [['contributionsPosted', COL.c, 0, t.contributions, (r.contributionsPostedOn || [])], ['repaymentsPaid', COL.r, 1, t.repayments, (r.repaymentsPaidOn || []).map(function (x) { return x.on; })], ['disbursed', COL.d, 2, t.disbursed, (r.disbursedOn || []).map(function (x) { return x.on; })]].forEach(function (b) {
+        [['contributionsPosted', COL.c, 0, t.contributions, (r.contributionsPostedOn || [])], ['repaymentsPaid', COL.r, 1, t.repayments, (r.repaymentsPaidOn || [])], ['disbursed', COL.d, 2, t.disbursed, (r.disbursedOn || []).map(function (x) { return x.on; })]].forEach(function (b) {
           var v = r[b[0]] || 0; if (v <= 0) return;
           var yy = y(v), dl = dates(b[4]);
           out.push('<rect x="' + (x0 + b[2] * bw + 0.5) + '" y="' + yy + '" width="' + (bw - 1) + '" height="' + Math.max(0, TOP + plotH - yy) + '" rx="2" fill="' + b[1] + '"><title>' + r.label + ' · ' + b[3] + ': ' + fmt(v) + (dl ? '\n' + (b[2] === 2 ? t.disbursedOn : t.paidOn) + ' ' + dl : '') + '</title></rect>');
