@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Tenant\Resources\Loans\Pages;
 
 use App\Filament\Concerns\RefreshesResourceRecord;
+use App\Filament\Support\LateSettledArrearsTableStyling;
 use App\Filament\Support\LoanFilamentActions;
 use App\Filament\Tenant\Resources\Loans\LoanResource;
 use App\Filament\Tenant\Resources\Loans\Schemas\LoanViewInfolist;
@@ -19,6 +20,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\HtmlString;
 
 class ViewLoan extends ViewRecord
@@ -38,10 +40,18 @@ class ViewLoan extends ViewRecord
         $loan = $this->getRecord();
         $status = Loan::statusOptions()[$loan->status] ?? $loan->status;
 
-        return new HtmlString(implode(' · ', [
+        $parts = [
             $this->linkedMemberLabelHtml($loan->member),
             e((string) $status),
-        ]));
+        ];
+
+        $early = LateSettledArrearsTableStyling::loanEarlySettlementChip($loan);
+        $chip = $early === null ? '' : ' '.Blade::render(
+            '<x-filament::badge size="sm" color="info" tooltip="{{ $hint }}" style="display:inline-flex">{{ $label }}</x-filament::badge>',
+            ['label' => $early['label'], 'hint' => $early['hint']],
+        );
+
+        return new HtmlString(implode(' · ', $parts).$chip);
     }
 
     private function linkedMemberLabelHtml(?Member $member): string
