@@ -140,8 +140,8 @@ test('early settlement chips: full, partial and skipped cycles', function () {
     $normal = new LoanInstallment(['status' => 'pending']);
 
     expect(array_column(LateSettledArrearsTableStyling::installmentFlags($full), 'label'))->toBe([__('Early settlement (full)')])
-        ->and(array_column(LateSettledArrearsTableStyling::installmentFlags($partial), 'label'))->toBe([__('Early settlement (partial)')])
-        ->and(array_column(LateSettledArrearsTableStyling::installmentFlags($skipped), 'label'))->toBe([__('Early settlement (partial)')])
+        ->and(array_column(LateSettledArrearsTableStyling::installmentFlags($partial), 'label'))->toBe([__('Pre-paid')])
+        ->and(array_column(LateSettledArrearsTableStyling::installmentFlags($skipped), 'label'))->toBe([__('Pre-paid')])
         ->and(LateSettledArrearsTableStyling::installmentFlags($normal))->toBe([]);
 });
 
@@ -156,7 +156,7 @@ test('an EMI paid in a cycle before its own cycle gets the partial early-settlem
         'status' => 'paid', 'due_date' => $due, 'paid_at' => $paid, 'amount' => 500, 'amount_collected' => 500,
     ]);
 
-    expect(array_column(LateSettledArrearsTableStyling::installmentFlags($make('2024-08-05', '2024-06-03 09:00:00')), 'code'))->toBe(['early_settlement_partial'])
+    expect(array_column(LateSettledArrearsTableStyling::installmentFlags($make('2024-08-05', '2024-06-03 09:00:00')), 'code'))->toBe(['pre_paid'])
         ->and(LateSettledArrearsTableStyling::installmentFlags($make('2024-07-05', '2024-06-10 09:00:00')))->toBe([])
         ->and(LateSettledArrearsTableStyling::installmentFlags($make('2024-07-05', '2024-07-20 09:00:00')))->toBe([]);
 });

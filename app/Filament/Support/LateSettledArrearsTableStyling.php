@@ -335,18 +335,17 @@ final class LateSettledArrearsTableStyling
         if ($installment->settled_via === 'early_full') {
             $flags[] = ['code' => 'early_settlement_full', 'label' => __('Early settlement (full)'), 'color' => 'info', 'hint' => __('Settled as part of a full early settlement of the loan')];
         } elseif ($installment->settled_via === 'early_partial' || $installment->waive_reason === self::WAIVE_REASON_EARLY_SKIP) {
-            $flags[] = ['code' => 'early_settlement_partial', 'label' => __('Early settlement (partial)'), 'color' => 'info', 'hint' => __('Settled as part of a partial early settlement of the loan')];
+            $flags[] = ['code' => 'pre_paid', 'label' => __('Pre-paid'), 'color' => 'info', 'hint' => __('Paid in advance of its cycle')];
         } elseif ($installment->settled_via === null && $installment->waive_reason === null && self::isPaidInAdvance($installment)) {
             // A cycle paid ahead of its due month: a partial early settlement ("full" = fund balance topped back up).
-            $flags[] = ['code' => 'early_settlement_partial', 'label' => __('Early settlement (partial)'), 'color' => 'info', 'hint' => __('Cycle paid in advance as part of a partial early settlement of the loan')];
+            $flags[] = ['code' => 'pre_paid', 'label' => __('Pre-paid'), 'color' => 'info', 'hint' => __('Paid in advance of its cycle')];
         }
 
         return $flags;
     }
 
     /**
-     * An EMI paid in a contribution cycle before the cycle it falls due in is a pre-paid cycle (partial early
-     * settlement). Used for rows with no stored `settled_via`. An EMI due on the 5th belongs to the previous
+     * An EMI paid in a contribution cycle before the cycle it falls due in is a pre-paid cycle. Used for rows with no stored `settled_via`. An EMI due on the 5th belongs to the previous
      * month's cycle, so paying in that cycle is on time.
      */
     public static function isPaidInAdvance(LoanInstallment $installment): bool
@@ -359,8 +358,8 @@ final class LateSettledArrearsTableStyling
     }
 
     /**
-     * Loan-level early settlement highlight for loan lists and cards: full when the loan was settled early,
-     * partial when some EMIs were settled ahead of schedule (roll-up or skipped cycles) and the loan carried on.
+     * Loan-level early settlement highlight for loan lists and cards: only a full early settlement. Cycles paid
+     * in advance are flagged per installment as "Pre-paid".
      *
      * @return array{code: string, label: string, color: string, hint: string}|null
      */
@@ -370,19 +369,6 @@ final class LateSettledArrearsTableStyling
 
         if ($loan->status === 'early_settled' || (clone $installments)->where('settled_via', 'early_full')->exists()) {
             return ['code' => 'early_settlement_full', 'label' => __('Early settlement (full)'), 'color' => 'info', 'hint' => __('The whole loan was settled ahead of schedule')];
-        }
-
-        $early = (clone $installments)
-            ->where(fn ($query) => $query->where('settled_via', 'early_partial')->orWhere('waive_reason', self::WAIVE_REASON_EARLY_SKIP))
-            ->count();
-
-        $advance = (clone $installments)->where('status', 'paid')->whereNull('settled_via')->whereNull('waive_reason')->whereNotNull('paid_at')->get()
-            ->filter(fn (LoanInstallment $i) => self::isPaidInAdvance($i))
-            ->count();
-        $early += $advance;
-
-        if ($early > 0) {
-            return ['code' => 'early_settlement_partial', 'label' => __('Early settlement (partial)'), 'color' => 'info', 'hint' => trans_choice(':count EMI settled ahead of schedule in a partial early settlement|:count EMIs settled ahead of schedule in a partial early settlement', $early, ['count' => $early])];
         }
 
         return null;
