@@ -151,13 +151,12 @@ test('installment collected above its scheduled amount is not flagged above limi
     expect(LateSettledArrearsTableStyling::installmentFlags($over))->toBe([]);
 });
 
-test('migrated loan payoff: EMIs paid on the settlement day, due a month or more later, get the partial early-settlement flag', function () {
-    $loan = new \App\Models\Tenant\Loan(['status' => 'completed', 'settled_at' => '2025-07-08 10:00:00']);
-    $make = fn (string $due, string $paid) => tap(new LoanInstallment([
+test('an EMI paid in a cycle before its own cycle gets the partial early-settlement flag', function () {
+    $make = fn (string $due, string $paid) => new LoanInstallment([
         'status' => 'paid', 'due_date' => $due, 'paid_at' => $paid, 'amount' => 500, 'amount_collected' => 500,
-    ]), fn ($i) => $i->setRelation('loan', $loan));
+    ]);
 
-    expect(array_column(LateSettledArrearsTableStyling::installmentFlags($make('2025-09-05', '2025-07-08 09:00:00')), 'code'))->toBe(['early_settlement_partial'])
-        ->and(LateSettledArrearsTableStyling::installmentFlags($make('2025-07-05', '2025-07-08 09:00:00')))->toBe([])
-        ->and(LateSettledArrearsTableStyling::installmentFlags($make('2025-09-05', '2025-06-03 09:00:00')))->toBe([]);
+    expect(array_column(LateSettledArrearsTableStyling::installmentFlags($make('2024-08-05', '2024-06-03 09:00:00')), 'code'))->toBe(['early_settlement_partial'])
+        ->and(LateSettledArrearsTableStyling::installmentFlags($make('2024-07-05', '2024-06-10 09:00:00')))->toBe([])
+        ->and(LateSettledArrearsTableStyling::installmentFlags($make('2024-07-05', '2024-07-20 09:00:00')))->toBe([]);
 });

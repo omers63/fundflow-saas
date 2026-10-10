@@ -23,15 +23,17 @@ final class PaymentChipsColumn
             ->badge()
             ->state(fn (Loan $record): ?string => LateSettledArrearsTableStyling::loanEarlySettlementChip($record)['label'] ?? null)
             ->sortable(query: function ($query, string $direction) {
+                $shift = max(0, \App\Models\Tenant\Setting::contributionCycleStartDay() - 1);
                 // 0 = full, 1 = partial, 2 = none — the same rules as loanEarlySettlementChip().
                 return $query->orderByRaw("case
                     when loans.status = 'early_settled'
                         or exists (select 1 from loan_installments li where li.loan_id = loans.id and li.settled_via = 'early_full') then 0
                     when exists (select 1 from loan_installments li where li.loan_id = loans.id and (li.settled_via = 'early_partial' or li.waive_reason = 'early_skip'))
-                        or (loans.status = 'completed' and loans.settled_at is not null and exists (
+                        or exists (
                             select 1 from loan_installments li where li.loan_id = loans.id and li.settled_via is null and li.waive_reason is null
-                                and li.status = 'paid' and li.paid_at is not null and date(li.paid_at) = date(loans.settled_at)
-                                and (year(li.due_date) * 12 + month(li.due_date)) - (year(loans.settled_at) * 12 + month(loans.settled_at)) >= 1)) then 1
+                                and li.status = 'paid' and li.paid_at is not null
+                                and (year(date_sub(li.paid_at, interval {$shift} day)) * 12 + month(date_sub(li.paid_at, interval {$shift} day)))
+                                    < (year(date_sub(li.due_date, interval {$shift} day)) * 12 + month(date_sub(li.due_date, interval {$shift} day)))) then 1
                     else 2 end {$direction}");
             })
             ->color('info')
