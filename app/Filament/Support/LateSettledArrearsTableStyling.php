@@ -386,6 +386,34 @@ final class LateSettledArrearsTableStyling
     }
 
     /**
+     * Migrated loans carry no `settled_via` marker: a completed loan counts as settled early when it closed at
+     * least one calendar month before its last installment was due and has no other early marker.
+     */
+    private static function isLegacyEarlySettled(Loan $loan): bool
+    {
+        if ($loan->status !== 'completed' || $loan->settled_at === null) {
+            return false;
+        }
+
+        $installments = $loan->installments();
+
+        if ((clone $installments)->where(fn ($q) => $q->whereNotNull('settled_via')->orWhereNotNull('waive_reason'))->exists()) {
+            return false;
+        }
+
+        $lastDue = (clone $installments)->max('due_date');
+
+        if ($lastDue === null) {
+            return false;
+        }
+
+        $last = \Carbon\Carbon::parse($lastDue);
+        $settled = $loan->settled_at;
+
+        return ($last->year * 12 + $last->month) - ($settled->year * 12 + $settled->month) >= 1;
+    }
+
+    /**
      * Loan-level early settlement highlight for loan lists and cards: full when the loan was settled early,
      * partial when some EMIs were settled ahead of schedule (roll-up or skipped cycles) and the loan carried on.
      *
@@ -395,7 +423,7 @@ final class LateSettledArrearsTableStyling
     {
         $installments = $loan->installments();
 
-        if ($loan->status === 'early_settled' || (clone $installments)->where('settled_via', 'early_full')->exists()) {
+        if ($loan->status === 'early_settled' || (clone $installments)->where('settled_via', 'early_full')->exists() || self::isLegacyEarlySettled($loan)) {
             return ['code' => 'early_settlement_full', 'label' => __('Early settlement (full)'), 'color' => 'info', 'hint' => __('The whole loan was settled ahead of schedule')];
         }
 
