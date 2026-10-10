@@ -77,7 +77,7 @@ test('emi collection segment loads on loans list', function () {
     $this->get('http://'.$this->domain.$path.($query ? '?'.$query : ''))
         ->assertSuccessful()
         ->assertSee(__('Collection'), false)
-        ->assertSee(__('To collect'), false);
+        ->assertSee(__('Uncollected'), false);
 });
 
 test('loans list exposes delinquency maintenance actions on delinquency workspace', function () {
