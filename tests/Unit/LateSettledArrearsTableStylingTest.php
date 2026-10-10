@@ -154,3 +154,14 @@ test('installment collected above its scheduled amount is flagged above limit', 
         ->and($flags[0]['hint'])->toContain('650.00')
         ->and(LateSettledArrearsTableStyling::installmentFlags($exact))->toBe([]);
 });
+
+test('migrated loan payoff: EMIs paid on the settlement day, due a month or more later, get the full early-settlement flag', function () {
+    $loan = new \App\Models\Tenant\Loan(['status' => 'completed', 'settled_at' => '2025-07-08 10:00:00']);
+    $make = fn (string $due, string $paid) => tap(new LoanInstallment([
+        'status' => 'paid', 'due_date' => $due, 'paid_at' => $paid, 'amount' => 500, 'amount_collected' => 500,
+    ]), fn ($i) => $i->setRelation('loan', $loan));
+
+    expect(array_column(LateSettledArrearsTableStyling::installmentFlags($make('2025-09-05', '2025-07-08 09:00:00')), 'code'))->toBe(['early_settlement_full'])
+        ->and(LateSettledArrearsTableStyling::installmentFlags($make('2025-07-05', '2025-07-08 09:00:00')))->toBe([])
+        ->and(LateSettledArrearsTableStyling::installmentFlags($make('2025-09-05', '2025-06-03 09:00:00')))->toBe([]);
+});
