@@ -480,3 +480,53 @@ test('contribution arrears skips cycles the member was in EMI repayment for, eve
         ->and($after)->not->toContain('2026-03')
         ->and($after)->toContain('2025-12');
 });
+
+test('loans sidebar badge counts members who still owe an EMI for the open cycle', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    \App\Filament\Tenant\Clusters\LoansCluster::forgetOpenCycleUncollectedCount();
+    expect(\App\Filament\Tenant\Clusters\LoansCluster::getNavigationBadge())->toBeNull();
+
+    $member = Member::create([
+        'member_number' => 'NAV-'.uniqid(),
+        'name' => 'Nav Badge Member',
+        'monthly_contribution_amount' => 1000,
+        'joined_at' => now()->subYear(),
+        'status' => 'active',
+    ]);
+    app(AccountingService::class)->createMemberAccounts($member);
+
+    $loan = Loan::create([
+        'member_id' => $member->id,
+        'amount' => 10000,
+        'amount_requested' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'interest_rate' => 0,
+        'term_months' => 12,
+        'monthly_repayment' => 1000,
+        'total_repaid' => 0,
+        'status' => 'active',
+        'applied_at' => now()->subMonths(3),
+        'disbursed_at' => now()->subMonths(3),
+    ]);
+
+    [$start, $end] = app(ContributionCycleService::class)->cycleDueDateBounds(
+        ...app(ContributionCycleService::class)->currentOpenPeriod(),
+    );
+
+    LoanInstallment::create([
+        'loan_id' => $loan->id,
+        'installment_number' => 1,
+        'amount' => 1000,
+        'due_date' => $end,
+        'status' => 'pending',
+    ]);
+
+    \App\Filament\Tenant\Clusters\LoansCluster::forgetOpenCycleUncollectedCount();
+
+    expect(\App\Filament\Tenant\Clusters\LoansCluster::getNavigationBadge())->toBe('1')
+        ->and(\App\Filament\Tenant\Clusters\LoansCluster::getNavigationBadgeColor())->toBe('warning');
+
+    Carbon::setTestNow();
+});

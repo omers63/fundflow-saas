@@ -6,7 +6,10 @@ namespace App\Filament\Tenant\Clusters;
 
 use App\Filament\Concerns\TranslatesPageNavigationLabel;
 use App\Filament\Tenant\Support\TenantNavigation;
+use App\Services\ContributionCycleService;
+use App\Services\Loans\LoanEmiCollectionCatalogService;
 use App\Support\Lang;
+use App\Support\TenantRuntimeCache;
 use BackedEnum;
 use Filament\Clusters\Cluster;
 use Filament\Support\Icons\Heroicon;
@@ -15,6 +18,8 @@ use UnitEnum;
 class LoansCluster extends Cluster
 {
     use TranslatesPageNavigationLabel;
+
+    public const OPEN_CYCLE_UNCOLLECTED_CACHE_KEY = 'loans_cluster:open_cycle_uncollected_count';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
 
@@ -39,13 +44,37 @@ class LoansCluster extends Cluster
         return Lang::formatUiLabel(__($breadcrumb));
     }
 
+    /**
+     * Sidebar pill: members who still owe an EMI for the OPEN cycle (the Collection tab's "Uncollected" count),
+     * independent of whichever cycle is being browsed on the Loans page.
+     */
     public static function getNavigationBadge(): ?string
     {
-        return null;
+        $count = self::openCycleUncollectedCount();
+
+        return $count > 0 ? (string) $count : null;
     }
 
     public static function getNavigationBadgeColor(): ?string
     {
-        return null;
+        return 'warning';
+    }
+
+    public static function openCycleUncollectedCount(): int
+    {
+        return (int) TenantRuntimeCache::remember(
+            self::OPEN_CYCLE_UNCOLLECTED_CACHE_KEY,
+            60,
+            function (): int {
+                [$month, $year] = app(ContributionCycleService::class)->currentOpenPeriod();
+
+                return app(LoanEmiCollectionCatalogService::class)->pendingMemberCount($month, $year);
+            },
+        );
+    }
+
+    public static function forgetOpenCycleUncollectedCount(): void
+    {
+        TenantRuntimeCache::forget(self::OPEN_CYCLE_UNCOLLECTED_CACHE_KEY);
     }
 }

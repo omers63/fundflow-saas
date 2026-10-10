@@ -639,6 +639,10 @@ class LoanResource extends Resource
         bool $fullPageRefresh = false,
         bool $invalidateInsights = true,
     ): void {
+        if ($invalidateInsights) {
+            LoansCluster::forgetOpenCycleUncollectedCount();
+        }
+
         if ($livewire === null) {
             return;
         }
