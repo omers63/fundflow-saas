@@ -22,6 +22,20 @@ final class PaymentChipsColumn
             ->label(__('Early settlement'))
             ->badge()
             ->state(fn (Loan $record): ?string => LateSettledArrearsTableStyling::loanEarlySettlementChip($record)['label'] ?? null)
+            ->sortable(query: function ($query, string $direction) {
+                $marked = '(select count(*) from loan_installments li where li.loan_id = loans.id and (li.settled_via is not null or li.waive_reason is not null))';
+                $lastDue = '(select max(li.due_date) from loan_installments li where li.loan_id = loans.id)';
+
+                // 0 = full, 1 = partial, 2 = none — the same rules as loanEarlySettlementChip().
+                return $query->orderByRaw("case
+                    when loans.status = 'early_settled'
+                        or exists (select 1 from loan_installments li where li.loan_id = loans.id and li.settled_via = 'early_full')
+                        or (loans.status = 'completed' and loans.settled_at is not null and {$marked} = 0
+                            and ({$lastDue} is not null)
+                            and (year({$lastDue}) * 12 + month({$lastDue})) - (year(loans.settled_at) * 12 + month(loans.settled_at)) >= 1) then 0
+                    when exists (select 1 from loan_installments li where li.loan_id = loans.id and (li.settled_via = 'early_partial' or li.waive_reason = 'early_skip')) then 1
+                    else 2 end {$direction}");
+            })
             ->color('info')
             ->tooltip(fn (Loan $record): ?string => LateSettledArrearsTableStyling::loanEarlySettlementChip($record)['hint'] ?? null)
             ->placeholder('—')
