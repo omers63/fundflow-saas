@@ -123,7 +123,9 @@
     get tipStyle() {
       var w = 210, x = (this.sel + 0.5) * this.monthW - this.scrollX - w / 2;
       x = Math.max(0, Math.min(x, Math.max(0, this.viewW - w)));
-      return 'left:' + x + 'px;top:4px;width:' + w + 'px';
+      // An object (not a string): Alpine merges it per property, so it never wipes the inline display:none that
+      // x-show sets — a string replaced the whole style attribute and left an empty box visible after scrolling.
+      return { left: x + 'px', top: '4px', width: w + 'px' };
     },
     tipHtml: function () {
       var r = this.tipRow; if (!r) return '';
