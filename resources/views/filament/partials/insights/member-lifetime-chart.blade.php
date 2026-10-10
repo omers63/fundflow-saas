@@ -80,7 +80,7 @@
   }
   function pct(a, b) { return b > 0 ? Math.round((a / b) * 100) + '%' : '—'; }
   return {
-    rows: rows, t: t, start: Math.max(0, rows.length - PER), viewW: 0, H: H, sel: null, scrollX: 0,
+    rows: rows, t: t, start: Math.max(0, rows.length - PER), viewW: 0, H: H, sel: null, scrollX: 0, mouse: false,
     showCurve: (function () { try { return localStorage.getItem('ff-member-chart-curve') !== '0'; } catch (e) { return true; } })(),
     init: function () {
       var self = this, el = this.$refs.scroller;
@@ -106,17 +106,28 @@
       if (this.monthW <= 0) return;
       var el = this.$refs.scroller;
       this.scrollX = el.scrollLeft;
+      if (this.mouse) this.sel = null;
       this.start = Math.min(Math.max(0, this.rows.length - PER), Math.max(0, Math.round(el.scrollLeft / this.monthW)));
     },
     goTo: function (i) {
       var c = Math.min(Math.max(0, this.rows.length - PER), Math.max(0, i));
       this.$refs.scroller.scrollTo({ left: c * this.monthW, behavior: 'smooth' });
     },
-    // Touch screens have no hover, so SVG <title> tooltips never show: tapping a cycle column opens this pop-up instead.
-    pick: function (e) {
+    // Mouse: the pop-up follows the pointer over a cycle column (hover). Touch screens have no hover, so tapping a
+    // cycle column opens it instead and tapping again (or outside) closes it.
+    cycleAt: function (e) {
       var n = e.target && e.target.closest ? e.target.closest('[data-i]') : null;
-      if (!n) { this.sel = null; return; }
-      var i = +n.getAttribute('data-i');
+      return n ? +n.getAttribute('data-i') : null;
+    },
+    hover: function (e) {
+      if (e.pointerType !== 'mouse') return;
+      this.mouse = true;
+      this.sel = this.cycleAt(e);
+    },
+    pick: function (e) {
+      if (this.mouse) return; // hover already shows it; a mouse click must not toggle it off
+      var i = this.cycleAt(e);
+      if (i === null) { this.sel = null; return; }
       this.sel = this.sel === i ? null : i;
     },
     get tipRow() { return this.sel === null ? null : this.rows[this.sel] || null; },
@@ -169,7 +180,7 @@
         [['contributionsPosted', COL.c, 0, t.contributions, (r.contributionsPostedOn || [])], ['repaymentsPaid', COL.r, 1, t.repayments, (r.repaymentsPaidOn || [])], ['disbursed', COL.d, 2, t.disbursed, (r.disbursedOn || []).map(function (x) { return x.on; })]].forEach(function (b) {
           var v = r[b[0]] || 0; if (v <= 0) return;
           var yy = y(v), dl = dates(b[4]);
-          out.push('<rect x="' + (x0 + b[2] * bw + 0.5) + '" y="' + yy + '" width="' + (bw - 1) + '" height="' + Math.max(0, TOP + plotH - yy) + '" rx="2" fill="' + b[1] + '"><title>' + r.label + ' · ' + b[3] + ': ' + fmt(v) + (dl ? '\n' + (b[2] === 2 ? t.disbursedOn : t.paidOn) + ' ' + dl : '') + '</title></rect>');
+          out.push('<rect x="' + (x0 + b[2] * bw + 0.5) + '" y="' + yy + '" width="' + (bw - 1) + '" height="' + Math.max(0, TOP + plotH - yy) + '" rx="2" fill="' + b[1] + '"></rect>');
         });
         cs.push([cx, y(r.contributionsPosted)]); rs.push([cx, y(r.repaymentsPaid)]); ds.push([cx, y(r.disbursed || 0)]);
         ce.push([cx, y(r.contributionsExpected)]); rd.push([cx, y(r.repaymentsDue)]);
@@ -240,8 +251,8 @@ JS;
                         <span class="absolute right-1 -translate-y-1/2 text-[9px] tabular-nums" :style="'top:' + tickTop(tk) + 'px'" x-text="compact(tk)"></span>
                     </template>
                 </div>
-                <div class="relative min-w-0 flex-1" @click.outside="sel = null">
-                    <div x-ref="scroller" @scroll.passive="onScroll()" @click="pick($event)" class="overflow-x-auto text-gray-700 dark:text-gray-300" style="touch-action:pan-x pan-y">
+                <div class="relative min-w-0 flex-1" @click.outside="if (!mouse) sel = null">
+                    <div x-ref="scroller" @scroll.passive="onScroll()" @pointermove="hover($event)" @pointerleave="if ($event.pointerType === 'mouse') sel = null" @pointerdown="mouse = $event.pointerType === 'mouse'" @click="pick($event)" class="overflow-x-auto text-gray-700 dark:text-gray-300" style="touch-action:pan-x pan-y">
                         <div :style="'width:' + innerW + 'px'" x-html="svg()"></div>
                     </div>
                     <div x-show="tipRow" x-cloak :style="tipStyle" class="pointer-events-none absolute z-10 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-[11px] text-gray-800 shadow-lg dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" x-html="tipHtml()"></div>
