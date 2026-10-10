@@ -32,7 +32,7 @@ final class MemberLifetimeTrendService
     public function forMember(Member $member): array
     {
         return Cache::remember(
-            'member_lifetime_trend_cycle3:'.tenant()?->getTenantKey().':'.$member->id.':'.BusinessDay::now()->toDateString(),
+            'member_lifetime_trend_cycle4:'.tenant()?->getTenantKey().':'.$member->id.':'.BusinessDay::now()->toDateString(),
             now()->addMinutes(5),
             fn (): array => $this->build($member),
         );
@@ -46,7 +46,7 @@ final class MemberLifetimeTrendService
      * @param  Collection<int, LoanRepayment>  $repayments
      * @param  Collection<int, LoanInstallment>  $installments
      * @param  list<int>  $loansWithRepayments
-     * @return list<array{anchor: Carbon, on: Carbon, amount: float}>
+     * @return list<array{loan_id: int, anchor: Carbon, on: Carbon, amount: float}>
      */
     private function allocatePaidEvents(Collection $repayments, Collection $installments, array $loansWithRepayments): array
     {
@@ -60,14 +60,14 @@ final class MemberLifetimeTrendService
             if (isset($withRepayments[$i->loan_id]) || $on === null) {
                 continue;
             }
-            $events[] = ['anchor' => Carbon::parse($i->due_date), 'on' => Carbon::parse($on), 'amount' => $cap($i)];
+            $events[] = ['loan_id' => (int) $i->loan_id, 'anchor' => Carbon::parse($i->due_date), 'on' => Carbon::parse($on), 'amount' => $cap($i)];
         }
 
         $groups = [];
         foreach ($repayments as $r) {
             $on = Carbon::parse((string) $r->paid_at);
             $k = $r->loan_id.'|'.$on->format('Y-m-d');
-            $groups[$k] ??= ['on' => $on, 'total' => 0.0];
+            $groups[$k] ??= ['loan_id' => (int) $r->loan_id, 'on' => $on, 'total' => 0.0];
             $groups[$k]['total'] += (float) $r->amount;
         }
 
@@ -89,12 +89,12 @@ final class MemberLifetimeTrendService
                 }
                 $take = min($remaining, $cap($inst));
                 if ($take > 0.005) {
-                    $events[] = ['anchor' => Carbon::parse($inst->due_date), 'on' => $group['on'], 'amount' => $take];
+                    $events[] = ['loan_id' => $group['loan_id'], 'anchor' => Carbon::parse($inst->due_date), 'on' => $group['on'], 'amount' => $take];
                     $remaining -= $take;
                 }
             }
             if ($remaining > 0.005) {
-                $events[] = ['anchor' => $group['on'], 'on' => $group['on'], 'amount' => $remaining];
+                $events[] = ['loan_id' => $group['loan_id'], 'anchor' => $group['on'], 'on' => $group['on'], 'amount' => $remaining];
             }
         }
 
@@ -157,6 +157,7 @@ final class MemberLifetimeTrendService
         // the open cycle. Totals are unchanged, only redistributed over cycles.
         $openKey = sprintf('%04d-%02d', $openYear, $openMonth);
         $credited = [];
+        $endKeyByLoan = [];
         if ($loanIds !== []) {
             $allRepay = $withRepayments === []
                 ? collect()
@@ -166,9 +167,22 @@ final class MemberLifetimeTrendService
                 ->where(fn ($q) => $q->where('status', 'paid')->orWhere(fn ($w) => $w->where('status', 'waived')->where('amount_collected', '>', 0)))
                 ->get(['loan_id', 'installment_number', 'due_date', 'amount', 'amount_collected', 'paid_at', 'waived_at']);
 
+            // The repayment phase ends when the loan is settled / completed (the same rule as the contribution exemption).
+            // Installments prepaid for cycles after that are shown where the cash actually arrived.
+            $cycleKeyOf = fn (mixed $date): string => vsprintf('%2$04d-%1$02d', $this->cycles->cyclePeriodForDueDate(Carbon::parse((string) $date)));
+            foreach (Loan::query()->whereIn('id', $loanIds)->get(['id', 'settled_at', 'completed_at']) as $loan) {
+                $loanEnd = $loan->settled_at ?? $loan->completed_at;
+                if ($loanEnd !== null) {
+                    $endKeyByLoan[(int) $loan->id] = $cycleKeyOf($loanEnd);
+                }
+            }
+
             foreach ($this->allocatePaidEvents($allRepay, $allPaid, $withRepayments) as $event) {
-                [$em, $ey] = $this->cycles->cyclePeriodForDueDate($event['anchor']);
-                $key = sprintf('%04d-%02d', $ey, $em);
+                $key = $cycleKeyOf($event['anchor']);
+                $endKey = $endKeyByLoan[(int) $event['loan_id']] ?? null;
+                if ($endKey !== null && $key > $endKey) {
+                    $key = $cycleKeyOf($event['on']);
+                }
                 $credited[$key > $openKey ? $openKey : $key][] = $event;
             }
         }
@@ -178,7 +192,7 @@ final class MemberLifetimeTrendService
                 ->whereIn('loan_id', $loanIds)
                 ->whereBetween('due_date', [$start->toDateString(), $end->toDateString()])
                 ->where('status', '!=', 'waived')
-                ->get(['amount', 'due_date']);
+                ->get(['loan_id', 'amount', 'due_date']);
         $disbursements = $loanIds === []
             ? collect()
             : LoanDisbursement::query()->whereIn('loan_id', $loanIds)->whereBetween('disbursed_at', [$start, $end])->get(['amount', 'disbursed_at']);
@@ -205,7 +219,9 @@ final class MemberLifetimeTrendService
             $timingOf = static fn (Carbon $on): ?string => $on->lt($cs) ? 'early' : ($on->gt($ce) ? 'late' : null);
             $repaid = (float) $cycleEvents->sum('amount');
             $repaidCount = $cycleEvents->count();
-            $due = (float) $dueInst->filter(fn ($r): bool => $inCycle($r->due_date))->sum(fn ($r): float => (float) $r->amount);
+            $due = (float) $dueInst
+                ->filter(fn ($r): bool => $inCycle($r->due_date) && ! (isset($endKeyByLoan[(int) $r->loan_id]) && $key > $endKeyByLoan[(int) $r->loan_id]))
+                ->sum(fn ($r): float => (float) $r->amount);
             $disbursed = (float) $disbursements->filter(fn ($r): bool => $inCycle($r->disbursed_at))->sum(fn ($r): float => (float) $r->amount);
 
             $rows[] = [
