@@ -336,18 +336,19 @@ final class LateSettledArrearsTableStyling
             $flags[] = ['code' => 'early_settlement_full', 'label' => __('Early settlement (full)'), 'color' => 'info', 'hint' => __('Settled as part of a full early settlement of the loan')];
         } elseif ($installment->settled_via === 'early_partial' || $installment->waive_reason === self::WAIVE_REASON_EARLY_SKIP) {
             $flags[] = ['code' => 'early_settlement_partial', 'label' => __('Early settlement (partial)'), 'color' => 'info', 'hint' => __('Settled as part of a partial early settlement of the loan')];
-        } elseif ($installment->settled_via === null && $installment->waive_reason === null && self::isLegacyEarlySettledInstallment($installment)) {
-            $flags[] = ['code' => 'early_settlement_full', 'label' => __('Early settlement (full)'), 'color' => 'info', 'hint' => __('Settled as part of a full early settlement of the loan')];
+        } elseif ($installment->settled_via === null && $installment->waive_reason === null && self::isLegacyPrepaidInstallment($installment)) {
+            // A cycle paid ahead of its due month: a partial early settlement ("full" = fund balance topped back up).
+            $flags[] = ['code' => 'early_settlement_partial', 'label' => __('Early settlement (partial)'), 'color' => 'info', 'hint' => __('Cycle paid in advance as part of a partial early settlement of the loan')];
         }
 
         return $flags;
     }
 
     /**
-     * Migrated loans have no `settled_via`: an EMI counts as part of a full early settlement when its loan is
+     * Migrated loans have no `settled_via`: an EMI counts as pre-paid (partial early settlement) when its loan is
      * completed, it was paid on the loan's settlement day and it was due at least one calendar month later.
      */
-    private static function isLegacyEarlySettledInstallment(LoanInstallment $installment): bool
+    private static function isLegacyPrepaidInstallment(LoanInstallment $installment): bool
     {
         if ($installment->status !== 'paid' || $installment->paid_at === null || $installment->due_date === null) {
             return false;
@@ -367,34 +368,6 @@ final class LateSettledArrearsTableStyling
     }
 
     /**
-     * Migrated loans carry no `settled_via` marker: a completed loan counts as settled early when it closed at
-     * least one calendar month before its last installment was due and has no other early marker.
-     */
-    private static function isLegacyEarlySettled(Loan $loan): bool
-    {
-        if ($loan->status !== 'completed' || $loan->settled_at === null) {
-            return false;
-        }
-
-        $installments = $loan->installments();
-
-        if ((clone $installments)->where(fn ($q) => $q->whereNotNull('settled_via')->orWhereNotNull('waive_reason'))->exists()) {
-            return false;
-        }
-
-        $lastDue = (clone $installments)->max('due_date');
-
-        if ($lastDue === null) {
-            return false;
-        }
-
-        $last = \Carbon\Carbon::parse($lastDue);
-        $settled = $loan->settled_at;
-
-        return ($last->year * 12 + $last->month) - ($settled->year * 12 + $settled->month) >= 1;
-    }
-
-    /**
      * Loan-level early settlement highlight for loan lists and cards: full when the loan was settled early,
      * partial when some EMIs were settled ahead of schedule (roll-up or skipped cycles) and the loan carried on.
      *
@@ -404,13 +377,19 @@ final class LateSettledArrearsTableStyling
     {
         $installments = $loan->installments();
 
-        if ($loan->status === 'early_settled' || (clone $installments)->where('settled_via', 'early_full')->exists() || self::isLegacyEarlySettled($loan)) {
+        if ($loan->status === 'early_settled' || (clone $installments)->where('settled_via', 'early_full')->exists()) {
             return ['code' => 'early_settlement_full', 'label' => __('Early settlement (full)'), 'color' => 'info', 'hint' => __('The whole loan was settled ahead of schedule')];
         }
 
         $early = (clone $installments)
             ->where(fn ($query) => $query->where('settled_via', 'early_partial')->orWhere('waive_reason', self::WAIVE_REASON_EARLY_SKIP))
             ->count();
+
+        if ($early === 0 && $loan->status === 'completed' && $loan->settled_at !== null) {
+            $early = (clone $installments)->with('loan')->whereNull('settled_via')->whereNull('waive_reason')->get()
+                ->filter(fn (LoanInstallment $i) => self::isLegacyPrepaidInstallment($i->setRelation('loan', $loan)))
+                ->count();
+        }
 
         if ($early > 0) {
             return ['code' => 'early_settlement_partial', 'label' => __('Early settlement (partial)'), 'color' => 'info', 'hint' => trans_choice(':count EMI settled ahead of schedule in a partial early settlement|:count EMIs settled ahead of schedule in a partial early settlement', $early, ['count' => $early])];
