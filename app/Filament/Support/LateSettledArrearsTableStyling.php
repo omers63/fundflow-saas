@@ -297,33 +297,6 @@ final class LateSettledArrearsTableStyling
         return $at->copy()->startOfDay()->subDays($startDay - 1)->format('Y-m');
     }
 
-    private static function paidInstallmentsInCycle(LoanInstallment $installment): int
-    {
-        if ($installment->status !== 'paid' || $installment->paid_at === null) {
-            return 0;
-        }
-
-        $loanId = (int) $installment->loan_id;
-
-        if (! isset(self::$paidInCycleMemo[$loanId])) {
-            $counts = [];
-
-            LoanInstallment::query()
-                ->where('loan_id', $loanId)
-                ->where('status', 'paid')
-                ->whereNotNull('paid_at')
-                ->pluck('paid_at')
-                ->each(function ($paidAt) use (&$counts): void {
-                    $key = self::cycleKeyOf(\Illuminate\Support\Carbon::parse($paidAt));
-                    $counts[$key] = ($counts[$key] ?? 0) + 1;
-                });
-
-            self::$paidInCycleMemo[$loanId] = $counts;
-        }
-
-        return self::$paidInCycleMemo[$loanId][self::cycleKeyOf($installment->paid_at)] ?? 0;
-    }
-
     private static function money(float $n): string
     {
         return number_format($n, 2, '.', ',');
@@ -350,31 +323,14 @@ final class LateSettledArrearsTableStyling
     }
 
     /**
-     * Highlights for an installment: above limit (several EMIs in one cycle, over-collected) and early settlement.
+     * Highlights for an installment: early settlement (full / partial). Never "Above limit" — extra EMIs in a cycle are pre-payments.
      *
      * @return array<int, array{code: string, label: string, color: string, hint: string}>
      */
     public static function installmentFlags(LoanInstallment $installment): array
     {
+        // Installments are never flagged "Above limit": extra EMIs in a cycle are pre-payments or an early settlement.
         $flags = [];
-        $reasons = [];
-        $count = self::paidInstallmentsInCycle($installment);
-
-        if ($count > 1) {
-            $reasons[] = __(':count EMIs of this loan were paid in the same cycle', ['count' => $count]);
-        }
-
-        $amount = (float) $installment->amount;
-        $collected = (float) ($installment->amount_collected ?? 0);
-
-        if ($installment->status === 'paid' && $amount > 0.00001 && $collected > $amount + 0.01) {
-            $reasons[] = __('Collected :collected is above the EMI amount :amount', ['collected' => self::money($collected), 'amount' => self::money($amount)]);
-        }
-
-        if ($reasons !== []) {
-            $legacy = LegacyImportedLoan::isLoan((int) $installment->loan_id) ? ' '.__('(legacy-migrated payment)') : '';
-            $flags[] = ['code' => 'above_limit', 'label' => __('Above limit'), 'color' => 'warning', 'hint' => implode('; ', $reasons).$legacy];
-        }
 
         if ($installment->settled_via === 'early_full') {
             $flags[] = ['code' => 'early_settlement_full', 'label' => __('Early settlement (full)'), 'color' => 'info', 'hint' => __('Settled as part of a full early settlement of the loan')];

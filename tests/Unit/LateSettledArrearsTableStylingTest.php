@@ -145,14 +145,10 @@ test('early settlement chips: full, partial and skipped cycles', function () {
         ->and(LateSettledArrearsTableStyling::installmentFlags($normal))->toBe([]);
 });
 
-test('installment collected above its scheduled amount is flagged above limit', function () {
+test('installment collected above its scheduled amount is not flagged above limit', function () {
     $over = new LoanInstallment(['status' => 'paid', 'amount' => 500, 'amount_collected' => 650]);
-    $exact = new LoanInstallment(['status' => 'paid', 'amount' => 500, 'amount_collected' => 500]);
-    $flags = LateSettledArrearsTableStyling::installmentFlags($over);
 
-    expect(array_column($flags, 'code'))->toBe(['above_limit'])
-        ->and($flags[0]['hint'])->toContain('650.00')
-        ->and(LateSettledArrearsTableStyling::installmentFlags($exact))->toBe([]);
+    expect(LateSettledArrearsTableStyling::installmentFlags($over))->toBe([]);
 });
 
 test('migrated loan payoff: EMIs paid on the settlement day, due a month or more later, get the full early-settlement flag', function () {
