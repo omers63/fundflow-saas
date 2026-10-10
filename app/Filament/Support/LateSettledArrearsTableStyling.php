@@ -303,7 +303,7 @@ final class LateSettledArrearsTableStyling
     }
 
     /**
-     * Highlights for a contribution: above the configured maximum amount.
+     * Highlights for a contribution: above the configured maximum amount, and pre-paid (posted before its cycle).
      *
      * @return array<int, array{code: string, label: string, color: string, hint: string}>
      */
@@ -312,14 +312,32 @@ final class LateSettledArrearsTableStyling
         $max = (float) ContributionAmountSettings::maxAmount();
         $amount = (float) $contribution->amount;
 
+        $flags = [];
+
         if ($max > 0.00001 && $amount > $max + 0.005) {
             $hint = __('Contribution :amount is above the maximum :max', ['amount' => self::money($amount), 'max' => self::money($max)])
                 .(LegacyImportedContribution::isContribution($contribution) ? ' '.__('(legacy-migrated payment)') : '');
 
-            return [['code' => 'above_limit', 'label' => __('Above limit'), 'color' => 'warning', 'hint' => $hint]];
+            $flags[] = ['code' => 'above_limit', 'label' => __('Above limit'), 'color' => 'warning', 'hint' => $hint];
         }
 
-        return [];
+        if (self::contributionPaidInAdvance($contribution)) {
+            $flags[] = ['code' => 'pre_paid', 'label' => __('Pre-paid'), 'color' => 'info', 'hint' => __('Paid in advance of its cycle')];
+        }
+
+        return $flags;
+    }
+
+    /**
+     * A posted contribution is pre-paid when it was posted in a cycle before the cycle it is for.
+     */
+    public static function contributionPaidInAdvance(Contribution $contribution): bool
+    {
+        if ($contribution->status !== 'posted' || $contribution->posted_at === null || $contribution->period === null) {
+            return false;
+        }
+
+        return self::cycleKeyOf($contribution->posted_at) < \Carbon\Carbon::parse($contribution->period)->format('Y-m');
     }
 
     /**

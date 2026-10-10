@@ -160,3 +160,14 @@ test('an EMI paid in a cycle before its own cycle gets the partial early-settlem
         ->and(LateSettledArrearsTableStyling::installmentFlags($make('2024-07-05', '2024-06-10 09:00:00')))->toBe([])
         ->and(LateSettledArrearsTableStyling::installmentFlags($make('2024-07-05', '2024-07-20 09:00:00')))->toBe([]);
 });
+
+test('a contribution posted in a cycle before its own cycle is flagged pre-paid', function () {
+    $make = fn (string $period, string $postedAt, string $status = 'posted') => new Contribution([
+        'status' => $status, 'period' => $period, 'posted_at' => $postedAt, 'amount' => 500,
+    ]);
+
+    expect(array_column(LateSettledArrearsTableStyling::contributionFlags($make('2014-11-01', '2014-10-23 10:00:00')), 'code'))->toBe(['pre_paid'])
+        ->and(array_column(LateSettledArrearsTableStyling::contributionFlags($make('2024-04-01', '2024-04-04 10:00:00')), 'code'))->toBe(['pre_paid'])
+        ->and(LateSettledArrearsTableStyling::contributionFlags($make('2024-04-01', '2024-04-10 10:00:00')))->toBe([])
+        ->and(LateSettledArrearsTableStyling::contributionFlags($make('2024-04-01', '2024-03-01 10:00:00', 'pending')))->toBe([]);
+});
