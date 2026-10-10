@@ -1545,6 +1545,15 @@ class LoanDelinquencyService
                 continue;
             }
 
+            // A cycle the member was exempt from (EMI repayment phase of any loan, completed ones included, loan grace,
+            // partially disbursed loan) is never owed — same rule that decides whether a pending row is created for it.
+            // Checked last so the loan queries only run for periods that would otherwise be listed.
+            if ($member->isExemptFromContributions($month, $year)) {
+                $cursor->subMonthNoOverflow();
+
+                continue;
+            }
+
             $days = $this->lateFees->daysPastDue($deadline, $now);
 
             $periods[] = [

@@ -439,3 +439,44 @@ test('member workspace exposes arrears header actions', function () {
     Livewire::test(ViewMember::class, ['record' => $held->getRouteKey()])
         ->assertActionVisible('restoreSuspendedMember');
 });
+
+test('contribution arrears skips cycles the member was in EMI repayment for, even after the loan completed', function () {
+    Carbon::setTestNow(Carbon::create(2026, 5, 20));
+
+    $accounting = app(AccountingService::class);
+    $member = Member::create([
+        'member_number' => 'ARR-'.uniqid(),
+        'name' => 'Completed Loan Member',
+        'monthly_contribution_amount' => 5000,
+        'joined_at' => now()->subMonths(18),
+        'status' => 'active',
+    ]);
+    $accounting->createMemberAccounts($member);
+    $member = $member->fresh();
+
+    $keys = fn () => app(LoanDelinquencyService::class)->contributionArrearsTableRecords($member->id)
+        ->map(fn (array $row): string => sprintf('%04d-%02d', $row['year'], $row['month']))
+        ->all();
+
+    expect($keys())->toContain('2026-02')->toContain('2026-03');
+
+    Loan::factory()->for($member)->create([
+        'amount' => 10000,
+        'amount_approved' => 10000,
+        'amount_disbursed' => 10000,
+        'status' => 'completed',
+        'disbursed_at' => Carbon::create(2026, 1, 10),
+        'first_repayment_month' => 2,
+        'first_repayment_year' => 2026,
+        'settled_at' => Carbon::create(2026, 3, 20),
+        'completed_at' => Carbon::create(2026, 3, 20),
+    ]);
+
+    // The service memoises arrears per member; start from a fresh instance after the loan exists.
+    app()->forgetInstance(LoanDelinquencyService::class);
+    $after = $keys();
+
+    expect($after)->not->toContain('2026-02')
+        ->and($after)->not->toContain('2026-03')
+        ->and($after)->toContain('2025-12');
+});
