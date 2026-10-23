@@ -16,6 +16,7 @@
         'off' => __('Off'),
         'maxContribution' => __('Max contribution'),
         'maxRepayment' => __('Max repayment'),
+        'jumpToCycle' => __('Click to scroll the chart to that cycle'),
         'inView' => __('in view'),
         'thisView' => __('This view'),
         'ofExpected' => __('of expected'),
@@ -80,7 +81,7 @@
   }
   function pct(a, b) { return b > 0 ? Math.round((a / b) * 100) + '%' : '—'; }
   return {
-    rows: rows, t: t, start: Math.max(0, rows.length - PER), viewW: 0, H: H, sel: null, scrollX: 0, mouse: false,
+    rows: rows, t: t, start: Math.max(0, rows.length - PER), viewW: 0, H: H, sel: null, flash: null, flashTimer: null, scrollX: 0, mouse: false,
     showCurve: (function () { try { return localStorage.getItem('ff-member-chart-curve') !== '0'; } catch (e) { return true; } })(),
     init: function () {
       var self = this, el = this.$refs.scroller;
@@ -112,6 +113,17 @@
     goTo: function (i) {
       var c = Math.min(Math.max(0, this.rows.length - PER), Math.max(0, i));
       this.$refs.scroller.scrollTo({ left: c * this.monthW, behavior: 'smooth' });
+    },
+    // Max contribution / Max repayment pills: scroll the chart so that cycle sits mid-view and flash it for a moment.
+    focusCycle: function (label) {
+      if (!label) return;
+      var idx = this.rows.findIndex(function (r) { return r.label === label; });
+      if (idx < 0) return;
+      var self = this;
+      this.goTo(idx - Math.floor(PER / 2));
+      this.flash = idx;
+      if (this.flashTimer) clearTimeout(this.flashTimer);
+      this.flashTimer = setTimeout(function () { self.flash = null; }, 3000);
     },
     // Mouse: the pop-up follows the pointer over a cycle column (hover). Touch screens have no hover, so tapping a
     // cycle column opens it instead and tapping again (or outside) closes it.
@@ -188,7 +200,7 @@
       });
       // Full-height transparent column per cycle = the tap target (and a light highlight for the selected one).
       this.rows.forEach(function (r, i) {
-        out.push('<rect data-i="' + i + '" x="' + (i * mw) + '" y="0" width="' + mw + '" height="' + (H - XH + 14) + '" fill="' + (self.sel === i ? 'currentColor' : 'transparent') + '" fill-opacity="0.07" style="cursor:pointer"/>');
+        out.push('<rect data-i="' + i + '" x="' + (i * mw) + '" y="0" width="' + mw + '" height="' + (H - XH + 14) + '" fill="' + (self.flash === i ? '#534ab7' : self.sel === i ? 'currentColor' : 'transparent') + '" fill-opacity="' + (self.flash === i ? '0.16' : '0.07') + '" style="cursor:pointer"/>');
       });
       var step = function (p) { var d = ''; p.forEach(function (q, i) { d += (i === 0 ? 'M' : 'H' + q[0] + 'V') + (i === 0 ? q[0] + ',' + q[1] : q[1]); }); return d; };
       out.push('<path d="' + step(ce) + '" fill="none" stroke="' + COL.c + '" stroke-width="1.5" stroke-dasharray="4 3"/>');
@@ -223,16 +235,16 @@ JS;
                 </p>
             </div>
             <div class="flex flex-wrap gap-1.5">
-                <span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tabular-nums" style="border-color:#534ab7">
+                <button type="button" class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tabular-nums hover:bg-gray-50 disabled:cursor-default dark:hover:bg-gray-700" style="border-color:#534ab7" :disabled="!maxC" :title="t.jumpToCycle" @click="focusCycle(maxC && maxC.label)">
                     <span class="h-2 w-2 rounded-sm" style="background:#534ab7"></span>
                     <span x-text="t.maxContribution + ' ' + (maxC ? fmt(maxC.v) + ' · ' + maxC.label : '—')"></span>
                     <span class="font-normal text-gray-500" x-show="viewC && maxC && viewC.v !== maxC.v" x-text="'(' + t.inView + ' ' + (viewC ? fmt(viewC.v) : '') + ')'"></span>
-                </span>
-                <span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tabular-nums" style="border-color:#10b981">
+                </button>
+                <button type="button" class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tabular-nums hover:bg-gray-50 disabled:cursor-default dark:hover:bg-gray-700" style="border-color:#10b981" :disabled="!maxR" :title="t.jumpToCycle" @click="focusCycle(maxR && maxR.label)">
                     <span class="h-2 w-2 rounded-sm" style="background:#10b981"></span>
                     <span x-text="t.maxRepayment + ' ' + (maxR ? fmt(maxR.v) + ' · ' + maxR.label : '—')"></span>
                     <span class="font-normal text-gray-500" x-show="viewR && maxR && viewR.v !== maxR.v" x-text="'(' + t.inView + ' ' + (viewR ? fmt(viewR.v) : '') + ')'"></span>
-                </span>
+                </button>
             </div>
         </div>
         <div class="px-3 py-2.5">
