@@ -25,6 +25,10 @@ class MemberActivityTableWidget extends TableWidget
 
     public string $filter = MemberActivityFeedService::FILTER_ALL;
 
+    /** Lets the lifetime chart open this table with a date range (?filters[date_range_transacted_at][from|until]). */
+    #[\Livewire\Attributes\Url(as: 'filters')]
+    public ?array $tableFilters = null;
+
     public function getHeading(): ?string
     {
         return __('Transactions');

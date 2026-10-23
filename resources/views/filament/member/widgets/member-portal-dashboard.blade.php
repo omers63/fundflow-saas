@@ -224,6 +224,7 @@ $currency = $currency ?? null;
             @include('filament.partials.insights.member-lifetime-chart', [
                 'rows' => app(\App\Services\MemberLifetimeTrendService::class)->forMember($lifetimeMember),
                 'currency' => $currency ?? null,
+                'txUrls' => \App\Support\LifetimeChartLinks::forMemberPortal(),
             ])
         @endif
 
