@@ -16,6 +16,7 @@
         'off' => __('Off'),
         'maxContribution' => __('Max contribution'),
         'maxRepayment' => __('Max repayment'),
+        'maxDisbursement' => __('Max disbursement'),
         'jumpToCycle' => __('Click to scroll the chart to that cycle'),
         'inView' => __('in view'),
         'thisView' => __('This view'),
@@ -172,8 +173,10 @@
     get lifeR() { return this.rows.reduce(function (a, r) { return a + r.repaymentsPaid; }, 0); },
     get maxC() { return peak(this.rows, 'contributionsPosted'); },
     get maxR() { return peak(this.rows, 'repaymentsPaid'); },
+    get maxD() { return peak(this.rows, 'disbursed'); },
     get viewC() { return peak(this.win, 'contributionsPosted'); },
     get viewR() { return peak(this.win, 'repaymentsPaid'); },
+    get viewD() { return peak(this.win, 'disbursed'); },
     get viewSummary() {
       var s = function (k) { return this.win.reduce(function (a, r) { return a + r[k]; }, 0); }.bind(this);
       return t.thisView + ': ' + fmt(s('contributionsPosted')) + ' (' + pct(s('contributionsPosted'), s('contributionsExpected')) + ' ' + t.ofExpected + ') · ' +
@@ -244,6 +247,11 @@ JS;
                     <span class="h-2 w-2 rounded-sm" style="background:#10b981"></span>
                     <span x-text="t.maxRepayment + ' ' + (maxR ? fmt(maxR.v) + ' · ' + maxR.label : '—')"></span>
                     <span class="font-normal text-gray-500" x-show="viewR && maxR && viewR.v !== maxR.v" x-text="'(' + t.inView + ' ' + (viewR ? fmt(viewR.v) : '') + ')'"></span>
+                </button>
+                <button type="button" class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tabular-nums hover:bg-gray-50 disabled:cursor-default dark:hover:bg-gray-700" style="border-color:#dc2626" :disabled="!maxD" :title="t.jumpToCycle" @click="focusCycle(maxD && maxD.label)">
+                    <span class="h-2 w-2 rounded-sm" style="background:#dc2626"></span>
+                    <span x-text="t.maxDisbursement + ' ' + (maxD ? fmt(maxD.v) + ' · ' + maxD.label : '—')"></span>
+                    <span class="font-normal text-gray-500" x-show="viewD && maxD && viewD.v !== maxD.v" x-text="'(' + t.inView + ' ' + (viewD ? fmt(viewD.v) : '') + ')'"></span>
                 </button>
             </div>
         </div>
