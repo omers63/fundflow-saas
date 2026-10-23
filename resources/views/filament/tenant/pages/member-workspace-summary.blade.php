@@ -312,7 +312,6 @@
         @include('filament.partials.insights.member-lifetime-chart', [
             'rows' => $lifetimeRows,
             'currency' => $currency,
-            'txUrls' => $lifetimeTxUrls ?? [],
         ])
     @endif
 </div>

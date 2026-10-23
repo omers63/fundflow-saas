@@ -1,4 +1,4 @@
-@props(['rows' => [], 'currency' => null, 'txUrls' => []])
+@props(['rows' => [], 'currency' => null])
 
 @php
     $rows = array_values($rows);
@@ -34,7 +34,7 @@
         'currency' => $currency ?? '',
     ];
     $factory = <<<'JS'
-(function (rows, t, urls) {
+(function (rows, t) {
   var PER = 12, H = 260, TOP = 8, XH = 22;
   var COL = { c: '#534ab7', r: '#10b981', d: '#dc2626' };
   function fmt(n) { return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -82,7 +82,7 @@
   }
   function pct(a, b) { return b > 0 ? Math.round((a / b) * 100) + '%' : '—'; }
   return {
-    rows: rows, t: t, urls: urls, start: Math.max(0, rows.length - PER), viewW: 0, H: H, sel: null, flash: null, flashTimer: null, scrollX: 0, mouse: false,
+    rows: rows, t: t, start: Math.max(0, rows.length - PER), viewW: 0, H: H, sel: null, flash: null, flashTimer: null, scrollX: 0, mouse: false,
     showCurve: (function () { try { return localStorage.getItem('ff-member-chart-curve') !== '0'; } catch (e) { return true; } })(),
     init: function () {
       var self = this, el = this.$refs.scroller;
@@ -137,28 +137,7 @@
       this.mouse = true;
       this.sel = this.cycleAt(e);
     },
-    // Which bar (contribution / repayment / disbursement) of a cycle column was hit, from the pointer position.
-    barAt: function (e, i) {
-      var node = e.target.closest('[data-i]'); if (!node || !this.rows[i]) return null;
-      var r = node.getBoundingClientRect(), mw = this.monthW, gw = mw * 0.72, bw = gw / 3, x0 = (mw - gw) / 2;
-      var b = Math.floor((e.clientX - r.left - x0) / bw); if (b < 0 || b > 2) return null;
-      var key = ['contributionsPosted', 'repaymentsPaid', 'disbursed'][b], v = this.rows[i][key] || 0; if (v <= 0) return null;
-      var yy = TOP + this.plotH - (Math.min(v, this.scale.top) / this.scale.top) * this.plotH;
-      return e.clientY - r.top >= yy ? ['contribution', 'repayment', 'disbursement'][b] : null;
-    },
-    // Open the transactions behind a bar: that kind of payment, within the first → last day it was made in the cycle.
-    openBar: function (kind, i) {
-      var tpl = this.urls && this.urls[kind]; if (!tpl) return false;
-      var list = { contribution: this.rows[i].contributionsPostedOn, repayment: this.rows[i].repaymentsPaidOn, disbursement: this.rows[i].disbursedOn }[kind] || [];
-      var days = list.map(function (x) { return String(x.on).slice(0, 10); }).sort();
-      if (!days.length) return false;
-      window.location.href = tpl.replace('__FROM__', days[0]).replace('__UNTIL__', days[days.length - 1]);
-      return true;
-    },
     pick: function (e) {
-      var i0 = this.cycleAt(e), kind = i0 === null ? null : this.barAt(e, i0);
-      // A mouse click on a bar opens its transactions; on touch the first tap opens the pop-up, the second tap the transactions.
-      if (kind && (this.mouse || this.sel === i0) && this.openBar(kind, i0)) return;
       if (this.mouse) return; // hover already shows it; a mouse click must not toggle it off
       var i = this.cycleAt(e);
       if (i === null) { this.sel = null; return; }
@@ -241,7 +220,7 @@
   };
 })
 JS;
-    $xData = '('.$factory.')('.json_encode($rows, JSON_UNESCAPED_UNICODE).','.json_encode($i18n, JSON_UNESCAPED_UNICODE).','.json_encode((object) $txUrls, JSON_UNESCAPED_SLASHES).')';
+    $xData = '('.$factory.')('.json_encode($rows, JSON_UNESCAPED_UNICODE).','.json_encode($i18n, JSON_UNESCAPED_UNICODE).')';
 @endphp
 
 @if (count($rows) > 0)

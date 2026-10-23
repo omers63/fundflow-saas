@@ -103,7 +103,6 @@ class ViewMember extends ViewRecord
                     'summary' => $this->workspaceSummary(),
                     // Contributions & repayments — lifetime chart (cycle buckets), below the workspace summary.
                     'lifetimeRows' => app(MemberLifetimeTrendService::class)->forMember($this->record),
-                    'lifetimeTxUrls' => \App\Support\LifetimeChartLinks::forAdmin($this->record),
                 ]),
             $this->getRelationManagersContentComponent(),
         ]);

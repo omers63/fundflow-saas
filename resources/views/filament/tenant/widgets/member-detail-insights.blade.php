@@ -217,7 +217,6 @@ $hasFundProgress = $snapshot['fund_minimum_pct'] !== null;
                 @include('filament.partials.insights.member-lifetime-chart', [
                     'rows' => app(\App\Services\MemberLifetimeTrendService::class)->forMember($lifetimeMember),
                     'currency' => $currency,
-                    'txUrls' => \App\Support\LifetimeChartLinks::forAdmin($lifetimeMember),
                 ])
             @endif
     @endif
