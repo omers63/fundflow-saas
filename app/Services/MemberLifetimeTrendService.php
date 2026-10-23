@@ -39,6 +39,16 @@ final class MemberLifetimeTrendService
     }
 
     /**
+     * Uncached rows (the fund-level chart builds every member once and caches the total itself).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function buildFresh(Member $member): array
+    {
+        return $this->build($member);
+    }
+
+    /**
      * Which cycle a repayment belongs to: the cycle of the EMI it settles. Migrated loans have repayment rows with no
      * installment link, so each (loan, day) total is allocated over that day's paid installments in installment order, up
      * to each EMI's amount; any remainder stays with its own payment date. Mirrors Nest allocatePaidEvents.

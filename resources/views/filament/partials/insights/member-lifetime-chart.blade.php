@@ -1,9 +1,9 @@
-@props(['rows' => [], 'currency' => null])
+@props(['rows' => [], 'currency' => null, 'title' => null])
 
 @php
     $rows = array_values($rows);
     $i18n = [
-        'title' => __('Contributions & repayments — lifetime'),
+        'title' => $title ?? __('Contributions & repayments — lifetime'),
         'months' => __('cycles'),
         'lifetime' => __('lifetime'),
         'contributions' => __('Contributions collected'),
@@ -77,7 +77,8 @@
     return list.slice(0, max).map(function (x) {
       var on = typeof x === 'object' && x !== null ? x.on : x;
       var tm = typeof x === 'object' && x !== null && x.timing ? ' (' + (x.timing === 'early' ? t.early : t.late) + ')' : '';
-      return day(on) + tm;
+      var cnt = typeof x === 'object' && x !== null && x.count > 1 ? ' ×' + x.count : '';
+      return day(on) + tm + cnt;
     }).join(', ') + (list.length > max ? ' +' + (list.length - max) + ' more' : '');
   }
   function pct(a, b) { return b > 0 ? Math.round((a / b) * 100) + '%' : '—'; }

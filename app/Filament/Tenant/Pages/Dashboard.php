@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Tenant\Pages;
 
+use App\Filament\Tenant\Widgets\FundLifetimeTrendWidget;
 use App\Filament\Tenant\Widgets\TenantDashboardWidget;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Support\Enums\Width;
@@ -27,6 +28,7 @@ class Dashboard extends BaseDashboard
     {
         return [
             TenantDashboardWidget::class,
+            FundLifetimeTrendWidget::class,
         ];
     }
 
