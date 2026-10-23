@@ -11,6 +11,8 @@ $activity = $analyticsUnfolded ? ($d['recent_activity'] ?? []) : [];
 $lifetime = $analyticsUnfolded ? ($d['lifetime_fund_activity'] ?? []) : [];
 $forecast = $analyticsUnfolded ? ($d['forecast_summary'] ?? []) : [];
 $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
+$fx = $d['fund_extras'] ?? [];
+$flow30 = $analyticsUnfolded ? ($d['collection_flow_30d'] ?? []) : [];
 @endphp
     
     <div class="w-full max-w-none space-y-3 pb-6">
@@ -44,6 +46,26 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                             <x-heroicon-o-calendar-days class="h-4 w-4 shrink-0" />
                             {{ __('Cycle: :label', ['label' => $d['open_period_label']]) }}
                         </span>
+                    @if (! empty($fx))
+                        <a href="{{ $fx['chips']['recon_url'] }}"
+                            class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 ring-inset {{ $fx['chips']['recon_exceptions'] > 0 ? 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-800/40' : 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-800/40' }}">
+                            {{ __('Recon exceptions') }}: {{ $fx['chips']['recon_exceptions'] }}
+                        </a>
+                        <a href="{{ $fx['chips']['overdue_url'] }}"
+                            class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 ring-inset {{ $fx['chips']['overdue_emis'] > 0 ? 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-800/40' : 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-800/40' }}">
+                            {{ __('Overdue EMIs') }}: {{ $fx['chips']['overdue_emis'] }}
+                        </a>
+                        <span
+                            class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 ring-inset {{ $fx['chips']['drift_ok'] ? 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-800/40' : 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-800/40' }}">
+                            {{ __('Pool drift') }}: {{ $fx['chips']['drift_ok'] ? __('OK') : __('Review') }}
+                        </span>
+                        @foreach ($fx['actions'] as $action)
+                            <a href="{{ $action['url'] }}"
+                                class="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 shadow-sm ring-1 ring-inset ring-sky-200 hover:bg-sky-50 dark:bg-gray-900 dark:text-sky-300 dark:ring-sky-800/50">
+                                {{ $action['label'] }}
+                            </a>
+                        @endforeach
+                    @endif
                     </div>
                 </div>
     
@@ -71,6 +93,30 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                         </a>
                     @endforeach
                 </div>
+            @if (! empty($fx))
+                <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                    @foreach ($fx['cycle_stats'] as $stat)
+                        @php
+                            $statColor = match ($stat['tone']) {
+                                'amber' => 'text-amber-600 dark:text-amber-400',
+                                'emerald' => 'text-emerald-600 dark:text-emerald-400',
+                                'red' => 'text-red-600 dark:text-red-400',
+                                'sky' => 'text-sky-600 dark:text-sky-400',
+                                default => 'text-gray-700 dark:text-gray-200',
+                            };
+                        @endphp
+                        <div class="rounded-lg border border-white/90 bg-white/80 px-3 py-2 ring-1 ring-gray-200/60 dark:bg-gray-900/60 dark:ring-white/5">
+                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ $stat['label'] }}</p>
+                            <p class="mt-0.5 text-lg font-bold tabular-nums leading-tight {{ $statColor }}">{{ $stat['value'] }}</p>
+                            <p class="text-[10px] text-gray-400">{{ $stat['sub'] }}</p>
+                        </div>
+                    @endforeach
+                </div>
+                <p class="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+                    {{ __('Master pool drift') }}: {{ __('cash') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($fx['pool_drift']['cash']) !!}
+                    / {{ __('fund') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($fx['pool_drift']['fund']) !!}
+                </p>
+            @endif
             </div>
         </div>
     
@@ -96,6 +142,52 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
                 </a>
             @endforeach
         </div>
+    @if (! empty($fx))
+        {{-- ── Quick actions + open items ── --}}
+        <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900 lg:col-span-2">
+                <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
+                    <x-heroicon-o-bolt class="h-4 w-4 text-amber-500" />
+                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Quick actions') }}</span>
+                </div>
+                <div class="flex flex-wrap gap-2 p-3">
+                    @foreach ($d['quick_actions'] as $action)
+                        <a href="{{ $action['url'] }}"
+                            class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-800 transition hover:border-sky-300 hover:bg-sky-50/70 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-sky-950/20">
+                            {{ $action['label'] }}
+                            @if (! empty($action['badge']))
+                                <span class="rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">{{ $action['badge'] }}</span>
+                            @endif
+                            <x-heroicon-m-chevron-right class="ff-rtl-flip h-3 w-3 text-gray-300" />
+                        </a>
+                    @endforeach
+                </div>
+            </div>
+            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
+                    <x-heroicon-o-clipboard-document-list class="h-4 w-4 text-sky-500" />
+                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Open items') }}</span>
+                </div>
+                <div class="space-y-3 p-3">
+                    @foreach ($fx['open_items'] as $item)
+                        @php
+$pct = min(100, (int) round(($item['value'] / max(1, $item['max'])) * 100));
+@endphp
+                        <div>
+                            <div class="mb-1 flex justify-between text-[11px]">
+                                <span class="text-gray-600 dark:text-gray-300">{{ $item['label'] }}</span>
+                                <span class="font-semibold tabular-nums text-gray-900 dark:text-white">{{ $item['value'] }}</span>
+                            </div>
+                            <div class="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                                <div class="h-full rounded-full bg-amber-400" style="width: {{ $pct }}%"></div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @endif
+
 
     {{-- ── Active loan portfolio ── --}}
     <div
@@ -524,6 +616,127 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
             </div>
         </div>
     </div>
+    {{-- ── Collection flow (30d) + Pool composition + Attention queue + Recent members ── --}}
+    <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        @if (! empty($flow30))
+            @php
+                $flowMax = max(1, max(array_map(fn ($x) => max($x['contributions'], $x['emis']), $flow30)));
+                $w = 600; $h = 120; $n = count($flow30); $step = $w / max(1, $n);
+                $bar = max(2, $step * 0.34);
+            @endphp
+            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
+                    <x-heroicon-o-chart-bar class="h-4 w-4 text-emerald-500" />
+                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Collection flow (30d)') }}</span>
+                </div>
+                <div class="p-3" dir="ltr">
+                    <svg viewBox="0 0 {{ $w }} {{ $h + 16 }}" class="h-36 w-full" role="img">
+                        @foreach ($flow30 as $i => $day)
+                            @php
+                                $x = $i * $step + $step * 0.15;
+                                $ch = ($day['contributions'] / $flowMax) * $h;
+                                $eh = ($day['emis'] / $flowMax) * $h;
+                            @endphp
+                            <rect x="{{ $x }}" y="{{ $h - $ch }}" width="{{ $bar }}" height="{{ $ch }}" rx="1.5" fill="#534ab7"><title>{{ $day['date'] }} · {{ __('Contributions') }} {{ number_format($day['contributions'], 2) }}</title></rect>
+                            <rect x="{{ $x + $bar + 1 }}" y="{{ $h - $eh }}" width="{{ $bar }}" height="{{ $eh }}" rx="1.5" fill="#10b981"><title>{{ $day['date'] }} · EMI {{ number_format($day['emis'], 2) }}</title></rect>
+                            @if ($i % 5 === 0 || $i === $n - 1)
+                                <text x="{{ $x + $bar }}" y="{{ $h + 12 }}" text-anchor="middle" font-size="9" fill="currentColor" fill-opacity="0.6">{{ $day['date'] }}</text>
+                            @endif
+                        @endforeach
+                    </svg>
+                    <p class="mt-1 text-[11px] text-gray-500">
+                        <span class="me-3"><span class="me-1 inline-block h-2 w-2 rounded-sm" style="background:#534ab7"></span>{{ __('Contributions') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup(array_sum(array_column($flow30, 'contributions'))) !!}</span>
+                        <span><span class="me-1 inline-block h-2 w-2 rounded-sm" style="background:#10b981"></span>{{ __('EMI collected') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup(array_sum(array_column($flow30, 'emis'))) !!}</span>
+                    </p>
+                </div>
+            </div>
+        @endif
+
+        @if (! empty($pool))
+            @php
+                $compTotal = max(1.0, abs($pool['master_cash']) + abs($pool['master_fund']) + abs($pool['member_cash']) + abs($pool['member_fund']));
+                $comp = [
+                    [__('Master cash'), $pool['master_cash'], '#0ea5e9'],
+                    [__('Master fund'), $pool['master_fund'], '#6366f1'],
+                    [__('Member cash'), $pool['member_cash'], '#10b981'],
+                    [__('Member fund'), $pool['member_fund'], '#f59e0b'],
+                ];
+            @endphp
+            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
+                    <x-heroicon-o-chart-pie class="h-4 w-4 text-indigo-500" />
+                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Pool composition') }}</span>
+                </div>
+                <div class="space-y-2.5 p-4">
+                    @foreach ($comp as [$label, $value, $color])
+                        <div>
+                            <div class="mb-0.5 flex justify-between text-[11px]">
+                                <span class="text-gray-600 dark:text-gray-300">{{ $label }}</span>
+                                <span class="font-semibold tabular-nums">{!! \App\Support\Insights\InsightFormatter::moneyMarkup($value) !!}</span>
+                            </div>
+                            <div class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                                <div class="h-full rounded-full" style="width: {{ min(100, round(abs($value) / $compTotal * 100)) }}%; background: {{ $color }}"></div>
+                            </div>
+                        </div>
+                    @endforeach
+                    <p class="pt-1 text-[11px] text-gray-500">
+                        {{ __('Reconciliation health') }}:
+                        <span class="{{ $pool['has_drift'] ? 'text-red-600' : 'text-emerald-600' }} font-semibold">{{ $pool['has_drift'] ? __('Drift detected — investigate ledger') : __('Balanced') }}</span>
+                    </p>
+                </div>
+            </div>
+        @endif
+
+        <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
+                <x-heroicon-o-bell-alert class="h-4 w-4 text-red-500" />
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Attention queue') }}</span>
+            </div>
+            @php
+$attMax = max(1, max(array_map(fn ($c) => (int) ($c['count'] ?? 0), $d['attention_cards']) ?: [1]));
+@endphp
+            <div class="space-y-2.5 p-4">
+                @foreach ($d['attention_cards'] as $card)
+                    @php
+$cnt = (int) ($card['count'] ?? 0);
+@endphp
+                    <a href="{{ $card['url'] }}" class="block">
+                        <div class="mb-0.5 flex justify-between text-[11px]">
+                            <span class="text-gray-600 dark:text-gray-300">{{ $card['title'] }}</span>
+                            @if (isset($card['count']))<span class="font-semibold tabular-nums">{{ $cnt }}</span>@endif
+                        </div>
+                        <div class="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                            <div class="h-full rounded-full bg-red-400" style="width: {{ min(100, round($cnt / $attMax * 100)) }}%"></div>
+                        </div>
+                    </a>
+                @endforeach
+            </div>
+        </div>
+
+        @if (! empty($fx['recent_members']))
+            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <div class="flex items-center justify-between border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
+                    <div class="flex items-center gap-2">
+                        <x-heroicon-o-user-plus class="h-4 w-4 text-sky-500" />
+                        <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Recent members') }}</span>
+                    </div>
+                    <a href="{{ \App\Filament\Tenant\Resources\Members\MemberResource::getUrl('index') }}" class="text-[11px] font-medium text-sky-600 hover:underline dark:text-sky-400">{{ __('All →') }}</a>
+                </div>
+                <ul class="divide-y divide-gray-50 dark:divide-gray-800">
+                    @foreach ($fx['recent_members'] as $member)
+                        <li>
+                            <a href="{{ $member['url'] }}" class="flex items-center gap-2.5 px-4 py-2 text-xs transition hover:bg-sky-50/70 dark:hover:bg-sky-950/20">
+                                <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-[9px] font-bold text-sky-700">{{ $member['initials'] }}</span>
+                                <span class="min-w-0 flex-1 truncate font-medium text-gray-800 dark:text-gray-200">{{ $member['name'] }} <span class="text-gray-400">· {{ $member['number'] }}</span></span>
+                                <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold {{ $member['status'] === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700' }}">{{ $member['status'] }}</span>
+                            </a>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+    </div>
+
 
     {{-- ── Row 3: Collection progress (left) + Activity feed (center) + Fund gauges (right) ── --}}
     <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
@@ -701,6 +914,9 @@ $pool = $analyticsUnfolded ? ($d['pool_health'] ?? []) : [];
             <div class="flex items-center gap-2 border-b border-gray-100 px-4 py-2 dark:border-gray-700">
                 <x-heroicon-o-funnel class="h-4 w-4 text-sky-500" />
                 <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">{{ __('Loan pipeline') }}</span>
+                @if (! empty($fx['queued_demand']))
+                    <span class="ms-auto text-[11px] text-gray-500">{{ __('Queued demand') }} {!! \App\Support\Insights\InsightFormatter::moneyMarkup($fx['queued_demand']) !!}</span>
+                @endif
             </div>
             <div class="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-700 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
                 <a href="{{ $pipeline['queue_intake_url'] ?? '#' }}"

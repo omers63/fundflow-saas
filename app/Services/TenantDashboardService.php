@@ -194,6 +194,7 @@ final class TenantDashboardService
             ],
             'sparkline' => $masterSnapshot['sparkline'] ?? [],
             'sparkline_max' => $masterSnapshot['sparkline_max'] ?? 1,
+            'fund_extras' => $this->fundExtras($queueKpis, (int) ($collectionArrears['emi_arrears_installments'] ?? $delinquencyCounts['overdue_installments'] ?? 0), $openReconciliationCount, $collectionArrears, $collectionGauge, $masterBalance, $pendingContributions),
         ];
     }
 
@@ -227,7 +228,93 @@ final class TenantDashboardService
             'collection_breakdown' => $this->collectionBreakdown($openMonth, $openYear, $activeMembers, $delinquencyCounts),
             'fund_tier_utilisation' => $this->fundTierUtilisation($masterBalance('fund')),
             'pool_health' => $this->poolHealth($masterBalance),
+            'collection_flow_30d' => $this->collectionFlow30d($now),
         ];
+    }
+
+    /**
+     * Blocks the Nest dashboard shows that the PHP one lacked: hero chips + actions, the contribution-cycle stat strip,
+     * open-item counters, master pool drift (signed), queued demand and the newest members.
+     *
+     * @param  array<string, mixed>  $queueKpis
+     * @param  array<string, mixed>  $collectionArrears
+     * @param  array<string, mixed>  $collectionGauge
+     * @param  callable(string): float  $masterBalance
+     * @return array<string, mixed>
+     */
+    private function fundExtras(
+        array $queueKpis,
+        int $overdueEmis,
+        int $openReconciliationCount,
+        array $collectionArrears,
+        array $collectionGauge,
+        callable $masterBalance,
+        int $pendingContributions,
+    ): array {
+        $memberCash = (float) Account::query()->where('is_master', false)->where('type', 'cash')->sum('balance');
+        $memberFund = (float) Account::query()->where('is_master', false)->where('type', 'fund')->sum('balance');
+        $cashDrift = round($masterBalance('cash') - $memberCash, 2);
+        $fundDrift = round($masterBalance('fund') - $memberFund, 2);
+
+        return [
+            'chips' => [
+                'recon_exceptions' => $openReconciliationCount,
+                'recon_url' => ReconciliationOverviewPage::getUrl(),
+                'overdue_emis' => $overdueEmis,
+                'overdue_url' => LoanResource::listUrl('collection', [], 'arrears'),
+                'drift_ok' => abs($cashDrift) <= 0.01 && abs($fundDrift) <= 0.01,
+            ],
+            'actions' => [
+                ['label' => __('Add member'), 'url' => MemberResource::getUrl('create')],
+                ['label' => __('Bank clearing'), 'url' => BankAccountsResource::getUrl('index')],
+            ],
+            'cycle_stats' => [
+                ['label' => __('Pending'), 'value' => (string) $pendingContributions, 'sub' => __('Awaiting post'), 'tone' => $pendingContributions > 0 ? 'amber' : 'gray'],
+                ['label' => __('Posted'), 'value' => number_format(Contribution::query()->posted()->count()), 'sub' => __('All time'), 'tone' => 'emerald'],
+                ['label' => __('Failed'), 'value' => (string) Contribution::query()->where('status', 'failed')->count(), 'sub' => __('All time'), 'tone' => 'gray'],
+                ['label' => __('Arrears'), 'value' => (string) (int) ($collectionArrears['contribution_arrears_periods'] ?? 0), 'sub' => __('Periods'), 'tone' => 'red'],
+                ['label' => __('Collection'), 'value' => (string) ($collectionGauge['value'] ?? '0%'), 'sub' => (string) ($collectionGauge['sub'] ?? ''), 'tone' => 'sky'],
+                ['label' => __('Late'), 'value' => (string) Contribution::query()->where('status', 'pending')->where('is_late', true)->count(), 'sub' => __('Pending'), 'tone' => 'amber'],
+            ],
+            'open_items' => [
+                ['label' => Lang::ui('Pending contributions'), 'value' => $pendingContributions, 'max' => max(1, Member::active()->count())],
+                ['label' => __('Pending cash-outs'), 'value' => \App\Models\Tenant\CashOutRequest::query()->where('status', 'pending')->count(), 'max' => 20],
+            ],
+            'pool_drift' => ['cash' => $cashDrift, 'fund' => $fundDrift, 'ok' => abs($cashDrift) <= 0.01 && abs($fundDrift) <= 0.01],
+            'queued_demand' => (float) ($queueKpis['queued_demand'] ?? 0),
+            'recent_members' => Member::query()->latest('id')->limit(5)->get(['id', 'name', 'member_number', 'status'])
+                ->map(fn (Member $m): array => [
+                    'name' => $m->name,
+                    'number' => $m->member_number,
+                    'status' => $m->status,
+                    'url' => MemberResource::getUrl('view', ['record' => $m]),
+                    'initials' => mb_strtoupper(collect(explode(' ', (string) $m->name))->filter()->map(fn (string $w): string => mb_substr($w, 0, 1))->take(2)->implode('')),
+                ])->all(),
+        ];
+    }
+
+    /**
+     * Posted contributions and EMIs collected per day for the 30 days up to the business day.
+     *
+     * @return list<array{date: string, contributions: float, emis: float}>
+     */
+    private function collectionFlow30d(Carbon $now): array
+    {
+        $from = $now->copy()->subDays(29)->startOfDay();
+        $contributions = Contribution::query()->posted()->where('posted_at', '>=', $from)
+            ->get(['posted_at', 'amount'])->groupBy(fn (Contribution $c): string => $c->posted_at->format('Y-m-d'))
+            ->map(fn ($g): float => (float) $g->sum('amount'));
+        $emis = LoanInstallment::query()->where('paid_at', '>=', $from)
+            ->get(['paid_at', 'amount'])->groupBy(fn (LoanInstallment $i): string => $i->paid_at->format('Y-m-d'))
+            ->map(fn ($g): float => (float) $g->sum('amount'));
+
+        $days = [];
+        for ($i = 0; $i < 30; $i++) {
+            $d = $from->copy()->addDays($i)->format('Y-m-d');
+            $days[] = ['date' => substr($d, 5), 'contributions' => (float) ($contributions[$d] ?? 0), 'emis' => (float) ($emis[$d] ?? 0)];
+        }
+
+        return $days;
     }
 
     /**
@@ -826,6 +913,7 @@ final class TenantDashboardService
         if ($arrearsTotal > 0) {
             $cards[] = [
                 'title' => Lang::ui('Collection arrears'),
+                'count' => $arrearsTotal,
                 'body' => Lang::uiText(__('Unpaid items before :period — :contrib contribution period(s) and :emi EMI(s).', [
                     'period' => $periodLabel,
                     'contrib' => $contribArrears,
@@ -842,6 +930,7 @@ final class TenantDashboardService
         if ($pendingEligibilityReviews > 0) {
             $cards[] = [
                 'title' => Lang::ui('Eligibility reviews'),
+                'count' => $pendingEligibilityReviews,
                 'body' => Lang::uiText(trans_choice(
                     ':count member eligibility review pending|:count member eligibility reviews pending',
                     $pendingEligibilityReviews,
@@ -858,6 +947,7 @@ final class TenantDashboardService
         if ($openReconciliationCount > 0) {
             $cards[] = [
                 'title' => Lang::ui('Reconciliation'),
+                'count' => $openReconciliationCount,
                 'body' => Lang::uiText(trans_choice(
                     ':count open exception|:count open exceptions',
                     $openReconciliationCount,
@@ -872,6 +962,7 @@ final class TenantDashboardService
         if ($loanQueueCount > 0) {
             $cards[] = [
                 'title' => Lang::ui('Loan queue'),
+                'count' => $loanQueueCount,
                 'body' => Lang::uiText(trans_choice(':count loan awaiting action|:count loans awaiting action', $loanQueueCount, ['count' => $loanQueueCount])),
                 'tone' => 'amber',
                 'icon' => 'heroicon-o-queue-list',
@@ -882,6 +973,7 @@ final class TenantDashboardService
         if ($pendingApplications > 0) {
             $cards[] = [
                 'title' => Lang::ui('Membership applications'),
+                'count' => $pendingApplications,
                 'body' => Lang::uiText(trans_choice(':count pending review|:count pending reviews', $pendingApplications, ['count' => $pendingApplications])),
                 'tone' => 'sky',
                 'icon' => 'heroicon-o-user-plus',
@@ -892,6 +984,7 @@ final class TenantDashboardService
         if ($pendingDeposits > 0) {
             $cards[] = [
                 'title' => Lang::ui('Deposits'),
+                'count' => $pendingDeposits,
                 'body' => Lang::uiText(trans_choice(':count deposit to accept|:count deposits to accept', $pendingDeposits, ['count' => $pendingDeposits])),
                 'tone' => 'violet',
                 'icon' => 'heroicon-o-inbox-arrow-down',
@@ -903,6 +996,7 @@ final class TenantDashboardService
         if ($overdue > 0) {
             $cards[] = [
                 'title' => Lang::ui('Delinquency'),
+                'count' => $overdue,
                 'body' => Lang::uiText(trans_choice(':count overdue installment|:count overdue installments', $overdue, ['count' => $overdue])),
                 'tone' => 'rose',
                 'icon' => 'heroicon-o-exclamation-triangle',
@@ -914,6 +1008,7 @@ final class TenantDashboardService
         if ($pendingBank > 0) {
             $cards[] = [
                 'title' => Lang::ui('Bank imports'),
+                'count' => $pendingBank,
                 'body' => Lang::uiText(trans_choice(':count transaction to post|:count transactions to post', $pendingBank, ['count' => $pendingBank])),
                 'tone' => 'indigo',
                 'icon' => 'heroicon-o-document-arrow-up',
