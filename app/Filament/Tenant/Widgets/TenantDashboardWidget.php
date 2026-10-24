@@ -32,6 +32,14 @@ class TenantDashboardWidget extends Widget
         ];
     }
 
+    public function foldSection(string $section): void
+    {
+        $this->unfoldedSections = [
+            ...$this->unfoldedSections,
+            $section => false,
+        ];
+    }
+
     public function isSectionUnfolded(string $section): bool
     {
         return (bool) ($this->unfoldedSections[$section] ?? false);

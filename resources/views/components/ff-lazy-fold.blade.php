@@ -10,8 +10,13 @@
     wire:key="ff-lazy-fold-{{ $section }}"
 >
     @if ($unfolded)
-        <div class="border-b border-gray-100 px-4 py-3 dark:border-white/10">
+        <div class="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-white/10">
             <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">{{ $title }}</p>
+            <button
+                type="button"
+                wire:click="foldSection('{{ $section }}')"
+                class="shrink-0 text-sm font-semibold text-sky-600 hover:underline dark:text-sky-400"
+            >{{ __('Collapse') }}</button>
         </div>
         <div class="p-4">
             {{ $slot }}

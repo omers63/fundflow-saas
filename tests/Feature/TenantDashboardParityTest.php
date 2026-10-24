@@ -34,5 +34,14 @@ it('renders the consolidated admin dashboard (PHP + Nest blocks)', function () {
         ->assertSee(__('Recent members'))
         ->assertSee(__('Loan pipeline'));
 
+    // A fold that was expanded can be collapsed again.
+    Livewire::test(TenantDashboardWidget::class)
+        ->call('unfoldSection', 'analytics')
+        ->assertSee(__('Collapse'))
+        ->assertSet('unfoldedSections.analytics', true)
+        ->call('foldSection', 'analytics')
+        ->assertSet('unfoldedSections.analytics', false)
+        ->assertSee(__('Expand'));
+
     Livewire::test(FundLifetimeTrendWidget::class)->assertSee('Fund contributions', false);
 });
