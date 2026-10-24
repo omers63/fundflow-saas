@@ -260,6 +260,9 @@ $pct = min(100, (int) round(($item['value'] / max(1, $item['max'])) * 100));
     </div>
 
 
+    {{-- ── Fund lifetime chart (lazy child), above "More analytics" ── --}}
+    @livewire(\App\Filament\Tenant\Widgets\FundLifetimeTrendWidget::class, ['lazy' => true], key('fund-lifetime-trend'))
+
     <x-ff-lazy-fold
         section="analytics"
         :unfolded="$analyticsUnfolded"
