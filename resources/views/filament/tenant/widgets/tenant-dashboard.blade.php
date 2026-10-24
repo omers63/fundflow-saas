@@ -46,6 +46,10 @@ $flow30 = $analyticsUnfolded ? ($d['collection_flow_30d'] ?? []) : [];
                             <x-heroicon-o-calendar-days class="h-4 w-4 shrink-0" />
                             {{ __('Cycle: :label', ['label' => $d['open_period_label']]) }}
                         </span>
+                    </div>
+                </div>
+            @if (! empty($fx))
+                <div class="mt-4 flex flex-wrap items-center gap-2">
                     @if (! empty($fx))
                         <a href="{{ $fx['chips']['recon_url'] }}"
                             class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 ring-inset {{ $fx['chips']['recon_exceptions'] > 0 ? 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-800/40' : 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-800/40' }}">
@@ -66,8 +70,9 @@ $flow30 = $analyticsUnfolded ? ($d['collection_flow_30d'] ?? []) : [];
                             </a>
                         @endforeach
                     @endif
-                    </div>
+
                 </div>
+            @endif
     
                 <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
                     @foreach ($d['balances'] as $balance)
